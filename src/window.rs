@@ -1,0 +1,277 @@
+use crate::application::Application;
+use crate::dpi::{LogicalPosition, LogicalSize, PhysicalSize, Size};
+use crate::egui_input::EguiInput;
+use crate::egui_skia_painter::EguiSkiaPainter;
+use crate::sub_surface_view::SubSurfaceView;
+use crate::surface_view::SurfaceView;
+use crate::view::{SubView, View};
+use image::RgbaImage;
+use log::info;
+use sctk::shell::WaylandSurface;
+use sctk::shell::xdg::XdgSurface;
+use sctk::shell::xdg::window::{Window as XdgWindow, WindowDecorations};
+use wayland_client::QueueHandle;
+use wayland_client::protocol::wl_surface;
+use wayland_protocols::wp::fractional_scale::v1::client::wp_fractional_scale_v1::WpFractionalScaleV1;
+use crate::context::{AnnotatorContext, Output};
+
+/// AppWindow 管理应用的主窗口，包括主视图和动态管理的子视图。
+pub struct AppWindow {
+    /// 主视图（Surface）
+    pub main_view: SurfaceView,
+    /// 子视图列表（SubSurface）
+    pub sub_views: Vec<Box<dyn SubView>>,
+    /// 用于发送 Wayland 请求的消息队列句柄
+    queue_handle: QueueHandle<Application>,
+    /// XDG Shell 窗口句柄
+    xdg_window: XdgWindow,
+    /// 是否为首次配置（用于避免在窗口未准备好时绘图）
+    pub first_configure: bool,
+    /// 分数缩放管理（Wayland 协议扩展）
+    fractional_scale: Option<WpFractionalScaleV1>,
+    /// 当前缩放倍数
+    scale_factor: Option<f64>,
+    /// 窗口是否持有键盘焦点
+    keyboard_focus: bool,
+    /// 一个物理尺寸，用于在首次获取到缩放倍数后调整窗口的大小
+    pub preferred_size: Option<PhysicalSize<u32>>,
+}
+
+pub(crate) struct WindowConfiguration {
+    size: LogicalSize<u32>,
+    preferred_size: Option<PhysicalSize<u32>>,
+}
+
+impl WindowConfiguration {
+    pub fn new(size: LogicalSize<u32>, preferred_size: Option<PhysicalSize<u32>>) -> Self {
+        WindowConfiguration { size, preferred_size }
+    }
+}
+
+impl AppWindow {
+    /// 创建一个新的 AppWindow。
+    /// 该方法会初始化 Wayland Surface、SubSurface、XDG Window，并为每个视图创建 GPU 渲染表面。
+    ///
+    /// # 参数
+    /// - `app`: 应用实例
+    /// - `build_root_view`: 构建根视图 UI 的回调函数，接收窗口实例和 egui Context，返回 FullOutput
+    pub fn new(
+        app: &mut Application,
+        window_config: WindowConfiguration,
+        build_root_view: Box<dyn Fn(egui::RawInput, &mut egui::Context, &mut AnnotatorContext) -> Output>,
+    ) -> AppWindow {
+        // 1. 创建主表面
+        let main_surface = app
+            .globals
+            .compositor_state
+            .create_surface(&app.globals.queue_handle);
+
+        // 2. 创建 XDG 窗口并设置属性
+        let xdg_window = app.globals.xdg_shell_state.create_window(
+            main_surface.clone(),
+            WindowDecorations::None,
+            &app.globals.queue_handle,
+        );
+        xdg_window.set_title("Image Annotator");
+        xdg_window.set_app_id(app.app_id);
+        xdg_window.commit();
+
+        // 3. 初始化分数缩放和视口
+        let fractional_scale = app
+            .globals
+            .fractional_scaling_manager
+            .as_ref()
+            .map(|ref m| m.fractional_scaling(&main_surface, &app.globals.queue_handle));
+        let main_viewport = app
+            .globals
+            .viewporter_state
+            .as_ref()
+            .map(|ref viewporter_state| {
+                viewporter_state.get_viewport(&main_surface, &app.globals.queue_handle)
+            })
+            .expect("Failed to retrieve viewport");
+
+        // 4. 初始化主视图 (SurfaceView)
+        let main_size = LogicalSize::new(window_config.size.width, window_config.size.height);
+        let main_view = SurfaceView::new(
+            main_surface.clone(),
+            main_size,
+            main_viewport,
+            build_root_view,
+        );
+
+        let qh = app.globals.queue_handle.clone();
+
+        let window = Self {
+            main_view,
+            sub_views: Vec::new(),
+            queue_handle: qh,
+            xdg_window,
+            first_configure: true,
+            fractional_scale,
+            scale_factor: None,
+            keyboard_focus: false,
+            preferred_size: window_config.preferred_size,
+        };
+
+        window
+    }
+
+    /// 动态创建一个 SubSurfaceView 并添加到窗口中。
+    ///
+    /// # 参数
+    /// - `app`: 应用实例
+    /// - `size`: 子视图的逻辑大小
+    /// - `position`: 子视图的位置
+    /// - `build_view`: 构建子视图 UI 的回调函数，接收窗口实例和 egui Context，返回 FullOutput
+    pub fn create_sub_surface_view(
+        &mut self,
+        app: &mut Application,
+        size: LogicalSize<u32>,
+        position: LogicalPosition<i32>,
+        build_view: Box<dyn Fn(egui::RawInput, &mut egui::Context, &mut AnnotatorContext) -> Output>,
+    ) -> &mut SubSurfaceView {
+        let (sub_surface_handle, surface) = app
+            .globals
+            .sub_compositor_state
+            .create_subsurface(self.main_view.surface().clone(), &app.globals.queue_handle);
+
+        let viewport = app
+            .globals
+            .viewporter_state
+            .as_ref()
+            .map(|v| v.get_viewport(&surface, &app.globals.queue_handle))
+            .expect("Failed to retrieve viewport");
+
+        let mut subview = SubSurfaceView::new(
+            surface.clone(),
+            sub_surface_handle,
+            size,
+            viewport,
+            build_view,
+        );
+        subview.set_position(position);
+
+        subview.view_mut().surface().commit(); // Initial commit
+
+        self.sub_views.push(Box::new(subview));
+
+        // 返回刚添加的视图的引用。由于使用 Box<dyn SubView>，我们需要进行 downcast。
+        // 为了简单起见，这里假设我们知道它是 SubSurfaceView 类型。
+        let last_idx = self.sub_views.len() - 1;
+        let boxed_view = &mut self.sub_views[last_idx];
+        // SAFETY: 我们刚刚存入的就是 SubSurfaceView
+        unsafe {
+            let ptr = boxed_view.as_mut() as *mut dyn SubView as *mut SubSurfaceView;
+            &mut *ptr
+        }
+    }
+
+    pub fn handle_pointer_event(
+        &mut self,
+        event: &sctk::seat::pointer::PointerEvent,
+        globals: &crate::application::Globals,
+    ) {
+        let event_surface = &event.surface;
+        if event_surface == self.main_view.surface() {
+            self.main_view.handle_pointer_event(event, globals);
+        } else {
+            let sub_view = self
+                .sub_views
+                .iter_mut()
+                .find(|sub_view| sub_view.view().surface() == event_surface);
+            if let Some(sub_view) = sub_view {
+                sub_view.view_mut().handle_pointer_event(event, globals);
+            }
+        }
+
+        // use sctk::seat::pointer::PointerEventKind;
+        // if let PointerEventKind::Press { button, serial, .. } = event.kind {
+        //     if button == 0x110 {
+        //         // Left mouse button
+        //         if event.surface == *self.main_view.surface() {
+        //             if let Some(seat) = globals.seat_state.seats().next() {
+        //                 self.xdg_window.xdg_toplevel()._move(&seat, serial);
+        //             }
+        //         }
+        //     }
+        // }
+    }
+
+    pub fn handle_keyboard_event(&mut self, event: sctk::seat::keyboard::KeyEvent, pressed: bool) {
+        self.main_view.handle_keyboard_event(event.clone(), pressed);
+        self.sub_views.iter_mut().for_each(|sub_view| {
+            sub_view.view_mut().handle_keyboard_event(event.clone(), pressed);
+        });
+    }
+
+    pub fn update_modifiers(&mut self, modifiers: sctk::seat::keyboard::Modifiers) {
+        self.main_view.update_modifiers(modifiers.clone());
+        self.sub_views.iter_mut().for_each(|sub_view| {
+            sub_view.view_mut().update_modifiers(modifiers.clone());
+        });
+    }
+
+    pub fn contains_surface(&self, surface: &wl_surface::WlSurface) -> bool {
+        if surface == self.main_view.surface() {
+            return true;
+        }
+        for sub_view in &self.sub_views {
+            if surface == sub_view.view().surface() {
+                return true;
+            }
+        }
+        false
+    }
+
+    pub fn xdg_window(&self) -> &XdgWindow {
+        &self.xdg_window
+    }
+
+    pub fn scale_factor(&self) -> &Option<f64> {
+        &self.scale_factor
+    }
+
+    pub fn set_scale_factor(&mut self, new_scale_factor: f64) {
+        self.scale_factor = Some(new_scale_factor);
+        self.main_view.set_scale_factor(new_scale_factor);
+        for sub_view in &mut self.sub_views {
+            sub_view.view_mut().set_scale_factor(new_scale_factor);
+        }
+    }
+
+    pub fn resize(&mut self, new_size: LogicalSize<u32>, gpu: &mut crate::gpu::GpuContext) {
+        if let Some(gpu_surface) = &mut self.main_view.gpu_surface {
+            gpu_surface
+                .resize(gpu, new_size.width as i32, new_size.height as i32)
+                .ok();
+        }
+        self.main_view.resize(new_size.cast());
+    }
+
+    pub fn set_keyboard_focus(&mut self, focus: bool) {
+        self.keyboard_focus = focus;
+    }
+
+    pub fn keyboard_focus(&self) -> bool {
+        self.keyboard_focus
+    }
+
+    /// 执行窗口重绘逻辑。
+    /// 遍历所有视图并调用其独立的渲染方法。
+    pub fn draw(&mut self, qh: &QueueHandle<Application>, gpu: &mut crate::gpu::GpuContext) {
+        if self.first_configure || self.scale_factor.is_none() {
+            return;
+        }
+
+        // 1. 渲染主视图
+        {
+            self.main_view.draw(qh, gpu);
+        }
+
+        // 2. 渲染子视图
+        for i in 0..self.sub_views.len() {
+            self.sub_views[i].view_mut().draw(qh, gpu);
+        }
+    }
+}
