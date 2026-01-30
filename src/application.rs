@@ -1,11 +1,13 @@
+use crate::annotator::AnnotatorState;
 use crate::dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize};
+use crate::global::{ReadGlobal, UpdateGlobal};
 use crate::gpu::GpuContext;
 use crate::view::SubView;
 use crate::window::AppWindow;
 use crate::wp_fractional_scaling::FractionalScalingManager;
 use crate::wp_viewporter::ViewporterState;
 use egui::load::SizedTexture;
-use egui::{Color32, ColorImage, Id, Image, ImageSource, Order, Pos2, Rect, RichText};
+use egui::{Color32, ColorImage, Id, Image, ImageSource, Order, Pos2, Rect, RichText, pos2, vec2};
 use image::{GenericImageView, RgbaImage};
 use log::info;
 use sctk::compositor::{CompositorHandler, CompositorState};
@@ -33,8 +35,6 @@ use wayland_client::protocol::wl_seat::WlSeat;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::protocol::{wl_output, wl_surface};
 use wayland_client::{Connection, EventQueue, QueueHandle};
-use crate::annotator::{AnnotatorState};
-use crate::global::{ReadGlobal, UpdateGlobal};
 
 /// GlobalState 存储了 Wayland 的全局状态和协议处理器。
 pub struct GlobalState {
@@ -143,43 +143,55 @@ impl Application {
             self,
             window_config,
             Box::new(move |input, egui_ctx, window_ctx| {
-
                 // 将图像数据上传到 GPU 并获取纹理句柄
-                let annotator_state: &AnnotatorState =
-                    window_ctx.get_global_or_insert_with(|| {
-                        let mut annotator_state = AnnotatorState::default();
-                        // 创建 ColorImage
-                        // 注意：RgbaImage 的 bytes 应该是连续的 RGBA 数据
-                        let background_image = Arc::new(ColorImage::from_rgba_premultiplied(
-                            [image_width as usize, image_height as usize],
-                            image.as_raw(),
-                        ));
-                        // Load the texture only once.
-                        let texture_handle = egui_ctx.load_texture(
-                            "background-image",
-                            egui::ImageData::Color(background_image),
-                            Default::default(),
-                        );
-                        annotator_state.background_texture_handle = Some(texture_handle);
-                        annotator_state
-                    });
+                let annotator_state: &AnnotatorState = window_ctx.get_global_or_insert_with(|| {
+                    let mut annotator_state = AnnotatorState::default();
+                    // 创建 ColorImage
+                    // 注意：RgbaImage 的 bytes 应该是连续的 RGBA 数据
+                    let background_image = Arc::new(ColorImage::from_rgba_premultiplied(
+                        [image_width as usize, image_height as usize],
+                        image.as_raw(),
+                    ));
+                    // Load the texture only once.
+                    let texture_handle = egui_ctx.load_texture(
+                        "background-image",
+                        egui::ImageData::Color(background_image),
+                        Default::default(),
+                    );
+                    annotator_state.background_texture_handle = Some(texture_handle);
+                    annotator_state
+                });
 
                 // 将图像数据上传到 GPU 并获取纹理句柄
                 let texture_handle = annotator_state.background_texture_handle.as_ref().unwrap();
+                let texture_handle = texture_handle.clone();
+
+                let annotator_state = window_ctx.global_mut::<AnnotatorState>();
 
                 // 构建 UI 的具体内容
-                egui_ctx.run(input, |ctx| {
+                egui_ctx.run(input, move |ctx| {
                     egui::CentralPanel::default()
                         .frame(egui::Frame::new())
                         .show(ctx, |ui| {
-                            ui.add(
-                                Image::new(ImageSource::Texture(SizedTexture::from_handle(
-                                    texture_handle,
-                                )))
-                                .shrink_to_fit(),
+                            let bg_image = Image::new(ImageSource::Texture(
+                                SizedTexture::from_handle(&texture_handle),
+                            ));
+
+                            let frame_size = PhysicalSize::new(image_width, image_height)
+                                .to_logical(ctx.pixels_per_point() as f64);
+                            bg_image.paint_at(
+                                ui,
+                                Rect::from_min_size(
+                                    pos2(0., 0.),
+                                    vec2(frame_size.width, frame_size.height),
+                                ),
                             );
 
-                            // ui.text_edit_multiline()
+                            ui.vertical_centered(|ui| {
+                                ui.heading("标题在背景之上");
+                                ui.button("按钮也在背景之上");
+                                ui.text_edit_multiline(&mut annotator_state.editing_text);
+                            });
 
                             let mut shapes = Vec::new();
 

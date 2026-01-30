@@ -1,5 +1,5 @@
 use crate::global::Global;
-use egui::TextureHandle;
+use egui::{widgets, TextureHandle};
 
 
 #[derive(Default)]
