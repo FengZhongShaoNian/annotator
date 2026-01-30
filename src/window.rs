@@ -1,24 +1,28 @@
 use crate::application::Application;
-use crate::dpi::{LogicalPosition, LogicalSize, PhysicalSize, Size};
-use crate::egui_input::EguiInput;
-use crate::egui_skia_painter::EguiSkiaPainter;
+use crate::context::SurfaceViewContext;
+use crate::dpi::{LogicalPosition, LogicalSize, PhysicalSize};
+use crate::gpu;
+use crate::gpu::GpuContext;
 use crate::sub_surface_view::SubSurfaceView;
 use crate::surface_view::SurfaceView;
 use crate::view::{SubView, View};
-use image::RgbaImage;
-use log::info;
+use egui::FullOutput;
+use egui_wgpu::wgpu;
+use raw_window_handle::{
+    RawDisplayHandle, RawWindowHandle, WaylandDisplayHandle, WaylandWindowHandle,
+};
 use sctk::shell::WaylandSurface;
-use sctk::shell::xdg::XdgSurface;
 use sctk::shell::xdg::window::{Window as XdgWindow, WindowDecorations};
-use wayland_client::QueueHandle;
+use std::ptr::NonNull;
+use std::sync::Arc;
 use wayland_client::protocol::wl_surface;
+use wayland_client::{Proxy, QueueHandle};
 use wayland_protocols::wp::fractional_scale::v1::client::wp_fractional_scale_v1::WpFractionalScaleV1;
-use crate::context::{AnnotatorContext, Output};
 
 /// AppWindow 管理应用的主窗口，包括主视图和动态管理的子视图。
 pub struct AppWindow {
     /// 主视图（Surface）
-    pub main_view: SurfaceView,
+    pub main_view: SurfaceView<'static>,
     /// 子视图列表（SubSurface）
     pub sub_views: Vec<Box<dyn SubView>>,
     /// 用于发送 Wayland 请求的消息队列句柄
@@ -44,7 +48,10 @@ pub(crate) struct WindowConfiguration {
 
 impl WindowConfiguration {
     pub fn new(size: LogicalSize<u32>, preferred_size: Option<PhysicalSize<u32>>) -> Self {
-        WindowConfiguration { size, preferred_size }
+        WindowConfiguration {
+            size,
+            preferred_size,
+        }
     }
 }
 
@@ -58,15 +65,17 @@ impl AppWindow {
     pub fn new(
         app: &mut Application,
         window_config: WindowConfiguration,
-        build_root_view: Box<dyn Fn(egui::RawInput, &mut egui::Context, &mut AnnotatorContext) -> Output>,
+        build_root_view: Box<
+            dyn Fn(egui::RawInput, &mut egui::Context, &mut SurfaceViewContext) -> FullOutput,
+        >,
     ) -> AppWindow {
-        // 1. 创建主表面
+        // 创建主表面
         let main_surface = app
             .globals
             .compositor_state
             .create_surface(&app.globals.queue_handle);
 
-        // 2. 创建 XDG 窗口并设置属性
+        // 创建 XDG 窗口并设置属性
         let xdg_window = app.globals.xdg_shell_state.create_window(
             main_surface.clone(),
             WindowDecorations::None,
@@ -76,7 +85,68 @@ impl AppWindow {
         xdg_window.set_app_id(app.app_id);
         xdg_window.commit();
 
-        // 3. 初始化分数缩放和视口
+        // Create the raw window handle for the surface.
+        let raw_display_handle = RawDisplayHandle::Wayland(WaylandDisplayHandle::new(
+            NonNull::new(app.globals.connection.backend().display_ptr() as *mut _).unwrap(),
+        ));
+        let raw_window_handle = RawWindowHandle::Wayland(WaylandWindowHandle::new(
+            NonNull::new(xdg_window.wl_surface().id().as_ptr() as *mut _).unwrap(),
+        ));
+
+        // 初始化 wgpu
+        let wgpu_surface = if app.globals.gpu.is_none() {
+            let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+                backends: wgpu::Backends::all(),
+                ..Default::default()
+            });
+
+            let surface = unsafe {
+                instance
+                    .create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
+                        raw_display_handle,
+                        raw_window_handle,
+                    })
+                    .unwrap()
+            };
+            let gpu_context = gpu::GpuContext::new(instance, &surface).unwrap();
+            app.globals.gpu = Some(gpu_context);
+
+            surface
+        } else {
+            let instance = &app.globals.gpu.as_mut().unwrap().instance;
+            let surface = unsafe {
+                instance
+                    .create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
+                        raw_display_handle,
+                        raw_window_handle,
+                    })
+                    .unwrap()
+            };
+            surface
+        };
+
+        let surface_caps =
+            wgpu_surface.get_capabilities(&app.globals.gpu.as_mut().unwrap().adapter);
+
+        let surface_format = surface_caps.formats[0];
+        let config = wgpu::SurfaceConfiguration {
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            format: surface_format,
+
+            // width 和 height 指定 SurfaceTexture 的宽度和高度（物理像素，等于逻辑像素乘以屏幕缩放因子）
+            // 现在还无法获取到缩放因子，暂时设置为和逻辑尺寸相同大小
+            width: window_config.size.width,
+            height: window_config.size.height,
+
+            present_mode: surface_caps.present_modes[0],
+            desired_maximum_frame_latency: 2,
+            alpha_mode: surface_caps.alpha_modes[0],
+            view_formats: vec![],
+        };
+
+        wgpu_surface.configure(&app.globals.gpu.as_mut().unwrap().device, &config);
+
+        // 初始化分数缩放和视口
         let fractional_scale = app
             .globals
             .fractional_scaling_manager
@@ -91,10 +161,12 @@ impl AppWindow {
             })
             .expect("Failed to retrieve viewport");
 
-        // 4. 初始化主视图 (SurfaceView)
+        // 初始化主视图 (SurfaceView)
         let main_size = LogicalSize::new(window_config.size.width, window_config.size.height);
         let main_view = SurfaceView::new(
             main_surface.clone(),
+            wgpu_surface,
+            config,
             main_size,
             main_viewport,
             build_root_view,
@@ -129,7 +201,10 @@ impl AppWindow {
         app: &mut Application,
         size: LogicalSize<u32>,
         position: LogicalPosition<i32>,
-        build_view: Box<dyn Fn(egui::RawInput, &mut egui::Context, &mut AnnotatorContext) -> Output>,
+        build_view: Box<
+            dyn Fn(egui::RawInput, &mut egui::Context, &mut SurfaceViewContext) -> FullOutput,
+        >,
+        position_calculator: Option<Arc<crate::view::RelativePositionCalculator>>,
     ) -> &mut SubSurfaceView {
         let (sub_surface_handle, surface) = app
             .globals
@@ -143,12 +218,55 @@ impl AppWindow {
             .map(|v| v.get_viewport(&surface, &app.globals.queue_handle))
             .expect("Failed to retrieve viewport");
 
+        // Create the raw window handle for the surface.
+        let raw_display_handle = RawDisplayHandle::Wayland(WaylandDisplayHandle::new(
+            NonNull::new(app.globals.connection.backend().display_ptr() as *mut _).unwrap(),
+        ));
+        let raw_window_handle = RawWindowHandle::Wayland(WaylandWindowHandle::new(
+            NonNull::new(surface.id().as_ptr() as *mut _).unwrap(),
+        ));
+
+        // 初始化 wgpu
+        let instance = &mut app.globals.gpu.as_mut().unwrap().instance;
+        let wgpu_surface = unsafe {
+            instance
+                .create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
+                    raw_display_handle,
+                    raw_window_handle,
+                })
+                .unwrap()
+        };
+
+        let surface_caps =
+            wgpu_surface.get_capabilities(&app.globals.gpu.as_mut().unwrap().adapter);
+
+        let surface_format = surface_caps.formats[0];
+        let config = wgpu::SurfaceConfiguration {
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            format: surface_format,
+
+            // width 和 height 指定 SurfaceTexture 的宽度和高度（物理像素，等于逻辑像素乘以屏幕缩放因子）
+            // 现在还无法获取到缩放因子，暂时设置为和逻辑尺寸相同大小
+            width: size.width,
+            height: size.height,
+
+            present_mode: surface_caps.present_modes[0],
+            desired_maximum_frame_latency: 2,
+            alpha_mode: surface_caps.alpha_modes[0],
+            view_formats: vec![],
+        };
+
+        wgpu_surface.configure(&app.globals.gpu.as_mut().unwrap().device, &config);
+
         let mut subview = SubSurfaceView::new(
             surface.clone(),
+            wgpu_surface,
+            config,
             sub_surface_handle,
             size,
             viewport,
             build_view,
+            position_calculator,
         );
         subview.set_position(position);
 
@@ -184,24 +302,14 @@ impl AppWindow {
                 sub_view.view_mut().handle_pointer_event(event, globals);
             }
         }
-
-        // use sctk::seat::pointer::PointerEventKind;
-        // if let PointerEventKind::Press { button, serial, .. } = event.kind {
-        //     if button == 0x110 {
-        //         // Left mouse button
-        //         if event.surface == *self.main_view.surface() {
-        //             if let Some(seat) = globals.seat_state.seats().next() {
-        //                 self.xdg_window.xdg_toplevel()._move(&seat, serial);
-        //             }
-        //         }
-        //     }
-        // }
     }
 
     pub fn handle_keyboard_event(&mut self, event: sctk::seat::keyboard::KeyEvent, pressed: bool) {
         self.main_view.handle_keyboard_event(event.clone(), pressed);
         self.sub_views.iter_mut().for_each(|sub_view| {
-            sub_view.view_mut().handle_keyboard_event(event.clone(), pressed);
+            sub_view
+                .view_mut()
+                .handle_keyboard_event(event.clone(), pressed);
         });
     }
 
@@ -232,21 +340,32 @@ impl AppWindow {
         &self.scale_factor
     }
 
-    pub fn set_scale_factor(&mut self, new_scale_factor: f64) {
+    pub fn set_scale_factor(&mut self, new_scale_factor: f64, gpu: &mut GpuContext) {
         self.scale_factor = Some(new_scale_factor);
-        self.main_view.set_scale_factor(new_scale_factor);
+        self.main_view.set_scale_factor(new_scale_factor, gpu);
         for sub_view in &mut self.sub_views {
-            sub_view.view_mut().set_scale_factor(new_scale_factor);
+            sub_view.view_mut().set_scale_factor(new_scale_factor, gpu);
+            let position_calculate_fn = sub_view.position_calculator();
+            if let Some(position_calculate_fn) = position_calculate_fn {
+                let subview_size = sub_view.view().viewport_size();
+                let new_position =
+                    position_calculate_fn(&self.main_view.viewport_size(), &subview_size);
+                sub_view.set_position(new_position.to_logical(new_scale_factor));
+            }
         }
     }
 
-    pub fn resize(&mut self, new_size: LogicalSize<u32>, gpu: &mut crate::gpu::GpuContext) {
-        if let Some(gpu_surface) = &mut self.main_view.gpu_surface {
-            gpu_surface
-                .resize(gpu, new_size.width as i32, new_size.height as i32)
-                .ok();
+    pub fn resize(&mut self, new_size: LogicalSize<u32>, gpu: &mut GpuContext) {
+        self.main_view.resize(new_size, gpu);
+        for sub_view in &mut self.sub_views {
+            let position_calculate_fn = sub_view.position_calculator();
+            if let Some(position_calculate_fn) = position_calculate_fn {
+                let subview_size = sub_view.view().viewport_size();
+                let new_position =
+                    position_calculate_fn(&self.main_view.viewport_size(), &subview_size);
+                sub_view.set_position(new_position.to_logical(self.scale_factor.unwrap()));
+            }
         }
-        self.main_view.resize(new_size.cast());
     }
 
     pub fn set_keyboard_focus(&mut self, focus: bool) {

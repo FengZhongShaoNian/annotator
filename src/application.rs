@@ -1,37 +1,42 @@
-use std::sync::Arc;
-use egui::{Align2, Color32, ColorImage, ImageSource, Pos2, Rect};
-use egui::load::SizedTexture;
-use crate::dpi::{LogicalSize, PhysicalSize};
+use crate::dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize};
+use crate::gpu::GpuContext;
+use crate::view::SubView;
 use crate::window::AppWindow;
 use crate::wp_fractional_scaling::FractionalScalingManager;
 use crate::wp_viewporter::ViewporterState;
+use egui::load::SizedTexture;
+use egui::{Color32, ColorImage, Id, Image, ImageSource, Order, Pos2, Rect, RichText};
 use image::{GenericImageView, RgbaImage};
 use log::info;
 use sctk::compositor::{CompositorHandler, CompositorState};
 use sctk::output::{OutputHandler, OutputState};
+use sctk::reexports::calloop::{EventLoop, LoopHandle};
 use sctk::registry::{ProvidesRegistryState, RegistryState};
+use sctk::seat::{
+    Capability, SeatHandler, SeatState,
+    keyboard::{KeyEvent, KeyboardHandler, Keysym, Modifiers, RawModifiers},
+    pointer::{PointerEvent, PointerEventKind, PointerHandler},
+};
 use sctk::shell::xdg::XdgShell;
 use sctk::shell::xdg::window::{Window, WindowConfigure, WindowHandler};
 use sctk::subcompositor::SubcompositorState;
-use sctk::{delegate_compositor, delegate_keyboard, delegate_output, delegate_pointer, delegate_registry, delegate_seat, delegate_subcompositor, delegate_xdg_shell, delegate_xdg_window, registry_handlers};
-use sctk::reexports::calloop::{EventLoop, LoopHandle};
-use sctk::seat::{
-    keyboard::{KeyEvent, KeyboardHandler, Keysym, Modifiers, RawModifiers},
-    pointer::{PointerEvent, PointerEventKind, PointerHandler},
-    Capability, SeatHandler, SeatState,
+use sctk::{
+    delegate_compositor, delegate_keyboard, delegate_output, delegate_pointer, delegate_registry,
+    delegate_seat, delegate_subcompositor, delegate_xdg_shell, delegate_xdg_window,
+    registry_handlers,
 };
+use std::sync::Arc;
 use wayland_client::globals::registry_queue_init;
-use wayland_client::protocol::wl_surface::WlSurface;
-use wayland_client::protocol::{wl_output, wl_surface};
-use wayland_client::{Connection, EventQueue, QueueHandle};
 use wayland_client::protocol::wl_keyboard::WlKeyboard;
 use wayland_client::protocol::wl_pointer::WlPointer;
 use wayland_client::protocol::wl_seat::WlSeat;
-use crate::context::Output;
-use crate::gpu::GpuContext;
+use wayland_client::protocol::wl_surface::WlSurface;
+use wayland_client::protocol::{wl_output, wl_surface};
+use wayland_client::{Connection, EventQueue, QueueHandle};
 
 /// Globals 存储了 Wayland 的全局状态和协议处理器。
 pub struct Globals {
+    pub connection: Connection,
     /// 注册表状态，用于管理 Wayland 全局对象。
     pub registry_state: RegistryState,
     /// 输出设备状态（显示器信息）。
@@ -51,7 +56,7 @@ pub struct Globals {
     /// 队列句柄。
     pub queue_handle: QueueHandle<Application>,
     /// GPU 上下文（EGL/Skia）。
-    pub gpu: GpuContext,
+    pub gpu: Option<GpuContext>,
     /// 座位状态（管理输入设备）。
     pub seat_state: SeatState,
     /// 最近一次的序列号（用于同步）。
@@ -79,7 +84,7 @@ impl Application {
     pub fn new(app_id: &'static str) -> Application {
         let conn = Connection::connect_to_env().expect("Can't connect to the wayland server");
 
-        let (globals, mut event_queue) = registry_queue_init(&conn).unwrap();
+        let (globals, event_queue) = registry_queue_init(&conn).unwrap();
         let qh = event_queue.handle();
 
         let compositor_state =
@@ -97,12 +102,10 @@ impl Application {
         let event_loop: EventLoop<Application> =
             EventLoop::try_new().expect("Failed to initialize the event loop!");
 
-        let gpu = GpuContext::new(&conn).expect("GPU acceleration is required for this application");
-        info!("GPU acceleration enabled");
-
         let seat_state = SeatState::new(&globals, &qh);
         let mut app = Self {
             globals: Globals {
+                connection: conn,
                 registry_state: RegistryState::new(&globals),
                 output_state: OutputState::new(&globals, &qh),
                 compositor_state,
@@ -112,7 +115,7 @@ impl Application {
                 xdg_shell_state: XdgShell::bind(&globals, &qh).expect("xdg shell not available"),
                 event_queue: None,
                 queue_handle: qh,
-                gpu,
+                gpu: None,
                 seat_state,
                 last_serial: 0,
                 keyboard: None,
@@ -123,11 +126,6 @@ impl Application {
             windows: vec![],
         };
 
-        // 进行同步分发，以确保获取到初始的输出（Output）信息。
-        // 这对于后续在 open_image 中计算正确的初始逻辑尺寸至关重要。
-        event_queue.blocking_dispatch(&mut app).ok();
-        event_queue.blocking_dispatch(&mut app).ok(); // 多次分发以确保所有相关事件（如 output.done）都已处理
-
         app.globals.event_queue = Some(event_queue);
         app
     }
@@ -137,56 +135,100 @@ impl Application {
         let image_height = image.height();
         let window_config = crate::window::WindowConfiguration::new(
             LogicalSize::new(image_width, image_height),
-        Some(PhysicalSize::new(image_width, image_height)));
-        let window = AppWindow::new(self,window_config, Box::new(move |input, egui_ctx, annotator_ctx| {
-            // 1. 创建 ColorImage
-            // 注意：RgbaImage 的 bytes 应该是连续的 RGBA 数据
-            let background_image = annotator_ctx.background_image.get_or_insert_with(|| {
-                Arc::new(ColorImage::from_rgba_premultiplied([image_width as usize, image_height as usize], image.as_raw()))
-            });
+            Some(PhysicalSize::new(image_width, image_height)),
+        );
+        let mut window = AppWindow::new(
+            self,
+            window_config,
+            Box::new(move |input, egui_ctx, annotator_ctx| {
+                // 1. 创建 ColorImage
+                // 注意：RgbaImage 的 bytes 应该是连续的 RGBA 数据
+                let background_image = annotator_ctx.background_image.get_or_insert_with(|| {
+                    Arc::new(ColorImage::from_rgba_premultiplied(
+                        [image_width as usize, image_height as usize],
+                        image.as_raw(),
+                    ))
+                });
 
-            // 2. 将图像数据上传到 GPU 并获取纹理句柄
-            let texture_handle: &egui::TextureHandle = annotator_ctx.background_texture.get_or_insert_with(|| {
-                // Load the texture only once.
-                egui_ctx.load_texture(
-                    "background-image",
-                    egui::ImageData::Color(background_image.clone()),
-                    Default::default()
-                )
-            });
-
-            // 构建 UI 的具体内容
-            let egui_full_output = egui_ctx.run(input, |ctx| {
-                egui::CentralPanel::default()
-                    .frame(egui::Frame::none()) // 移除默认边距和背景
-                    .show(ctx, |ui| {
-                        ui.image(ImageSource::Texture(SizedTexture::from_handle(&texture_handle)));
-
-                        let mut shapes = Vec::new();
-
-                        // 添加多个形状
-                        shapes.push(egui::Shape::rect_filled(
-                            egui::Rect::from_min_size(egui::pos2(10.0, 10.0), egui::vec2(100.0, 50.0)),
-                            0.0,
-                            egui::Color32::BLUE
-                        ));
-
-                        shapes.push(egui::Shape::line_segment(
-                            [egui::pos2(150.0, 30.0), egui::pos2(300.0, 80.0)],
-                            egui::Stroke::new(2.0, egui::Color32::RED)
-                        ));
-
-                        // 一次性绘制所有形状
-                        ui.painter().extend(shapes);
+                // 2. 将图像数据上传到 GPU 并获取纹理句柄
+                let texture_handle: &egui::TextureHandle =
+                    annotator_ctx.background_texture.get_or_insert_with(|| {
+                        // Load the texture only once.
+                        egui_ctx.load_texture(
+                            "background-image",
+                            egui::ImageData::Color(background_image.clone()),
+                            Default::default(),
+                        )
                     });
-            });
 
-            let mut output = Output::new(egui_full_output);
-            let scale_factor = egui_ctx.pixels_per_point();
-            output.set_preferred_size(Some(PhysicalSize::new(image_width, image_height).to_logical(scale_factor as f64)));
+                // 构建 UI 的具体内容
+                egui_ctx.run(input, |ctx| {
+                    egui::CentralPanel::default()
+                        .frame(egui::Frame::new())
+                        .show(ctx, |ui| {
+                            ui.add(
+                                Image::new(ImageSource::Texture(SizedTexture::from_handle(
+                                    &texture_handle,
+                                )))
+                                .shrink_to_fit(),
+                            );
 
-            output
-        }));
+                            // ui.text_edit_multiline()
+
+                            let mut shapes = Vec::new();
+
+                            // 添加多个形状
+                            shapes.push(egui::Shape::rect_filled(
+                                egui::Rect::from_min_size(
+                                    egui::pos2(10.0, 10.0),
+                                    egui::vec2(100.0, 50.0),
+                                ),
+                                0.0,
+                                egui::Color32::BLUE,
+                            ));
+
+                            shapes.push(egui::Shape::line_segment(
+                                [egui::pos2(150.0, 30.0), egui::pos2(300.0, 80.0)],
+                                egui::Stroke::new(2.0, egui::Color32::RED),
+                            ));
+
+                            // 一次性绘制所有形状
+                            ui.painter().extend(shapes);
+                        });
+                })
+            }),
+        );
+
+        let position_calculator = Arc::new(
+            |parent_surface_size: &PhysicalSize<u32>, subview_size: &PhysicalSize<u32>| {
+                let subview_width = &subview_size.width;
+                PhysicalPosition::new(
+                    parent_surface_size.width - subview_width,
+                    parent_surface_size.height + 10,
+                )
+            },
+        );
+
+        // 创建工具条
+        window.create_sub_surface_view(
+            self,
+            LogicalSize::new(600, 38),
+            LogicalPosition::new(image_width as i32 - 600, (image_height + 10) as i32),
+            Box::new(|input, egui_ctx, annotator_ctx| {
+                // 构建 UI 的具体内容
+                egui_ctx.run(input, |ctx| {
+                    egui::CentralPanel::default()
+                        .frame(egui::Frame::new())
+                        .show(ctx, |ui| {
+                            if ui.button("Line").clicked() {
+                                println!("点击了直线工具 ");
+                            }
+                        });
+                })
+            }),
+            Some(position_calculator),
+        );
+
         self.windows.push(window);
     }
 
@@ -205,17 +247,20 @@ impl Application {
             // 如果窗口的scale_factor不存在，意味着窗口尚未开始绘制
             let old_scale_factor_is_none = w.scale_factor().is_none();
             if w.contains_surface(surface) {
-                w.set_scale_factor(scale_factor);
+                w.set_scale_factor(scale_factor, self.globals.gpu.as_mut().unwrap());
             }
             if old_scale_factor_is_none && w.first_configure == false {
                 // 为了能正确绘制，窗口需要等待首次配置完成并且获取到了缩放倍数，再开始首次绘制
-                
+
                 // 如果窗口设置了preferred_size，那么根据这个尺寸调整窗口大小
                 if let Some(preferred_size) = w.preferred_size {
                     let new_size = preferred_size.to_logical(scale_factor);
-                    w.resize(new_size, &mut self.globals.gpu);
+                    w.resize(new_size, &mut self.globals.gpu.as_mut().unwrap());
                 }
-                w.draw(&self.globals.queue_handle, &mut self.globals.gpu);
+                w.draw(
+                    &self.globals.queue_handle,
+                    &mut self.globals.gpu.as_mut().unwrap(),
+                );
             }
         })
     }
@@ -274,7 +319,7 @@ impl CompositorHandler for Application {
             // 只在主 Surface (main_view) 的帧回调到达时触发重绘
             // 这样可以保证渲染频率与显示刷新率同步，避免过度提交
             if window.main_view.surface() == surface {
-                window.draw(qh, gpu);
+                window.draw(qh, gpu.as_mut().unwrap());
                 return; // 找到对应的窗口并重绘后退出
             }
         }
@@ -366,11 +411,10 @@ impl WindowHandler for Application {
                 app_window.first_configure = false;
 
                 if app_window.scale_factor().is_some() {
-                    let gpu = &mut self.globals.gpu;
+                    let gpu = self.globals.gpu.as_mut().unwrap();
                     app_window.draw(qh, gpu);
                 }
             }
-
         }
     }
 }
@@ -410,7 +454,11 @@ impl SeatHandler for Application {
 
         if capability == Capability::Pointer && self.globals.pointer.is_none() {
             println!("Set pointer capability");
-            let pointer = self.globals.seat_state.get_pointer(qh, &seat).expect("Failed to create pointer");
+            let pointer = self
+                .globals
+                .seat_state
+                .get_pointer(qh, &seat)
+                .expect("Failed to create pointer");
             self.globals.pointer = Some(pointer);
         }
     }
@@ -447,7 +495,10 @@ impl KeyboardHandler for Application {
         _: &[u32],
         keysyms: &[Keysym],
     ) {
-        let window = self.windows.iter_mut().find(|w| w.contains_surface(surface));
+        let window = self
+            .windows
+            .iter_mut()
+            .find(|w| w.contains_surface(surface));
 
         if let Some(window) = window {
             println!("Keyboard focus on window with pressed syms: {keysyms:?}");
@@ -463,7 +514,10 @@ impl KeyboardHandler for Application {
         surface: &wl_surface::WlSurface,
         _: u32,
     ) {
-        let window = self.windows.iter_mut().find(|w| w.contains_surface(surface));
+        let window = self
+            .windows
+            .iter_mut()
+            .find(|w| w.contains_surface(surface));
 
         if let Some(window) = window {
             println!("Release keyboard focus on window");
@@ -574,7 +628,11 @@ impl PointerHandler for Application {
                     Release { button, .. } => {
                         println!("Release {:x} @ {:?}", button, event.position);
                     }
-                    Axis { horizontal, vertical, .. } => {
+                    Axis {
+                        horizontal,
+                        vertical,
+                        ..
+                    } => {
                         println!("Scroll H:{horizontal:?}, V:{vertical:?}");
                     }
                 }

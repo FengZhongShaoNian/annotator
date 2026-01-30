@@ -1,40 +1,67 @@
+use crate::context::SurfaceViewContext;
+use crate::dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize};
+use crate::surface_view::SurfaceView;
+use crate::view::{SubView, View};
+use egui::FullOutput;
+use egui_wgpu::wgpu::Surface;
+use std::sync::Arc;
 use wayland_client::protocol::wl_subsurface::WlSubsurface;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_protocols::wp::viewporter::client::wp_viewport::WpViewport;
-use crate::context::{AnnotatorContext, Output};
-use crate::dpi::{LogicalPosition, LogicalSize};
-use crate::surface_view::SurfaceView;
-use crate::view::{SubView, View};
 
-pub struct SubSurfaceView {
-    view: SurfaceView,
-    subsurface: WlSubsurface
+pub struct SubSurfaceView<'window> {
+    view: SurfaceView<'window>,
+    subsurface: WlSubsurface,
+    position_calculator: Option<Arc<crate::view::RelativePositionCalculator>>,
 }
 
-impl SubSurfaceView {
-    pub fn new(surface: WlSurface,
-               subsurface: WlSubsurface, 
-               size: LogicalSize<u32>,
-               viewport: WpViewport,
-               build_view: Box<dyn Fn(egui::RawInput, &mut egui::Context, &mut AnnotatorContext) -> Output>) -> Self {
-        let view = SurfaceView::new(surface, size, viewport, build_view);
+impl<'window> SubSurfaceView<'window> {
+    pub fn new(
+        surface: WlSurface,
+        wgpu_surface: Surface<'window>,
+        wgpu_surface_configuration: egui_wgpu::wgpu::SurfaceConfiguration,
+        subsurface: WlSubsurface,
+        size: LogicalSize<u32>,
+        viewport: WpViewport,
+        build_view: Box<
+            dyn Fn(egui::RawInput, &mut egui::Context, &mut SurfaceViewContext) -> FullOutput,
+        >,
+        position_calculator: Option<Arc<crate::view::RelativePositionCalculator>>,
+    ) -> Self {
+        let view = SurfaceView::new(
+            surface,
+            wgpu_surface,
+            wgpu_surface_configuration,
+            size,
+            viewport,
+            build_view,
+        );
         Self {
             view,
-            subsurface
+            subsurface,
+            position_calculator,
         }
     }
 }
 
-impl SubView for SubSurfaceView {
+impl<'window> SubView for SubSurfaceView<'window> {
     fn view(&self) -> &dyn View {
         &self.view
     }
-    
+
     fn view_mut(&mut self) -> &mut dyn View {
         &mut self.view
     }
 
     fn set_position(&mut self, pos: LogicalPosition<i32>) {
         self.subsurface.set_position(pos.x, pos.y);
+    }
+
+    fn position_calculator(&mut self) -> Option<Arc<crate::view::RelativePositionCalculator>> {
+        if let Some(relocation_fn) = &self.position_calculator {
+            Some(relocation_fn.clone())
+        } else {
+            None
+        }
     }
 }

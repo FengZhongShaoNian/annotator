@@ -64,7 +64,6 @@
 //! [points]: https://en.wikipedia.org/wiki/Point_(typography)
 //! [picas]: https://en.wikipedia.org/wiki/Pica_(typography)
 
-
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -404,7 +403,10 @@ impl<P: Pixel> LogicalPosition<P> {
 
     #[inline]
     pub fn cast<X: Pixel>(&self) -> LogicalPosition<X> {
-        LogicalPosition { x: self.x.cast(), y: self.y.cast() }
+        LogicalPosition {
+            x: self.x.cast(),
+            y: self.y.cast(),
+        }
     }
 }
 
@@ -466,7 +468,10 @@ impl<P: Pixel> PhysicalPosition<P> {
 
     #[inline]
     pub fn cast<X: Pixel>(&self) -> PhysicalPosition<X> {
-        PhysicalPosition { x: self.x.cast(), y: self.y.cast() }
+        PhysicalPosition {
+            x: self.x.cast(),
+            y: self.y.cast(),
+        }
     }
 }
 
@@ -542,7 +547,10 @@ impl<P: Pixel> LogicalSize<P> {
 
     #[inline]
     pub fn cast<X: Pixel>(&self) -> LogicalSize<X> {
-        LogicalSize { width: self.width.cast(), height: self.height.cast() }
+        LogicalSize {
+            width: self.width.cast(),
+            height: self.height.cast(),
+        }
     }
 }
 
@@ -601,7 +609,10 @@ impl<P: Pixel> PhysicalSize<P> {
 
     #[inline]
     pub fn cast<X: Pixel>(&self) -> PhysicalSize<X> {
-        PhysicalSize { width: self.width.cast(), height: self.height.cast() }
+        PhysicalSize {
+            width: self.width.cast(),
+            height: self.height.cast(),
+        }
     }
 }
 
@@ -743,7 +754,12 @@ pub struct LogicalInsets<P> {
 impl<P> LogicalInsets<P> {
     #[inline]
     pub const fn new(top: P, left: P, bottom: P, right: P) -> Self {
-        Self { top, left, bottom, right }
+        Self {
+            top,
+            left,
+            bottom,
+            right,
+        }
     }
 }
 
@@ -794,7 +810,12 @@ pub struct PhysicalInsets<P> {
 impl<P> PhysicalInsets<P> {
     #[inline]
     pub const fn new(top: P, left: P, bottom: P, right: P) -> Self {
-        Self { top, left, bottom, right }
+        Self {
+            top,
+            left,
+            bottom,
+            right,
+        }
     }
 }
 
@@ -935,7 +956,12 @@ mod tests {
 
     macro_rules! assert_approx_eq {
         ($a:expr, $b:expr $(,)?) => {
-            assert!(($a - $b).abs() < 0.001, "{} is not approximately equal to {}", $a, $b);
+            assert!(
+                ($a - $b).abs() < 0.001,
+                "{} is not approximately equal to {}",
+                $a,
+                $b
+            );
         };
     }
 
@@ -1054,8 +1080,14 @@ mod tests {
         assert_eq!(log_unit.to_physical::<u32>(1.0), PhysicalUnit::new(1));
         assert_eq!(log_unit.to_physical::<u32>(2.0), PhysicalUnit::new(2));
         assert_eq!(log_unit.cast::<u32>(), LogicalUnit::new(1));
-        assert_eq!(log_unit, LogicalUnit::from_physical(PhysicalUnit::new(1.0), 1.0));
-        assert_eq!(log_unit, LogicalUnit::from_physical(PhysicalUnit::new(2.0), 2.0));
+        assert_eq!(
+            log_unit,
+            LogicalUnit::from_physical(PhysicalUnit::new(1.0), 1.0)
+        );
+        assert_eq!(
+            log_unit,
+            LogicalUnit::from_physical(PhysicalUnit::new(2.0), 2.0)
+        );
         assert_eq!(LogicalUnit::from(2.0), LogicalUnit::new(2.0));
 
         let x: f64 = log_unit.into();
@@ -1064,8 +1096,14 @@ mod tests {
 
     #[test]
     fn test_physical_unit() {
-        assert_eq!(PhysicalUnit::from_logical(LogicalUnit::new(1.0), 1.0), PhysicalUnit::new(1));
-        assert_eq!(PhysicalUnit::from_logical(LogicalUnit::new(2.0), 0.5), PhysicalUnit::new(1));
+        assert_eq!(
+            PhysicalUnit::from_logical(LogicalUnit::new(1.0), 1.0),
+            PhysicalUnit::new(1)
+        );
+        assert_eq!(
+            PhysicalUnit::from_logical(LogicalUnit::new(2.0), 0.5),
+            PhysicalUnit::new(1)
+        );
         assert_eq!(PhysicalUnit::from(2.0), PhysicalUnit::new(2.0,));
         assert_eq!(PhysicalUnit::from(2.0), PhysicalUnit::new(2.0));
 
@@ -1079,10 +1117,22 @@ mod tests {
         assert_eq!(log_pos.to_physical::<u32>(1.0), PhysicalPosition::new(1, 2));
         assert_eq!(log_pos.to_physical::<u32>(2.0), PhysicalPosition::new(2, 4));
         assert_eq!(log_pos.cast::<u32>(), LogicalPosition::new(1, 2));
-        assert_eq!(log_pos, LogicalPosition::from_physical(PhysicalPosition::new(1.0, 2.0), 1.0));
-        assert_eq!(log_pos, LogicalPosition::from_physical(PhysicalPosition::new(2.0, 4.0), 2.0));
-        assert_eq!(LogicalPosition::from((2.0, 2.0)), LogicalPosition::new(2.0, 2.0));
-        assert_eq!(LogicalPosition::from([2.0, 3.0]), LogicalPosition::new(2.0, 3.0));
+        assert_eq!(
+            log_pos,
+            LogicalPosition::from_physical(PhysicalPosition::new(1.0, 2.0), 1.0)
+        );
+        assert_eq!(
+            log_pos,
+            LogicalPosition::from_physical(PhysicalPosition::new(2.0, 4.0), 2.0)
+        );
+        assert_eq!(
+            LogicalPosition::from((2.0, 2.0)),
+            LogicalPosition::new(2.0, 2.0)
+        );
+        assert_eq!(
+            LogicalPosition::from([2.0, 3.0]),
+            LogicalPosition::new(2.0, 3.0)
+        );
 
         let x: (f64, f64) = log_pos.into();
         assert_eq!(x, (1.0, 2.0));
@@ -1100,8 +1150,14 @@ mod tests {
             PhysicalPosition::from_logical(LogicalPosition::new(2.0, 4.0), 0.5),
             PhysicalPosition::new(1, 2)
         );
-        assert_eq!(PhysicalPosition::from((2.0, 2.0)), PhysicalPosition::new(2.0, 2.0));
-        assert_eq!(PhysicalPosition::from([2.0, 3.0]), PhysicalPosition::new(2.0, 3.0));
+        assert_eq!(
+            PhysicalPosition::from((2.0, 2.0)),
+            PhysicalPosition::new(2.0, 2.0)
+        );
+        assert_eq!(
+            PhysicalPosition::from([2.0, 3.0]),
+            PhysicalPosition::new(2.0, 3.0)
+        );
 
         let x: (f64, f64) = PhysicalPosition::new(1, 2).into();
         assert_eq!(x, (1.0, 2.0));
@@ -1115,8 +1171,14 @@ mod tests {
         assert_eq!(log_size.to_physical::<u32>(1.0), PhysicalSize::new(1, 2));
         assert_eq!(log_size.to_physical::<u32>(2.0), PhysicalSize::new(2, 4));
         assert_eq!(log_size.cast::<u32>(), LogicalSize::new(1, 2));
-        assert_eq!(log_size, LogicalSize::from_physical(PhysicalSize::new(1.0, 2.0), 1.0));
-        assert_eq!(log_size, LogicalSize::from_physical(PhysicalSize::new(2.0, 4.0), 2.0));
+        assert_eq!(
+            log_size,
+            LogicalSize::from_physical(PhysicalSize::new(1.0, 2.0), 1.0)
+        );
+        assert_eq!(
+            log_size,
+            LogicalSize::from_physical(PhysicalSize::new(2.0, 4.0), 2.0)
+        );
         assert_eq!(LogicalSize::from((2.0, 2.0)), LogicalSize::new(2.0, 2.0));
         assert_eq!(LogicalSize::from([2.0, 3.0]), LogicalSize::new(2.0, 3.0));
 
@@ -1147,7 +1209,10 @@ mod tests {
 
     #[test]
     fn test_size() {
-        assert_eq!(Size::new(PhysicalSize::new(1, 2)), Size::Physical(PhysicalSize::new(1, 2)));
+        assert_eq!(
+            Size::new(PhysicalSize::new(1, 2)),
+            Size::Physical(PhysicalSize::new(1, 2))
+        );
         assert_eq!(
             Size::new(LogicalSize::new(1.0, 2.0)),
             Size::Logical(LogicalSize::new(1.0, 2.0))

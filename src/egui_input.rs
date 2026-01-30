@@ -1,0 +1,159 @@
+use egui::{Event, Key, Modifiers, PointerButton, Pos2, RawInput, Vec2};
+use sctk::seat::keyboard::{KeyEvent, Keysym, Modifiers as SctkModifiers};
+use sctk::seat::pointer::{PointerEvent, PointerEventKind};
+
+pub struct EguiInput {
+    pub raw: RawInput,
+}
+
+impl EguiInput {
+    pub fn new() -> Self {
+        Self {
+            raw: RawInput::default(),
+        }
+    }
+
+    pub fn handle_pointer_event(&mut self, event: &PointerEvent, _scale_factor: f64) {
+        let (x, y) = event.position;
+        let pos = Pos2::new(x as f32, y as f32);
+
+        match event.kind {
+            PointerEventKind::Enter { .. } => {
+                self.raw.events.push(Event::PointerMoved(pos));
+            }
+            PointerEventKind::Leave { .. } => {
+                self.raw.events.push(Event::PointerGone);
+            }
+            PointerEventKind::Motion { .. } => {
+                self.raw.events.push(Event::PointerMoved(pos));
+            }
+            PointerEventKind::Press { button, .. } => {
+                if let Some(egui_button) = map_pointer_button(button) {
+                    self.raw.events.push(Event::PointerButton {
+                        pos,
+                        button: egui_button,
+                        pressed: true,
+                        modifiers: self.raw.modifiers,
+                    });
+                }
+            }
+            PointerEventKind::Release { button, .. } => {
+                if let Some(egui_button) = map_pointer_button(button) {
+                    self.raw.events.push(Event::PointerButton {
+                        pos,
+                        button: egui_button,
+                        pressed: false,
+                        modifiers: self.raw.modifiers,
+                    });
+                }
+            }
+            PointerEventKind::Axis {
+                horizontal,
+                vertical,
+                ..
+            } => {
+                let delta = Vec2::new(
+                    horizontal.absolute as f32 + horizontal.discrete as f32 * 10.0,
+                    vertical.absolute as f32 + vertical.discrete as f32 * 10.0,
+                );
+                self.raw.events.push(Event::MouseWheel {
+                    unit: egui::MouseWheelUnit::Point,
+                    delta,
+                    modifiers: self.raw.modifiers,
+                });
+            }
+        }
+    }
+
+    pub fn handle_keyboard_event(&mut self, event: KeyEvent, pressed: bool) {
+        if let Some(key) = map_keysym(event.keysym) {
+            self.raw.events.push(Event::Key {
+                key,
+                physical_key: None,
+                pressed,
+                repeat: false, // SCTK handles repeat separately if needed
+                modifiers: self.raw.modifiers,
+            });
+        }
+
+        // For text input
+        if pressed {
+            if let Some(txt) = event.utf8 {
+                if !txt.chars().any(|c| c.is_control()) {
+                    self.raw.events.push(Event::Text(txt));
+                }
+            }
+        }
+    }
+
+    pub fn update_modifiers(&mut self, modifiers: SctkModifiers) {
+        self.raw.modifiers = Modifiers {
+            alt: modifiers.alt,
+            ctrl: modifiers.ctrl,
+            shift: modifiers.shift,
+            mac_cmd: false,
+            command: modifiers.ctrl,
+        };
+    }
+}
+
+fn map_pointer_button(button: u32) -> Option<PointerButton> {
+    // These are linux/input-event-codes.h constants
+    match button {
+        0x110 => Some(PointerButton::Primary),   // BTN_LEFT
+        0x111 => Some(PointerButton::Secondary), // BTN_RIGHT
+        0x112 => Some(PointerButton::Middle),    // BTN_MIDDLE
+        0x113 => Some(PointerButton::Extra1),    // BTN_SIDE
+        0x114 => Some(PointerButton::Extra2),    // BTN_EXTRA
+        _ => None,
+    }
+}
+
+fn map_keysym(keysym: Keysym) -> Option<Key> {
+    use sctk::seat::keyboard::Keysym as K;
+    // Map some common keysyms to egui Keys
+    match keysym {
+        K::Return => Some(Key::Enter),
+        K::Tab => Some(Key::Tab),
+        K::BackSpace => Some(Key::Backspace),
+        K::Insert => Some(Key::Insert),
+        K::Delete => Some(Key::Delete),
+        K::Right => Some(Key::ArrowRight),
+        K::Left => Some(Key::ArrowLeft),
+        K::Down => Some(Key::ArrowDown),
+        K::Up => Some(Key::ArrowUp),
+        K::Page_Up => Some(Key::PageUp),
+        K::Page_Down => Some(Key::PageDown),
+        K::Home => Some(Key::Home),
+        K::End => Some(Key::End),
+        K::Escape => Some(Key::Escape),
+        K::space => Some(Key::Space),
+        K::A | K::a => Some(Key::A),
+        K::B | K::b => Some(Key::B),
+        K::C | K::c => Some(Key::C),
+        K::D | K::d => Some(Key::D),
+        K::E | K::e => Some(Key::E),
+        K::F | K::f => Some(Key::F),
+        K::G | K::g => Some(Key::G),
+        K::H | K::h => Some(Key::H),
+        K::I | K::i => Some(Key::I),
+        K::J | K::j => Some(Key::J),
+        K::K | K::k => Some(Key::K),
+        K::L | K::l => Some(Key::L),
+        K::M | K::m => Some(Key::M),
+        K::N | K::n => Some(Key::N),
+        K::O | K::o => Some(Key::O),
+        K::P | K::p => Some(Key::P),
+        K::Q | K::q => Some(Key::Q),
+        K::R | K::r => Some(Key::R),
+        K::S | K::s => Some(Key::S),
+        K::T | K::t => Some(Key::T),
+        K::U | K::u => Some(Key::U),
+        K::V | K::v => Some(Key::V),
+        K::W | K::w => Some(Key::W),
+        K::X | K::x => Some(Key::X),
+        K::Y | K::y => Some(Key::Y),
+        K::Z | K::z => Some(Key::Z),
+        _ => None,
+    }
+}

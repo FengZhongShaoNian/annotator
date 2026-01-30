@@ -1,25 +1,24 @@
 mod application;
-mod window;
 mod egui_input;
-mod egui_skia_painter;
 mod gpu;
+mod window;
 
 mod wp_fractional_scaling;
 
-mod wp_viewporter;
-mod surface_view;
-mod sub_surface_view;
-mod view;
-mod dpi;
 mod context;
+mod dpi;
+mod sub_surface_view;
+mod surface_view;
+mod view;
+mod wp_viewporter;
 
-use std::env;
-use log::error;
 use crate::application::Application;
+use log::error;
+use std::env;
 
 fn main() {
     env_logger::init();
-    
+
     let mut app = Application::new("site.nullable.annotator");
 
     for path in env::args_os().skip(1) {
@@ -36,7 +35,6 @@ fn main() {
         let image = image.to_rgba8();
         app.open_image(image);
     }
-    
+
     app.run();
 }
-

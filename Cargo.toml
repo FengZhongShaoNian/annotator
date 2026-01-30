@@ -1,0 +1,24 @@
+[package]
+name = "annotator"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+sctk = { package = "smithay-client-toolkit", version = "0.20.0", default-features = false, features = [
+    "calloop",
+    "xkbcommon"
+] }
+wayland-client = {version = "0.31.11", features = ["log"]}
+wayland-backend = { version = "0.3", features = ["client_system"] }
+wayland-sys = "0.31"
+wayland-protocols = {version = "0.32.9", features = ["client"]}
+log = "0.4.29"
+image = "0.25.9"
+anyhow = "1.0.100"
+env_logger = "0.11.8"
+serde = "1.0.228"
+wgpu = {version = "0.19.0"}
+pollster = "0.3.0"
+egui-wgpu = { version = "0.33.3", features = ["wayland"] }
+egui = "0.33.3"
+raw-window-handle = "0.6.2"
