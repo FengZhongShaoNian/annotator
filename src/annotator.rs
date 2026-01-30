@@ -2,7 +2,12 @@ use crate::global::Global;
 use egui::TextureHandle;
 
 
-/// 背景图片的纹理
-pub struct BackgroundTexture(pub TextureHandle);
+#[derive(Default)]
+pub struct AnnotatorState {
+    /// 背景图片的纹理句柄
+    pub background_texture_handle: Option<TextureHandle>,
 
-impl Global for BackgroundTexture {}
+    pub editing_text: String,
+}
+
+impl Global for AnnotatorState {}

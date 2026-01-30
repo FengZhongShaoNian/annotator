@@ -33,7 +33,7 @@ use wayland_client::protocol::wl_seat::WlSeat;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::protocol::{wl_output, wl_surface};
 use wayland_client::{Connection, EventQueue, QueueHandle};
-use crate::annotator::{BackgroundTexture};
+use crate::annotator::{AnnotatorState};
 use crate::global::{ReadGlobal, UpdateGlobal};
 
 /// GlobalState 存储了 Wayland 的全局状态和协议处理器。
@@ -145,8 +145,9 @@ impl Application {
             Box::new(move |input, egui_ctx, window_ctx| {
 
                 // 将图像数据上传到 GPU 并获取纹理句柄
-                let texture_handle: &BackgroundTexture =
+                let annotator_state: &AnnotatorState =
                     window_ctx.get_global_or_insert_with(|| {
+                        let mut annotator_state = AnnotatorState::default();
                         // 创建 ColorImage
                         // 注意：RgbaImage 的 bytes 应该是连续的 RGBA 数据
                         let background_image = Arc::new(ColorImage::from_rgba_premultiplied(
@@ -159,8 +160,12 @@ impl Application {
                             egui::ImageData::Color(background_image),
                             Default::default(),
                         );
-                        BackgroundTexture(texture_handle)
+                        annotator_state.background_texture_handle = Some(texture_handle);
+                        annotator_state
                     });
+
+                // 将图像数据上传到 GPU 并获取纹理句柄
+                let texture_handle = annotator_state.background_texture_handle.as_ref().unwrap();
 
                 // 构建 UI 的具体内容
                 egui_ctx.run(input, |ctx| {
@@ -169,7 +174,7 @@ impl Application {
                         .show(ctx, |ui| {
                             ui.add(
                                 Image::new(ImageSource::Texture(SizedTexture::from_handle(
-                                    &texture_handle.0,
+                                    texture_handle,
                                 )))
                                 .shrink_to_fit(),
                             );
