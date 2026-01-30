@@ -74,15 +74,15 @@ impl AppWindow {
     ) -> AppWindow {
         // 创建主表面
         let main_surface = app
-            .globals
+            .global_state
             .compositor_state
-            .create_surface(&app.globals.queue_handle);
+            .create_surface(&app.global_state.queue_handle);
 
         // 创建 XDG 窗口并设置属性
-        let xdg_window = app.globals.xdg_shell_state.create_window(
+        let xdg_window = app.global_state.xdg_shell_state.create_window(
             main_surface.clone(),
             WindowDecorations::None,
-            &app.globals.queue_handle,
+            &app.global_state.queue_handle,
         );
         xdg_window.set_title("Image Annotator");
         xdg_window.set_app_id(app.app_id);
@@ -90,14 +90,14 @@ impl AppWindow {
 
         // Create the raw window handle for the surface.
         let raw_display_handle = RawDisplayHandle::Wayland(WaylandDisplayHandle::new(
-            NonNull::new(app.globals.connection.backend().display_ptr() as *mut _).unwrap(),
+            NonNull::new(app.global_state.connection.backend().display_ptr() as *mut _).unwrap(),
         ));
         let raw_window_handle = RawWindowHandle::Wayland(WaylandWindowHandle::new(
             NonNull::new(xdg_window.wl_surface().id().as_ptr() as *mut _).unwrap(),
         ));
 
         // 初始化 wgpu
-        let wgpu_surface = if app.globals.gpu.is_none() {
+        let wgpu_surface = if app.global_state.gpu.is_none() {
             let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
                 backends: wgpu::Backends::all(),
                 ..Default::default()
@@ -112,11 +112,11 @@ impl AppWindow {
                     .unwrap()
             };
             let gpu_context = gpu::GpuContext::new(instance, &surface).unwrap();
-            app.globals.gpu = Some(gpu_context);
+            app.global_state.gpu = Some(gpu_context);
 
             surface
         } else {
-            let instance = &app.globals.gpu.as_mut().unwrap().instance;
+            let instance = &app.global_state.gpu.as_mut().unwrap().instance;
             let surface = unsafe {
                 instance
                     .create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
@@ -129,7 +129,7 @@ impl AppWindow {
         };
 
         let surface_caps =
-            wgpu_surface.get_capabilities(&app.globals.gpu.as_mut().unwrap().adapter);
+            wgpu_surface.get_capabilities(&app.global_state.gpu.as_mut().unwrap().adapter);
 
         let surface_format = surface_caps.formats[0];
         let config = wgpu::SurfaceConfiguration {
@@ -147,20 +147,20 @@ impl AppWindow {
             view_formats: vec![],
         };
 
-        wgpu_surface.configure(&app.globals.gpu.as_mut().unwrap().device, &config);
+        wgpu_surface.configure(&app.global_state.gpu.as_mut().unwrap().device, &config);
 
         // 初始化分数缩放和视口
         let fractional_scale = app
-            .globals
+            .global_state
             .fractional_scaling_manager
             .as_ref()
-            .map(|ref m| m.fractional_scaling(&main_surface, &app.globals.queue_handle));
+            .map(|ref m| m.fractional_scaling(&main_surface, &app.global_state.queue_handle));
         let main_viewport = app
-            .globals
+            .global_state
             .viewporter_state
             .as_ref()
             .map(|ref viewporter_state| {
-                viewporter_state.get_viewport(&main_surface, &app.globals.queue_handle)
+                viewporter_state.get_viewport(&main_surface, &app.global_state.queue_handle)
             })
             .expect("Failed to retrieve viewport");
 
@@ -175,7 +175,7 @@ impl AppWindow {
             build_root_view,
         );
 
-        let qh = app.globals.queue_handle.clone();
+        let qh = app.global_state.queue_handle.clone();
 
         let window = Self {
             main_view,
@@ -211,27 +211,27 @@ impl AppWindow {
         position_calculator: Option<Arc<crate::view::RelativePositionCalculator>>,
     ) -> &mut SubSurfaceView {
         let (sub_surface_handle, surface) = app
-            .globals
+            .global_state
             .sub_compositor_state
-            .create_subsurface(self.main_view.surface().clone(), &app.globals.queue_handle);
+            .create_subsurface(self.main_view.surface().clone(), &app.global_state.queue_handle);
 
         let viewport = app
-            .globals
+            .global_state
             .viewporter_state
             .as_ref()
-            .map(|v| v.get_viewport(&surface, &app.globals.queue_handle))
+            .map(|v| v.get_viewport(&surface, &app.global_state.queue_handle))
             .expect("Failed to retrieve viewport");
 
         // Create the raw window handle for the surface.
         let raw_display_handle = RawDisplayHandle::Wayland(WaylandDisplayHandle::new(
-            NonNull::new(app.globals.connection.backend().display_ptr() as *mut _).unwrap(),
+            NonNull::new(app.global_state.connection.backend().display_ptr() as *mut _).unwrap(),
         ));
         let raw_window_handle = RawWindowHandle::Wayland(WaylandWindowHandle::new(
             NonNull::new(surface.id().as_ptr() as *mut _).unwrap(),
         ));
 
         // 初始化 wgpu
-        let instance = &mut app.globals.gpu.as_mut().unwrap().instance;
+        let instance = &mut app.global_state.gpu.as_mut().unwrap().instance;
         let wgpu_surface = unsafe {
             instance
                 .create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
@@ -242,7 +242,7 @@ impl AppWindow {
         };
 
         let surface_caps =
-            wgpu_surface.get_capabilities(&app.globals.gpu.as_mut().unwrap().adapter);
+            wgpu_surface.get_capabilities(&app.global_state.gpu.as_mut().unwrap().adapter);
 
         let surface_format = surface_caps.formats[0];
         let config = wgpu::SurfaceConfiguration {
@@ -260,7 +260,7 @@ impl AppWindow {
             view_formats: vec![],
         };
 
-        wgpu_surface.configure(&app.globals.gpu.as_mut().unwrap().device, &config);
+        wgpu_surface.configure(&app.global_state.gpu.as_mut().unwrap().device, &config);
 
         let mut subview = SubSurfaceView::new(
             surface.clone(),
@@ -292,7 +292,7 @@ impl AppWindow {
     pub fn handle_pointer_event(
         &mut self,
         event: &sctk::seat::pointer::PointerEvent,
-        globals: &crate::application::Globals,
+        globals: &crate::application::GlobalState,
     ) {
         let event_surface = &event.surface;
         if event_surface == self.main_view.surface() {

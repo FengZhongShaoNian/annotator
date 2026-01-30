@@ -25,7 +25,7 @@ pub trait View {
     fn handle_pointer_event(
         &mut self,
         event: &sctk::seat::pointer::PointerEvent,
-        globals: &crate::application::Globals,
+        global_state: &crate::application::GlobalState,
     );
 
     /// 使用 GPU 上下文进行重绘。

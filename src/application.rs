@@ -36,8 +36,8 @@ use wayland_client::{Connection, EventQueue, QueueHandle};
 use crate::annotator::{BackgroundTexture};
 use crate::global::{ReadGlobal, UpdateGlobal};
 
-/// Globals 存储了 Wayland 的全局状态和协议处理器。
-pub struct Globals {
+/// GlobalState 存储了 Wayland 的全局状态和协议处理器。
+pub struct GlobalState {
     pub connection: Connection,
     /// 注册表状态，用于管理 Wayland 全局对象。
     pub registry_state: RegistryState,
@@ -74,7 +74,7 @@ pub struct Globals {
 /// Application 是应用的核心结构，管理全局状态和窗口列表。
 pub struct Application {
     /// 全局状态。
-    pub globals: Globals,
+    pub global_state: GlobalState,
     /// 应用 ID。
     pub app_id: &'static str,
     /// 窗口列表。
@@ -106,7 +106,7 @@ impl Application {
 
         let seat_state = SeatState::new(&globals, &qh);
         let mut app = Self {
-            globals: Globals {
+            global_state: GlobalState {
                 connection: conn,
                 registry_state: RegistryState::new(&globals),
                 output_state: OutputState::new(&globals, &qh),
@@ -128,7 +128,7 @@ impl Application {
             windows: vec![],
         };
 
-        app.globals.event_queue = Some(event_queue);
+        app.global_state.event_queue = Some(event_queue);
         app
     }
 
@@ -239,7 +239,7 @@ impl Application {
         scale_factor: f64,
         is_legacy: bool,
     ) {
-        if is_legacy && self.globals.fractional_scaling_manager.is_some() {
+        if is_legacy && self.global_state.fractional_scaling_manager.is_some() {
             // 使用分数缩放的情况下忽略整数缩放倍数
             return;
         }
@@ -248,7 +248,7 @@ impl Application {
             // 如果窗口的scale_factor不存在，意味着窗口尚未开始绘制
             let old_scale_factor_is_none = w.scale_factor().is_none();
             if w.contains_surface(surface) {
-                w.set_scale_factor(scale_factor, self.globals.gpu.as_mut().unwrap());
+                w.set_scale_factor(scale_factor, self.global_state.gpu.as_mut().unwrap());
             }
             if old_scale_factor_is_none && w.first_configure == false {
                 // 为了能正确绘制，窗口需要等待首次配置完成并且获取到了缩放倍数，再开始首次绘制
@@ -256,18 +256,18 @@ impl Application {
                 // 如果窗口设置了preferred_size，那么根据这个尺寸调整窗口大小
                 if let Some(preferred_size) = w.preferred_size {
                     let new_size = preferred_size.to_logical(scale_factor);
-                    w.resize(new_size, &mut self.globals.gpu.as_mut().unwrap());
+                    w.resize(new_size, &mut self.global_state.gpu.as_mut().unwrap());
                 }
                 w.draw(
-                    &self.globals.queue_handle,
-                    &mut self.globals.gpu.as_mut().unwrap(),
+                    &self.global_state.queue_handle,
+                    &mut self.global_state.gpu.as_mut().unwrap(),
                 );
             }
         })
     }
 
     pub fn run(&mut self) {
-        let mut event_queue = self.globals.event_queue.take().unwrap();
+        let mut event_queue = self.global_state.event_queue.take().unwrap();
         loop {
             event_queue.blocking_dispatch(self).unwrap();
         }
@@ -315,7 +315,7 @@ impl CompositorHandler for Application {
         surface: &wl_surface::WlSurface,
         _time: u32,
     ) {
-        let gpu = &mut self.globals.gpu;
+        let gpu = &mut self.global_state.gpu;
         for window in &mut self.windows {
             // 只在主 Surface (main_view) 的帧回调到达时触发重绘
             // 这样可以保证渲染频率与显示刷新率同步，避免过度提交
@@ -351,7 +351,7 @@ impl CompositorHandler for Application {
 
 impl OutputHandler for Application {
     fn output_state(&mut self) -> &mut OutputState {
-        &mut self.globals.output_state
+        &mut self.global_state.output_state
     }
 
     fn new_output(
@@ -381,7 +381,7 @@ impl OutputHandler for Application {
 
 impl ProvidesRegistryState for Application {
     fn registry(&mut self) -> &mut RegistryState {
-        &mut self.globals.registry_state
+        &mut self.global_state.registry_state
     }
 
     registry_handlers!(OutputState);
@@ -412,7 +412,7 @@ impl WindowHandler for Application {
                 app_window.first_configure = false;
 
                 if app_window.scale_factor().is_some() {
-                    let gpu = self.globals.gpu.as_mut().unwrap();
+                    let gpu = self.global_state.gpu.as_mut().unwrap();
                     app_window.draw(qh, gpu);
                 }
             }
@@ -422,7 +422,7 @@ impl WindowHandler for Application {
 
 impl SeatHandler for Application {
     fn seat_state(&mut self) -> &mut SeatState {
-        &mut self.globals.seat_state
+        &mut self.global_state.seat_state
     }
 
     fn new_seat(&mut self, _: &Connection, _: &QueueHandle<Self>, _: WlSeat) {}
@@ -434,33 +434,33 @@ impl SeatHandler for Application {
         seat: WlSeat,
         capability: Capability,
     ) {
-        if capability == Capability::Keyboard && self.globals.keyboard.is_none() {
+        if capability == Capability::Keyboard && self.global_state.keyboard.is_none() {
             println!("Set keyboard capability");
             let keyboard = self
-                .globals
+                .global_state
                 .seat_state
                 .get_keyboard_with_repeat(
                     qh,
                     &seat,
                     None,
-                    self.globals.loop_handle.clone(),
+                    self.global_state.loop_handle.clone(),
                     Box::new(|_state, _wl_kbd, event| {
                         println!("Repeat: {:?} ", event);
                     }),
                 )
                 .expect("Failed to create keyboard");
 
-            self.globals.keyboard = Some(keyboard);
+            self.global_state.keyboard = Some(keyboard);
         }
 
-        if capability == Capability::Pointer && self.globals.pointer.is_none() {
+        if capability == Capability::Pointer && self.global_state.pointer.is_none() {
             println!("Set pointer capability");
             let pointer = self
-                .globals
+                .global_state
                 .seat_state
                 .get_pointer(qh, &seat)
                 .expect("Failed to create pointer");
-            self.globals.pointer = Some(pointer);
+            self.global_state.pointer = Some(pointer);
         }
     }
 
@@ -471,14 +471,14 @@ impl SeatHandler for Application {
         _: WlSeat,
         capability: Capability,
     ) {
-        if capability == Capability::Keyboard && self.globals.keyboard.is_some() {
+        if capability == Capability::Keyboard && self.global_state.keyboard.is_some() {
             println!("Unset keyboard capability");
-            self.globals.keyboard.take().unwrap().release();
+            self.global_state.keyboard.take().unwrap().release();
         }
 
-        if capability == Capability::Pointer && self.globals.pointer.is_some() {
+        if capability == Capability::Pointer && self.global_state.pointer.is_some() {
             println!("Unset pointer capability");
-            self.globals.pointer.take().unwrap().release();
+            self.global_state.pointer.take().unwrap().release();
         }
     }
 
@@ -611,7 +611,7 @@ impl PointerHandler for Application {
             }
 
             if let Some(idx) = target_window_idx {
-                self.windows[idx].handle_pointer_event(event, &self.globals);
+                self.windows[idx].handle_pointer_event(event, &self.global_state);
 
                 match event.kind {
                     Enter { .. } => {

@@ -1,4 +1,4 @@
-use crate::application::{Application, Globals};
+use crate::application::{Application, GlobalState};
 use crate::context::WindowContext;
 use crate::dpi::{LogicalSize, PhysicalSize};
 use crate::egui_input::EguiInput;
@@ -78,7 +78,7 @@ impl<'window> SurfaceView<'window> {
     pub fn handle_pointer_event(
         &mut self,
         event: &PointerEvent,
-        _globals: &Globals,
+        _globals: &GlobalState,
     ) {
         self.egui_input
             .handle_pointer_event(event, self.scale_factor);
@@ -137,7 +137,7 @@ impl<'window> View for SurfaceView<'window> {
         self.egui_input.update_modifiers(modifiers);
     }
 
-    fn handle_pointer_event(&mut self, event: &PointerEvent, globals: &Globals) {
+    fn handle_pointer_event(&mut self, event: &PointerEvent, globals: &GlobalState) {
         self.egui_input
             .handle_pointer_event(event, self.scale_factor);
     }
