@@ -9,6 +9,7 @@ use wayland_client::QueueHandle;
 use wayland_client::protocol::wl_surface;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_protocols::wp::viewporter::client::wp_viewport::WpViewport;
+use crate::context::WindowContext;
 
 pub trait View {
     fn scale_factor(&self) -> f64;
@@ -28,7 +29,7 @@ pub trait View {
     );
 
     /// 使用 GPU 上下文进行重绘。
-    fn draw(&mut self, queue_handle: &QueueHandle<Application>, gpu: &crate::gpu::GpuContext);
+    fn draw(&mut self, queue_handle: &QueueHandle<Application>, gpu: &GpuContext, window_context: &mut WindowContext);
 }
 
 /// 一个函数，可以根据父表面的尺寸和子表面自身的尺寸重新计算子表面的位置

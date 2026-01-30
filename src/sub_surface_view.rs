@@ -1,4 +1,4 @@
-use crate::context::SurfaceViewContext;
+use crate::context::WindowContext;
 use crate::dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize};
 use crate::surface_view::SurfaceView;
 use crate::view::{SubView, View};
@@ -24,7 +24,7 @@ impl<'window> SubSurfaceView<'window> {
         size: LogicalSize<u32>,
         viewport: WpViewport,
         build_view: Box<
-            dyn Fn(egui::RawInput, &mut egui::Context, &mut SurfaceViewContext) -> FullOutput,
+            dyn Fn(egui::RawInput, &mut egui::Context, &mut WindowContext) -> FullOutput,
         >,
         position_calculator: Option<Arc<crate::view::RelativePositionCalculator>>,
     ) -> Self {

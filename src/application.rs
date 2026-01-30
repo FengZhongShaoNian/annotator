@@ -33,6 +33,8 @@ use wayland_client::protocol::wl_seat::WlSeat;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::protocol::{wl_output, wl_surface};
 use wayland_client::{Connection, EventQueue, QueueHandle};
+use crate::annotator::{BackgroundTexture};
+use crate::global::{ReadGlobal, UpdateGlobal};
 
 /// Globals 存储了 Wayland 的全局状态和协议处理器。
 pub struct Globals {
@@ -140,25 +142,24 @@ impl Application {
         let mut window = AppWindow::new(
             self,
             window_config,
-            Box::new(move |input, egui_ctx, annotator_ctx| {
-                // 1. 创建 ColorImage
-                // 注意：RgbaImage 的 bytes 应该是连续的 RGBA 数据
-                let background_image = annotator_ctx.background_image.get_or_insert_with(|| {
-                    Arc::new(ColorImage::from_rgba_premultiplied(
-                        [image_width as usize, image_height as usize],
-                        image.as_raw(),
-                    ))
-                });
+            Box::new(move |input, egui_ctx, window_ctx| {
 
-                // 2. 将图像数据上传到 GPU 并获取纹理句柄
-                let texture_handle: &egui::TextureHandle =
-                    annotator_ctx.background_texture.get_or_insert_with(|| {
+                // 将图像数据上传到 GPU 并获取纹理句柄
+                let texture_handle: &BackgroundTexture =
+                    window_ctx.get_global_or_insert_with(|| {
+                        // 创建 ColorImage
+                        // 注意：RgbaImage 的 bytes 应该是连续的 RGBA 数据
+                        let background_image = Arc::new(ColorImage::from_rgba_premultiplied(
+                            [image_width as usize, image_height as usize],
+                            image.as_raw(),
+                        ));
                         // Load the texture only once.
-                        egui_ctx.load_texture(
+                        let texture_handle = egui_ctx.load_texture(
                             "background-image",
-                            egui::ImageData::Color(background_image.clone()),
+                            egui::ImageData::Color(background_image),
                             Default::default(),
-                        )
+                        );
+                        BackgroundTexture(texture_handle)
                     });
 
                 // 构建 UI 的具体内容
@@ -168,7 +169,7 @@ impl Application {
                         .show(ctx, |ui| {
                             ui.add(
                                 Image::new(ImageSource::Texture(SizedTexture::from_handle(
-                                    &texture_handle,
+                                    &texture_handle.0,
                                 )))
                                 .shrink_to_fit(),
                             );

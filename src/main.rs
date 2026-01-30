@@ -11,6 +11,8 @@ mod sub_surface_view;
 mod surface_view;
 mod view;
 mod wp_viewporter;
+mod global;
+mod annotator;
 
 use crate::application::Application;
 use log::error;

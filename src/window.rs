@@ -1,5 +1,6 @@
+use std::any::{Any, TypeId};
 use crate::application::Application;
-use crate::context::SurfaceViewContext;
+use crate::context::WindowContext;
 use crate::dpi::{LogicalPosition, LogicalSize, PhysicalSize};
 use crate::gpu;
 use crate::gpu::GpuContext;
@@ -15,6 +16,7 @@ use sctk::shell::WaylandSurface;
 use sctk::shell::xdg::window::{Window as XdgWindow, WindowDecorations};
 use std::ptr::NonNull;
 use std::sync::Arc;
+use rustc_hash::FxHashMap;
 use wayland_client::protocol::wl_surface;
 use wayland_client::{Proxy, QueueHandle};
 use wayland_protocols::wp::fractional_scale::v1::client::wp_fractional_scale_v1::WpFractionalScaleV1;
@@ -39,6 +41,7 @@ pub struct AppWindow {
     keyboard_focus: bool,
     /// 一个物理尺寸，用于在首次获取到缩放倍数后调整窗口的大小
     pub preferred_size: Option<PhysicalSize<u32>>,
+    window_context: WindowContext
 }
 
 pub(crate) struct WindowConfiguration {
@@ -66,7 +69,7 @@ impl AppWindow {
         app: &mut Application,
         window_config: WindowConfiguration,
         build_root_view: Box<
-            dyn Fn(egui::RawInput, &mut egui::Context, &mut SurfaceViewContext) -> FullOutput,
+            dyn Fn(egui::RawInput, &mut egui::Context, &mut WindowContext) -> FullOutput,
         >,
     ) -> AppWindow {
         // 创建主表面
@@ -184,6 +187,7 @@ impl AppWindow {
             scale_factor: None,
             keyboard_focus: false,
             preferred_size: window_config.preferred_size,
+            window_context: Default::default(),
         };
 
         window
@@ -202,7 +206,7 @@ impl AppWindow {
         size: LogicalSize<u32>,
         position: LogicalPosition<i32>,
         build_view: Box<
-            dyn Fn(egui::RawInput, &mut egui::Context, &mut SurfaceViewContext) -> FullOutput,
+            dyn Fn(egui::RawInput, &mut egui::Context, &mut WindowContext) -> FullOutput,
         >,
         position_calculator: Option<Arc<crate::view::RelativePositionCalculator>>,
     ) -> &mut SubSurfaceView {
@@ -383,14 +387,16 @@ impl AppWindow {
             return;
         }
 
+        let window_context = &mut self.window_context;
+
         // 1. 渲染主视图
         {
-            self.main_view.draw(qh, gpu);
+            self.main_view.draw(qh, gpu, window_context);
         }
 
         // 2. 渲染子视图
         for i in 0..self.sub_views.len() {
-            self.sub_views[i].view_mut().draw(qh, gpu);
+            self.sub_views[i].view_mut().draw(qh, gpu, window_context);
         }
     }
 }

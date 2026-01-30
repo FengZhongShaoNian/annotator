@@ -1,5 +1,5 @@
 use crate::application::{Application, Globals};
-use crate::context::SurfaceViewContext;
+use crate::context::WindowContext;
 use crate::dpi::{LogicalSize, PhysicalSize};
 use crate::egui_input::EguiInput;
 use crate::gpu::GpuContext;
@@ -33,8 +33,7 @@ pub struct SurfaceView<'window> {
     /// Egui Skia 渲染器
     egui_renderer: Option<egui_wgpu::Renderer>,
     /// 用于构建UI的函数
-    build_view: Box<dyn Fn(RawInput, &mut egui::Context, &mut SurfaceViewContext) -> FullOutput>,
-    annotator_context: SurfaceViewContext,
+    build_view: Box<dyn Fn(RawInput, &mut egui::Context, &mut WindowContext) -> FullOutput>,
 }
 
 impl<'window> SurfaceView<'window> {
@@ -45,7 +44,7 @@ impl<'window> SurfaceView<'window> {
         size: LogicalSize<u32>,
         viewport: WpViewport,
         build_view: Box<
-            dyn Fn(egui::RawInput, &mut egui::Context, &mut SurfaceViewContext) -> FullOutput,
+            dyn Fn(egui::RawInput, &mut egui::Context, &mut WindowContext) -> FullOutput,
         >,
     ) -> Self {
         viewport.set_destination(size.width as i32, size.height as i32);
@@ -65,7 +64,6 @@ impl<'window> SurfaceView<'window> {
             egui_input,
             egui_renderer: None,
             build_view,
-            annotator_context: Default::default(),
         }
     }
 
@@ -79,8 +77,8 @@ impl<'window> SurfaceView<'window> {
 
     pub fn handle_pointer_event(
         &mut self,
-        event: &sctk::seat::pointer::PointerEvent,
-        _globals: &crate::application::Globals,
+        event: &PointerEvent,
+        _globals: &Globals,
     ) {
         self.egui_input
             .handle_pointer_event(event, self.scale_factor);
@@ -145,8 +143,8 @@ impl<'window> View for SurfaceView<'window> {
     }
 
     /// 使用 GPU 渲染视图内容
-    fn draw(&mut self, queue_handle: &QueueHandle<Application>, gpu: &crate::gpu::GpuContext) {
-        let egui_output = self.run_egui();
+    fn draw(&mut self, queue_handle: &QueueHandle<Application>, gpu: &GpuContext, window_context: &mut WindowContext) {
+        let egui_output = self.run_egui(window_context);
 
         // 获取当前帧纹理
         let Ok(frame) = self.wgpu_surface.get_current_texture() else {
@@ -246,7 +244,7 @@ impl<'window> SurfaceView<'window> {
 }
 
 impl<'window> SurfaceView<'window> {
-    fn run_egui(&mut self) -> FullOutput {
+    fn run_egui(&mut self, window_context: &mut WindowContext) -> FullOutput {
         // 准备 Egui 输入
         let mut raw_input = self.egui_input.raw.take();
 
@@ -261,7 +259,7 @@ impl<'window> SurfaceView<'window> {
         raw_input.screen_rect = Some(screen_rect);
 
         let build_ui_fn = &self.build_view;
-        let egui_output = build_ui_fn(raw_input, &mut self.egui_ctx, &mut self.annotator_context);
+        let egui_output = build_ui_fn(raw_input, &mut self.egui_ctx, window_context);
 
         // 重要：为下一帧准备新的 RawInput
         // egui 在渲染后需要重置输入状态，保留持久性信息
