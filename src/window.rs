@@ -309,12 +309,12 @@ impl AppWindow {
         }
     }
 
-    pub fn handle_keyboard_event(&mut self, event: sctk::seat::keyboard::KeyEvent, pressed: bool) {
-        self.main_view.handle_keyboard_event(event.clone(), pressed);
+    pub fn handle_keyboard_event(&mut self, event: sctk::seat::keyboard::KeyEvent, pressed: bool, repeat: bool) {
+        self.main_view.handle_keyboard_event(event.clone(), pressed, repeat);
         self.sub_views.iter_mut().for_each(|sub_view| {
             sub_view
                 .view_mut()
-                .handle_keyboard_event(event.clone(), pressed);
+                .handle_keyboard_event(event.clone(), pressed, repeat);
         });
     }
 

@@ -534,7 +534,6 @@ impl KeyboardHandler for Application {
             .find(|w| w.contains_surface(surface));
 
         if let Some(window) = window {
-            println!("Keyboard focus on window with pressed syms: {keysyms:?}");
             window.set_keyboard_focus(true);
         }
     }
@@ -553,7 +552,6 @@ impl KeyboardHandler for Application {
             .find(|w| w.contains_surface(surface));
 
         if let Some(window) = window {
-            println!("Release keyboard focus on window");
             window.set_keyboard_focus(false);
         }
     }
@@ -566,10 +564,9 @@ impl KeyboardHandler for Application {
         _: u32,
         event: KeyEvent,
     ) {
-        println!("Key press: {event:?}");
         for window in &mut self.windows {
             if window.keyboard_focus() {
-                window.handle_keyboard_event(event.clone(), true);
+                window.handle_keyboard_event(event.clone(), true, false);
             }
         }
     }
@@ -582,10 +579,9 @@ impl KeyboardHandler for Application {
         _: u32,
         event: KeyEvent,
     ) {
-        println!("Key repeat: {event:?}");
         for window in &mut self.windows {
             if window.keyboard_focus() {
-                window.handle_keyboard_event(event.clone(), true);
+                window.handle_keyboard_event(event.clone(), true, true);
             }
         }
     }
@@ -598,10 +594,9 @@ impl KeyboardHandler for Application {
         _: u32,
         event: KeyEvent,
     ) {
-        println!("Key release: {event:?}");
         for window in &mut self.windows {
             if window.keyboard_focus() {
-                window.handle_keyboard_event(event.clone(), false);
+                window.handle_keyboard_event(event.clone(), false, false);
             }
         }
     }
@@ -616,7 +611,6 @@ impl KeyboardHandler for Application {
         _raw_modifiers: RawModifiers,
         _layout: u32,
     ) {
-        println!("Update modifiers: {modifiers:?}");
         for window in &mut self.windows {
             if window.keyboard_focus() {
                 window.update_modifiers(modifiers);
@@ -633,7 +627,6 @@ impl PointerHandler for Application {
         _pointer: &WlPointer,
         events: &[PointerEvent],
     ) {
-        use PointerEventKind::*;
         for event in events {
             // Ignore events for other window
             let mut target_window_idx = None;
@@ -646,31 +639,6 @@ impl PointerHandler for Application {
 
             if let Some(idx) = target_window_idx {
                 self.windows[idx].handle_pointer_event(event, &self.global_state);
-
-                match event.kind {
-                    Enter { .. } => {
-                        println!("Pointer entered @{:?}", event.position);
-                    }
-                    Leave { .. } => {
-                        println!("Pointer left");
-                    }
-                    Motion { time: _ } => {
-                        // println!("Pointer motion {:?}, position: {:?}", time, event.position);
-                    }
-                    Press { button, .. } => {
-                        println!("Press {:x} @ {:?}", button, event.position);
-                    }
-                    Release { button, .. } => {
-                        println!("Release {:x} @ {:?}", button, event.position);
-                    }
-                    Axis {
-                        horizontal,
-                        vertical,
-                        ..
-                    } => {
-                        println!("Scroll H:{horizontal:?}, V:{vertical:?}");
-                    }
-                }
             }
         }
     }

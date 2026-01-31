@@ -67,8 +67,8 @@ impl<'window> SurfaceView<'window> {
         }
     }
 
-    pub fn handle_keyboard_event(&mut self, event: sctk::seat::keyboard::KeyEvent, pressed: bool) {
-        self.egui_input.handle_keyboard_event(event, pressed);
+    pub fn handle_keyboard_event(&mut self, event: sctk::seat::keyboard::KeyEvent, pressed: bool, repeat: bool) {
+        self.egui_input.handle_keyboard_event(event, pressed, repeat);
     }
 
     pub fn update_modifiers(&mut self, modifiers: sctk::seat::keyboard::Modifiers) {
@@ -129,8 +129,8 @@ impl<'window> View for SurfaceView<'window> {
         self.surface()
     }
 
-    fn handle_keyboard_event(&mut self, event: KeyEvent, pressed: bool) {
-        self.egui_input.handle_keyboard_event(event, pressed);
+    fn handle_keyboard_event(&mut self, event: KeyEvent, pressed: bool, repeat: bool) {
+        self.egui_input.handle_keyboard_event(event, pressed, repeat);
     }
 
     fn update_modifiers(&mut self, modifiers: Modifiers) {
@@ -153,7 +153,7 @@ impl<'window> View for SurfaceView<'window> {
         // 获取当前帧纹理
         let Ok(frame) = self.wgpu_surface.get_current_texture() else {
             // 跳过这一帧
-            return None; 
+            return None;
         };
 
         // 创建纹理视图
@@ -237,7 +237,7 @@ impl<'window> View for SurfaceView<'window> {
 
         // 提交缓冲区到表面，然后提交
         frame.present();
-        
+
         Some(egui_output.platform_output)
     }
 }

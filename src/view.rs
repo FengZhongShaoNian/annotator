@@ -21,7 +21,7 @@ pub trait View {
     fn resize(&mut self, new_size: LogicalSize<u32>, gpu: &mut GpuContext);
     fn surface(&self) -> &WlSurface;
 
-    fn handle_keyboard_event(&mut self, event: sctk::seat::keyboard::KeyEvent, pressed: bool);
+    fn handle_keyboard_event(&mut self, event: sctk::seat::keyboard::KeyEvent, pressed: bool, repeat: bool);
     fn update_modifiers(&mut self, modifiers: sctk::seat::keyboard::Modifiers);
     fn handle_ime_event(&mut self, event: &ImeEvent);
     fn handle_pointer_event(

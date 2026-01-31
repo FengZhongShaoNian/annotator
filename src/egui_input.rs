@@ -4,12 +4,14 @@ use sctk::seat::pointer::{PointerEvent, PointerEventKind};
 
 pub struct EguiInput {
     pub raw: RawInput,
+    pub modifiers: Modifiers,
 }
 
 impl EguiInput {
     pub fn new() -> Self {
         Self {
             raw: RawInput::default(),
+            modifiers: Modifiers::default(),
         }
     }
 
@@ -65,14 +67,14 @@ impl EguiInput {
         }
     }
 
-    pub fn handle_keyboard_event(&mut self, event: KeyEvent, pressed: bool) {
+    pub fn handle_keyboard_event(&mut self, event: KeyEvent, pressed: bool, repeat: bool) {
         if let Some(key) = map_keysym(event.keysym) {
             self.raw.events.push(Event::Key {
                 key,
                 physical_key: None,
                 pressed,
-                repeat: false, // SCTK handles repeat separately if needed
-                modifiers: self.raw.modifiers,
+                repeat,
+                modifiers: self.modifiers,
             });
         }
 
@@ -81,6 +83,11 @@ impl EguiInput {
             if let Some(txt) = event.utf8 {
                 if !txt.chars().any(|c| c.is_control()) {
                     self.raw.events.push(Event::Text(txt));
+                }
+            } else if repeat {
+                let character = event.keysym.key_char();
+                if let Some(txt) = character && self.modifiers.is_none(){
+                    self.raw.events.push(Event::Text(txt.to_string()));
                 }
             }
         }
@@ -91,13 +98,15 @@ impl EguiInput {
     }
 
     pub fn update_modifiers(&mut self, modifiers: SctkModifiers) {
-        self.raw.modifiers = Modifiers {
+        let modifiers = Modifiers {
             alt: modifiers.alt,
             ctrl: modifiers.ctrl,
             shift: modifiers.shift,
             mac_cmd: false,
             command: modifiers.ctrl,
         };
+        self.modifiers = modifiers;
+        self.raw.modifiers = modifiers;
     }
 }
 
