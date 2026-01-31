@@ -8,10 +8,6 @@ use egui::output::IMEOutput;
 pub struct WindowContext {
     /// 按类型存储全局变量
     globals_by_type: FxHashMap<TypeId, Box<dyn Any>>,
-
-    /// This is set if, and only if, the user is currently editing text.
-    /// Useful for IME.
-    pub ime: Option<IMEOutput>,
 }
 
 impl WindowContext {

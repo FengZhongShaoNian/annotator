@@ -74,7 +74,7 @@ pub struct GlobalState {
     /// 事件循环句柄。
     loop_handle: LoopHandle<'static, Application>,
     pub text_input_manager: Option<zwp_text_input_manager_v3::ZwpTextInputManagerV3>,
-    text_input: Option<zwp_text_input_v3::ZwpTextInputV3>,
+    pub text_input: Option<zwp_text_input_v3::ZwpTextInputV3>,
 }
 
 /// Application 是应用的核心结构，管理全局状态和窗口列表。
@@ -286,8 +286,7 @@ impl Application {
                     w.resize(new_size, &mut self.global_state.gpu.as_mut().unwrap());
                 }
                 w.draw(
-                    &self.global_state.queue_handle,
-                    &mut self.global_state.gpu.as_mut().unwrap(),
+                    &self.global_state,
                 );
             }
         })
@@ -348,7 +347,7 @@ impl CompositorHandler for Application {
             // 只在主 Surface (main_view) 的帧回调到达时触发重绘
             // 这样可以保证渲染频率与显示刷新率同步，避免过度提交
             if window.main_view.surface() == surface {
-                window.draw(qh, gpu.as_mut().unwrap());
+                window.draw(&self.global_state);
                 return; // 找到对应的窗口并重绘后退出
             }
         }
@@ -441,7 +440,7 @@ impl WindowHandler for Application {
 
                 if app_window.scale_factor().is_some() {
                     let gpu = self.global_state.gpu.as_mut().unwrap();
-                    app_window.draw(qh, gpu);
+                    app_window.draw(&self.global_state);
                 }
             }
         }
@@ -697,25 +696,14 @@ impl Dispatch<zwp_text_input_v3::ZwpTextInputV3, ()> for Application {
 
                 for window in &mut this.windows {
                     if window.keyboard_focus() {
-                        let ime_area = window.get_ime_area();
-                        println!("ime area: {:?}", ime_area);
-                        if let Some(area) = ime_area{
-                            text_input.set_cursor_rectangle(
-                                area.origin.x as i32,
-                                area.origin.y as i32,
-                                area.size.width as i32,
-                                area.size.height as i32);
-                        }
                         window.handle_ime_event(&ImeEvent::Enabled);
                     }
                 }
                 text_input.commit();
 
-                info!("zwp_text_input_v3::Event::Enter");
+                this.global_state.text_input = Some(text_input);
             }
             zwp_text_input_v3::Event::Leave { .. } => {
-                info!("zwp_text_input_v3::Event::Leave");
-
                 if let Some(text_input) = &this.global_state.text_input {
                     text_input.disable();
                     text_input.commit();
@@ -728,8 +716,6 @@ impl Dispatch<zwp_text_input_v3::ZwpTextInputV3, ()> for Application {
                 }
             }
             zwp_text_input_v3::Event::CommitString { text } => {
-                info!("zwp_text_input_v3::Event::CommitString, text: {:?}", text);
-
                 let Some(text) = text else {
                     return;
                 };
@@ -741,8 +727,6 @@ impl Dispatch<zwp_text_input_v3::ZwpTextInputV3, ()> for Application {
                 }
             }
             zwp_text_input_v3::Event::PreeditString { text, .. } => {
-                info!("zwp_text_input_v3::Event::PreeditString text: {:?}", text);
-
                 let Some(text) = text else {
                     return;
                 };
@@ -754,7 +738,6 @@ impl Dispatch<zwp_text_input_v3::ZwpTextInputV3, ()> for Application {
                 }
             }
             zwp_text_input_v3::Event::Done { serial } => {
-                info!("zwp_text_input_v3::Event::Done");
                 this.global_state.last_serial = serial;
             }
             _ => {}

@@ -1,5 +1,4 @@
-use std::any::{Any, TypeId};
-use crate::application::Application;
+use crate::application::{Application, GlobalState};
 use crate::context::WindowContext;
 use crate::dpi::{LogicalPosition, LogicalSize, PhysicalBounds, PhysicalSize};
 use crate::gpu;
@@ -7,16 +6,17 @@ use crate::gpu::GpuContext;
 use crate::sub_surface_view::SubSurfaceView;
 use crate::surface_view::SurfaceView;
 use crate::view::{SubView, View};
-use egui::{FullOutput, ImeEvent};
+use egui::{FullOutput, ImeEvent, PlatformOutput};
 use egui_wgpu::wgpu;
 use raw_window_handle::{
     RawDisplayHandle, RawWindowHandle, WaylandDisplayHandle, WaylandWindowHandle,
 };
+use rustc_hash::FxHashMap;
 use sctk::shell::WaylandSurface;
 use sctk::shell::xdg::window::{Window as XdgWindow, WindowDecorations};
+use std::any::{Any, TypeId};
 use std::ptr::NonNull;
 use std::sync::Arc;
-use rustc_hash::FxHashMap;
 use wayland_client::protocol::wl_surface;
 use wayland_client::{Proxy, QueueHandle};
 use wayland_protocols::wp::fractional_scale::v1::client::wp_fractional_scale_v1::WpFractionalScaleV1;
@@ -41,7 +41,7 @@ pub struct AppWindow {
     keyboard_focus: bool,
     /// 一个物理尺寸，用于在首次获取到缩放倍数后调整窗口的大小
     pub preferred_size: Option<PhysicalSize<u32>>,
-    window_context: WindowContext
+    window_context: WindowContext,
 }
 
 pub(crate) struct WindowConfiguration {
@@ -210,10 +210,11 @@ impl AppWindow {
         >,
         position_calculator: Option<Arc<crate::view::RelativePositionCalculator>>,
     ) -> &mut SubSurfaceView {
-        let (sub_surface_handle, surface) = app
-            .global_state
-            .sub_compositor_state
-            .create_subsurface(self.main_view.surface().clone(), &app.global_state.queue_handle);
+        let (sub_surface_handle, surface) =
+            app.global_state.sub_compositor_state.create_subsurface(
+                self.main_view.surface().clone(),
+                &app.global_state.queue_handle,
+            );
 
         let viewport = app
             .global_state
@@ -327,23 +328,10 @@ impl AppWindow {
     pub fn handle_ime_event(&mut self, event: &ImeEvent) {
         self.main_view.handle_ime_event(event);
         self.sub_views.iter_mut().for_each(|sub_view| {
-            sub_view
-                .view_mut()
-                .handle_ime_event(event);
+            sub_view.view_mut().handle_ime_event(event);
         });
     }
 
-    pub fn get_ime_area(&self) -> Option<PhysicalBounds<u32>> {
-        match self.window_context.ime {
-            Some(ime) => {
-                let rect = ime.cursor_rect;
-                Some(PhysicalBounds::new(rect.min.x, rect.min.y, rect.max.x - rect.min.x, rect.max.y - rect.min.y).cast())
-            }
-            None => {
-                None
-            }
-        }
-    }
     pub fn contains_surface(&self, surface: &wl_surface::WlSurface) -> bool {
         if surface == self.main_view.surface() {
             return true;
@@ -402,7 +390,7 @@ impl AppWindow {
 
     /// 执行窗口重绘逻辑。
     /// 遍历所有视图并调用其独立的渲染方法。
-    pub fn draw(&mut self, qh: &QueueHandle<Application>, gpu: &mut crate::gpu::GpuContext) {
+    pub fn draw(&mut self, global_state: &GlobalState) {
         if self.first_configure || self.scale_factor.is_none() {
             return;
         }
@@ -411,12 +399,31 @@ impl AppWindow {
 
         // 1. 渲染主视图
         {
-            self.main_view.draw(qh, gpu, window_context);
+            let output = self.main_view.draw(global_state, window_context);
+            Self::update_ime_position_if_necessary(&output, global_state);
         }
 
         // 2. 渲染子视图
         for i in 0..self.sub_views.len() {
-            self.sub_views[i].view_mut().draw(qh, gpu, window_context);
+            let output = self.sub_views[i].view_mut().draw(global_state, window_context);
+            Self::update_ime_position_if_necessary(&output, global_state);
+        }
+    }
+
+    fn update_ime_position_if_necessary(output: &Option<PlatformOutput>, global_state: &GlobalState) {
+        if let (Some(platform_output), Some(text_input)) =
+            (output, global_state.text_input.as_ref())
+        {
+            if let Some(ime) = platform_output.ime {
+                let cursor_rect = ime.cursor_rect;
+                text_input.set_cursor_rectangle(
+                    cursor_rect.min.x.round() as i32,
+                    cursor_rect.min.y.round() as i32,
+                    ((cursor_rect.max.x - ime.cursor_rect.min.x) as f64).round() as i32,
+                    ((cursor_rect.max.y - ime.cursor_rect.min.y) as f64).round() as i32,
+                );
+                text_input.commit();
+            }
         }
     }
 }

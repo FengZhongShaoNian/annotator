@@ -4,7 +4,7 @@ use crate::dpi::{LogicalSize, PhysicalSize};
 use crate::egui_input::EguiInput;
 use crate::gpu::GpuContext;
 use crate::view::View;
-use egui::{FullOutput, ImeEvent, RawInput};
+use egui::{FullOutput, ImeEvent, PlatformOutput, RawInput};
 use egui_wgpu::wgpu::TextureFormat;
 use egui_wgpu::{RendererOptions, wgpu};
 use log::info;
@@ -147,23 +147,21 @@ impl<'window> View for SurfaceView<'window> {
     }
 
     /// 使用 GPU 渲染视图内容
-    fn draw(&mut self, queue_handle: &QueueHandle<Application>, gpu: &GpuContext, window_context: &mut WindowContext) {
+    fn draw(&mut self, global_state: &GlobalState, window_context: &mut WindowContext) -> Option<PlatformOutput> {
         let egui_output = self.run_egui(window_context);
-
-        window_context.ime = egui_output.platform_output.ime;
-        if let Some(ime) =  window_context.ime {
-
-        }
 
         // 获取当前帧纹理
         let Ok(frame) = self.wgpu_surface.get_current_texture() else {
-            return; // 跳过这一帧
+            // 跳过这一帧
+            return None; 
         };
 
         // 创建纹理视图
         let view = frame
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
+
+        let gpu = global_state.gpu.as_ref().unwrap();
 
         // 创建命令编码器
         let device = &gpu.device;
@@ -235,10 +233,12 @@ impl<'window> View for SurfaceView<'window> {
         gpu.queue.submit(std::iter::once(encoder.finish()));
 
         // 请求frame回调以确保持续渲染
-        self.surface.frame(&queue_handle, self.surface.clone());
+        self.surface.frame(&global_state.queue_handle, self.surface.clone());
 
         // 提交缓冲区到表面，然后提交
         frame.present();
+        
+        Some(egui_output.platform_output)
     }
 }
 

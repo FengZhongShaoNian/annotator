@@ -1,11 +1,11 @@
-use crate::application::Application;
+use crate::application::{Application, GlobalState};
 use crate::dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize};
 use crate::gpu::GpuContext;
 use crate::surface_view::SurfaceView;
 use crate::window::AppWindow;
 use log::info;
 use std::sync::Arc;
-use egui::ImeEvent;
+use egui::{ImeEvent, PlatformOutput};
 use wayland_client::QueueHandle;
 use wayland_client::protocol::wl_surface;
 use wayland_client::protocol::wl_surface::WlSurface;
@@ -31,7 +31,7 @@ pub trait View {
     );
 
     /// 使用 GPU 上下文进行重绘。
-    fn draw(&mut self, queue_handle: &QueueHandle<Application>, gpu: &GpuContext, window_context: &mut WindowContext);
+    fn draw(&mut self, global_state: &GlobalState, window_context: &mut WindowContext) -> Option<PlatformOutput>;
 }
 
 /// 一个函数，可以根据父表面的尺寸和子表面自身的尺寸重新计算子表面的位置
