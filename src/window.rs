@@ -1,13 +1,13 @@
 use std::any::{Any, TypeId};
 use crate::application::Application;
 use crate::context::WindowContext;
-use crate::dpi::{LogicalPosition, LogicalSize, PhysicalSize};
+use crate::dpi::{LogicalPosition, LogicalSize, PhysicalBounds, PhysicalSize};
 use crate::gpu;
 use crate::gpu::GpuContext;
 use crate::sub_surface_view::SubSurfaceView;
 use crate::surface_view::SurfaceView;
 use crate::view::{SubView, View};
-use egui::FullOutput;
+use egui::{FullOutput, ImeEvent};
 use egui_wgpu::wgpu;
 use raw_window_handle::{
     RawDisplayHandle, RawWindowHandle, WaylandDisplayHandle, WaylandWindowHandle,
@@ -324,6 +324,26 @@ impl AppWindow {
         });
     }
 
+    pub fn handle_ime_event(&mut self, event: &ImeEvent) {
+        self.main_view.handle_ime_event(event);
+        self.sub_views.iter_mut().for_each(|sub_view| {
+            sub_view
+                .view_mut()
+                .handle_ime_event(event);
+        });
+    }
+
+    pub fn get_ime_area(&self) -> Option<PhysicalBounds<u32>> {
+        match self.window_context.ime {
+            Some(ime) => {
+                let rect = ime.cursor_rect;
+                Some(PhysicalBounds::new(rect.min.x, rect.min.y, rect.max.x - rect.min.x, rect.max.y - rect.min.y).cast())
+            }
+            None => {
+                None
+            }
+        }
+    }
     pub fn contains_surface(&self, surface: &wl_surface::WlSurface) -> bool {
         if surface == self.main_view.surface() {
             return true;

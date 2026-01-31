@@ -5,6 +5,7 @@ use crate::surface_view::SurfaceView;
 use crate::window::AppWindow;
 use log::info;
 use std::sync::Arc;
+use egui::ImeEvent;
 use wayland_client::QueueHandle;
 use wayland_client::protocol::wl_surface;
 use wayland_client::protocol::wl_surface::WlSurface;
@@ -22,6 +23,7 @@ pub trait View {
 
     fn handle_keyboard_event(&mut self, event: sctk::seat::keyboard::KeyEvent, pressed: bool);
     fn update_modifiers(&mut self, modifiers: sctk::seat::keyboard::Modifiers);
+    fn handle_ime_event(&mut self, event: &ImeEvent);
     fn handle_pointer_event(
         &mut self,
         event: &sctk::seat::pointer::PointerEvent,

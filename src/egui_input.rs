@@ -1,4 +1,4 @@
-use egui::{Event, Key, Modifiers, PointerButton, Pos2, RawInput, Vec2};
+use egui::{Event, ImeEvent, Key, Modifiers, PointerButton, Pos2, RawInput, Vec2};
 use sctk::seat::keyboard::{KeyEvent, Keysym, Modifiers as SctkModifiers};
 use sctk::seat::pointer::{PointerEvent, PointerEventKind};
 
@@ -84,6 +84,10 @@ impl EguiInput {
                 }
             }
         }
+    }
+
+    pub fn handle_ime_event(&mut self, event: &ImeEvent) {
+        self.raw.events.push(Event::Ime(event.clone()));
     }
 
     pub fn update_modifiers(&mut self, modifiers: SctkModifiers) {

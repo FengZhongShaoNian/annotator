@@ -4,7 +4,7 @@ use crate::dpi::{LogicalSize, PhysicalSize};
 use crate::egui_input::EguiInput;
 use crate::gpu::GpuContext;
 use crate::view::View;
-use egui::{FullOutput, RawInput};
+use egui::{FullOutput, ImeEvent, RawInput};
 use egui_wgpu::wgpu::TextureFormat;
 use egui_wgpu::{RendererOptions, wgpu};
 use log::info;
@@ -137,6 +137,10 @@ impl<'window> View for SurfaceView<'window> {
         self.egui_input.update_modifiers(modifiers);
     }
 
+    fn handle_ime_event(&mut self, event: &ImeEvent) {
+        self.egui_input.handle_ime_event(event);
+    }
+
     fn handle_pointer_event(&mut self, event: &PointerEvent, globals: &GlobalState) {
         self.egui_input
             .handle_pointer_event(event, self.scale_factor);
@@ -145,6 +149,11 @@ impl<'window> View for SurfaceView<'window> {
     /// 使用 GPU 渲染视图内容
     fn draw(&mut self, queue_handle: &QueueHandle<Application>, gpu: &GpuContext, window_context: &mut WindowContext) {
         let egui_output = self.run_egui(window_context);
+
+        window_context.ime = egui_output.platform_output.ime;
+        if let Some(ime) =  window_context.ime {
+
+        }
 
         // 获取当前帧纹理
         let Ok(frame) = self.wgpu_surface.get_current_texture() else {

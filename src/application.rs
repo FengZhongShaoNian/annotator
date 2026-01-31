@@ -7,7 +7,7 @@ use crate::window::AppWindow;
 use crate::wp_fractional_scaling::FractionalScalingManager;
 use crate::wp_viewporter::ViewporterState;
 use egui::load::SizedTexture;
-use egui::{Color32, ColorImage, Id, Image, ImageSource, Order, Pos2, Rect, RichText, pos2, vec2};
+use egui::{Color32, ColorImage, Id, Image, ImageSource, Order, Pos2, Rect, RichText, pos2, vec2, ImeEvent};
 use image::{GenericImageView, RgbaImage};
 use log::info;
 use sctk::compositor::{CompositorHandler, CompositorState};
@@ -34,7 +34,11 @@ use wayland_client::protocol::wl_pointer::WlPointer;
 use wayland_client::protocol::wl_seat::WlSeat;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::protocol::{wl_output, wl_surface};
-use wayland_client::{Connection, EventQueue, QueueHandle};
+use wayland_client::{delegate_noop, Connection, Dispatch, EventQueue, Proxy, QueueHandle};
+use wayland_protocols::wp::text_input::zv3::client::{
+    zwp_text_input_manager_v3, zwp_text_input_v3,
+};
+use wayland_protocols::wp::text_input::zv3::client::zwp_text_input_v3::{ContentHint, ContentPurpose};
 
 /// GlobalState 存储了 Wayland 的全局状态和协议处理器。
 pub struct GlobalState {
@@ -69,6 +73,8 @@ pub struct GlobalState {
     pointer: Option<WlPointer>,
     /// 事件循环句柄。
     loop_handle: LoopHandle<'static, Application>,
+    pub text_input_manager: Option<zwp_text_input_manager_v3::ZwpTextInputManagerV3>,
+    text_input: Option<zwp_text_input_v3::ZwpTextInputV3>,
 }
 
 /// Application 是应用的核心结构，管理全局状态和窗口列表。
@@ -104,6 +110,8 @@ impl Application {
         let event_loop: EventLoop<Application> =
             EventLoop::try_new().expect("Failed to initialize the event loop!");
 
+        let text_input_manager = globals.bind(&qh, 1..=1, ()).ok();
+
         let seat_state = SeatState::new(&globals, &qh);
         let mut app = Self {
             global_state: GlobalState {
@@ -123,6 +131,8 @@ impl Application {
                 keyboard: None,
                 pointer: None,
                 loop_handle: event_loop.handle(),
+                text_input_manager,
+                text_input: None,
             },
             app_id,
             windows: vec![],
@@ -302,6 +312,7 @@ delegate_xdg_window!(Application);
 delegate_seat!(Application);
 delegate_keyboard!(Application);
 delegate_pointer!(Application);
+delegate_noop!(Application: ignore zwp_text_input_manager_v3::ZwpTextInputManagerV3);
 
 impl CompositorHandler for Application {
     fn scale_factor_changed(
@@ -468,6 +479,11 @@ impl SeatHandler for Application {
                 .expect("Failed to create keyboard");
 
             self.global_state.keyboard = Some(keyboard);
+
+            self.global_state.text_input = self.global_state
+                .text_input_manager
+                .as_ref()
+                .map(|text_input_manager| text_input_manager.get_text_input(&seat, qh, ()));
         }
 
         if capability == Capability::Pointer && self.global_state.pointer.is_none() {
@@ -603,7 +619,9 @@ impl KeyboardHandler for Application {
     ) {
         println!("Update modifiers: {modifiers:?}");
         for window in &mut self.windows {
-            window.update_modifiers(modifiers);
+            if window.keyboard_focus() {
+                window.update_modifiers(modifiers);
+            }
         }
     }
 }
@@ -655,6 +673,91 @@ impl PointerHandler for Application {
                     }
                 }
             }
+        }
+    }
+}
+
+impl Dispatch<zwp_text_input_v3::ZwpTextInputV3, ()> for Application {
+    fn event(
+        this: &mut Self,
+        _text_input: &zwp_text_input_v3::ZwpTextInputV3,
+        event: <zwp_text_input_v3::ZwpTextInputV3 as Proxy>::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        match event {
+            zwp_text_input_v3::Event::Enter { .. } => {
+                let Some(text_input) = this.global_state.text_input.take() else {
+                    return;
+                };
+
+                text_input.enable();
+                text_input.set_content_type(ContentHint::None, ContentPurpose::Normal);
+
+                for window in &mut this.windows {
+                    if window.keyboard_focus() {
+                        let ime_area = window.get_ime_area();
+                        println!("ime area: {:?}", ime_area);
+                        if let Some(area) = ime_area{
+                            text_input.set_cursor_rectangle(
+                                area.origin.x as i32,
+                                area.origin.y as i32,
+                                area.size.width as i32,
+                                area.size.height as i32);
+                        }
+                        window.handle_ime_event(&ImeEvent::Enabled);
+                    }
+                }
+                text_input.commit();
+
+                info!("zwp_text_input_v3::Event::Enter");
+            }
+            zwp_text_input_v3::Event::Leave { .. } => {
+                info!("zwp_text_input_v3::Event::Leave");
+
+                if let Some(text_input) = &this.global_state.text_input {
+                    text_input.disable();
+                    text_input.commit();
+                }
+
+                for window in &mut this.windows {
+                    if window.keyboard_focus() {
+                        window.handle_ime_event(&ImeEvent::Disabled);
+                    }
+                }
+            }
+            zwp_text_input_v3::Event::CommitString { text } => {
+                info!("zwp_text_input_v3::Event::CommitString, text: {:?}", text);
+
+                let Some(text) = text else {
+                    return;
+                };
+
+                for window in &mut this.windows {
+                    if window.keyboard_focus() {
+                        window.handle_ime_event(&ImeEvent::Commit(text.clone()));
+                    }
+                }
+            }
+            zwp_text_input_v3::Event::PreeditString { text, .. } => {
+                info!("zwp_text_input_v3::Event::PreeditString text: {:?}", text);
+
+                let Some(text) = text else {
+                    return;
+                };
+
+                for window in &mut this.windows {
+                    if window.keyboard_focus() {
+                        window.handle_ime_event(&ImeEvent::Preedit(text.clone()));
+                    }
+                }
+            }
+            zwp_text_input_v3::Event::Done { serial } => {
+                info!("zwp_text_input_v3::Event::Done");
+                this.global_state.last_serial = serial;
+            }
+            _ => {}
         }
     }
 }

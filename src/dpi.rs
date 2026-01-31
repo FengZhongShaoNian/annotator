@@ -64,7 +64,9 @@
 //! [points]: https://en.wikipedia.org/wiki/Point_(typography)
 //! [picas]: https://en.wikipedia.org/wiki/Pica_(typography)
 
+use std::fmt::Debug;
 #[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
 use serde::{Deserialize, Serialize};
 
 pub trait Pixel: Copy + Into<f64> {
@@ -888,6 +890,64 @@ impl<P: Pixel> From<LogicalInsets<P>> for Insets {
     #[inline]
     fn from(insets: LogicalInsets<P>) -> Self {
         Self::Logical(insets.cast())
+    }
+}
+
+/// 定义一个矩形区域
+#[derive(Copy, Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct LogicalBounds<T: Clone> {
+    /// 矩形区域的左上角坐标
+    pub origin: LogicalPosition<T>,
+    /// 矩形区域的宽度和高度
+    pub size: LogicalSize<T>,
+}
+
+impl<P: Pixel> LogicalBounds<P> {
+    pub fn new(x: P, y: P, width: P, height: P) -> Self {
+        let origin: LogicalPosition<P> = LogicalPosition::new(x, y);
+        let size = LogicalSize::new(width, height);
+        Self {
+            origin,
+            size,
+        }
+    }
+
+    #[inline]
+    pub fn cast<X: Pixel>(&self) -> LogicalBounds<X> {
+        LogicalBounds {
+            origin: self.origin.cast(),
+            size: self.size.cast(),
+        }
+    }
+}
+
+/// 定义一个矩形区域
+#[derive(Copy, Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct PhysicalBounds<T: Clone> {
+    /// 矩形区域的左上角坐标
+    pub origin: PhysicalPosition<T>,
+    /// 矩形区域的宽度和高度
+    pub size: PhysicalSize<T>,
+}
+
+impl<P: Pixel> PhysicalBounds<P> {
+    pub fn new(x: P, y: P, width: P, height: P) -> Self {
+        let origin = PhysicalPosition::new(x, y);
+        let size = PhysicalSize::new(width, height);
+        Self {
+            origin,
+            size,
+        }
+    }
+
+    #[inline]
+    pub fn cast<X: Pixel>(&self) -> PhysicalBounds<X> {
+        PhysicalBounds {
+            origin: self.origin.cast(),
+            size: self.size.cast(),
+        }
     }
 }
 
