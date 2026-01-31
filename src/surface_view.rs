@@ -67,22 +67,7 @@ impl<'window> SurfaceView<'window> {
         }
     }
 
-    pub fn handle_keyboard_event(&mut self, event: sctk::seat::keyboard::KeyEvent, pressed: bool, repeat: bool) {
-        self.egui_input.handle_keyboard_event(event, pressed, repeat);
-    }
-
-    pub fn update_modifiers(&mut self, modifiers: sctk::seat::keyboard::Modifiers) {
-        self.egui_input.update_modifiers(modifiers);
-    }
-
-    pub fn handle_pointer_event(
-        &mut self,
-        event: &PointerEvent,
-        _globals: &GlobalState,
-    ) {
-        self.egui_input
-            .handle_pointer_event(event, self.scale_factor);
-    }
+    
 
     /// 获取关联的 Wayland Surface。
     pub fn surface(&self) -> &WlSurface {
@@ -141,9 +126,13 @@ impl<'window> View for SurfaceView<'window> {
         self.egui_input.handle_ime_event(event);
     }
 
-    fn handle_pointer_event(&mut self, event: &PointerEvent, globals: &GlobalState) {
+    fn handle_pointer_event(
+        &mut self,
+        event: &PointerEvent,
+        _globals: &GlobalState,
+    ) {
         self.egui_input
-            .handle_pointer_event(event, self.scale_factor);
+            .handle_pointer_event(event);
     }
 
     /// 使用 GPU 渲染视图内容

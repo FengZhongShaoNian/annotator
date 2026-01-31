@@ -625,7 +625,7 @@ impl PointerHandler for Application {
         _conn: &Connection,
         _qh: &QueueHandle<Self>,
         _pointer: &WlPointer,
-        events: &[PointerEvent],
+        events: &[PointerEvent], // 指针事件使用的是逻辑坐标
     ) {
         for event in events {
             // Ignore events for other window

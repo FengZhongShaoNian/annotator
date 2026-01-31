@@ -15,7 +15,7 @@ impl EguiInput {
         }
     }
 
-    pub fn handle_pointer_event(&mut self, event: &PointerEvent, _scale_factor: f64) {
+    pub fn handle_pointer_event(&mut self, event: &PointerEvent) {
         let (x, y) = event.position;
         let pos = Pos2::new(x as f32, y as f32);
 
@@ -107,6 +107,29 @@ impl EguiInput {
         };
         self.modifiers = modifiers;
         self.raw.modifiers = modifiers;
+    }
+}
+
+#[derive(Clone, Copy, Eq, PartialEq, Debug)]
+pub enum MouseButton {
+    Left,
+    Right,
+    Middle,
+    Side,
+    Extra,
+    Unknown
+}
+
+impl From<u32> for MouseButton {
+    fn from(button: u32) -> Self {
+        match button {
+            0x110 => MouseButton::Left,   // BTN_LEFT
+            0x111 => MouseButton::Right,  // BTN_RIGHT
+            0x112 => MouseButton::Middle, // BTN_MIDDLE
+            0x113 => MouseButton::Side,   // BTN_SIDE
+            0x114 => MouseButton::Extra,  // BTN_EXTRA
+            _ => MouseButton::Unknown,
+        }
     }
 }
 

@@ -1,6 +1,6 @@
 use crate::application::{Application, GlobalState};
 use crate::context::WindowContext;
-use crate::dpi::{LogicalPosition, LogicalSize, PhysicalBounds, PhysicalSize};
+use crate::dpi::{LogicalPosition, LogicalSize, PhysicalSize};
 use crate::gpu;
 use crate::gpu::GpuContext;
 use crate::sub_surface_view::SubSurfaceView;
@@ -11,10 +11,8 @@ use egui_wgpu::wgpu;
 use raw_window_handle::{
     RawDisplayHandle, RawWindowHandle, WaylandDisplayHandle, WaylandWindowHandle,
 };
-use rustc_hash::FxHashMap;
-use sctk::shell::WaylandSurface;
 use sctk::shell::xdg::window::{Window as XdgWindow, WindowDecorations};
-use std::any::{Any, TypeId};
+use sctk::shell::WaylandSurface;
 use std::ptr::NonNull;
 use std::sync::Arc;
 use wayland_client::protocol::wl_surface;
@@ -293,11 +291,25 @@ impl AppWindow {
     pub fn handle_pointer_event(
         &mut self,
         event: &sctk::seat::pointer::PointerEvent,
-        globals: &crate::application::GlobalState,
+        globals: &GlobalState,
     ) {
+        println!("handling pointer event: {:?}", event);
         let event_surface = &event.surface;
         if event_surface == self.main_view.surface() {
             self.main_view.handle_pointer_event(event, globals);
+
+            // 测试移动窗口
+            // if let PointerEventKind::Press {button, serial, ..} = event.kind {
+            //     if MouseButton::Right == MouseButton::from(button) {
+            //         self.moveable = false;
+            //     }
+            //     if self.moveable && MouseButton::Left == MouseButton::from(button) {
+            //         let seat = globals.seat_state.seats().last();
+            //         if let Some(seat) = seat {
+            //             self.xdg_window.move_(&seat, serial);
+            //         }
+            //     }
+            // }
         } else {
             let sub_view = self
                 .sub_views
