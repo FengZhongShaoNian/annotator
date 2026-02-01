@@ -13,6 +13,7 @@ use sctk::seat::pointer::PointerEvent;
 use wayland_client::QueueHandle;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_protocols::wp::viewporter::client::wp_viewport::WpViewport;
+use crate::font::setup_chinese_fonts;
 
 pub struct SurfaceView<'window> {
     /// Wayland Surface 句柄
@@ -51,6 +52,8 @@ impl<'window> SurfaceView<'window> {
 
         // 初始化 Egui 环境
         let egui_ctx = egui::Context::default();
+        setup_chinese_fonts(&egui_ctx);
+
         let egui_input = EguiInput::new();
 
         Self {

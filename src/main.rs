@@ -13,6 +13,7 @@ mod view;
 mod wp_viewporter;
 mod global;
 mod annotator;
+mod font;
 
 use crate::application::Application;
 use log::error;
