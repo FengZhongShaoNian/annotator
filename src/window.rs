@@ -293,7 +293,6 @@ impl AppWindow {
         event: &sctk::seat::pointer::PointerEvent,
         globals: &GlobalState,
     ) {
-        println!("handling pointer event: {:?}", event);
         let event_surface = &event.surface;
         if event_surface == self.main_view.surface() {
             self.main_view.handle_pointer_event(event, globals);

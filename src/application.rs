@@ -1,4 +1,4 @@
-use crate::annotator::AnnotatorState;
+use crate::annotator::{Annotation, AnnotatorState, ToolType};
 use crate::dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize};
 use crate::global::{ReadGlobal, UpdateGlobal};
 use crate::gpu::GpuContext;
@@ -7,7 +7,7 @@ use crate::window::AppWindow;
 use crate::wp_fractional_scaling::FractionalScalingManager;
 use crate::wp_viewporter::ViewporterState;
 use egui::load::SizedTexture;
-use egui::{Color32, ColorImage, Id, Image, ImageSource, Order, Pos2, Rect, RichText, pos2, vec2, ImeEvent};
+use egui::{Area, Color32, ColorImage, Id, Image, ImageSource, ImeEvent, Order, Pos2, Rect, RichText, TextEdit, Vec2, pos2, vec2, Stroke, StrokeKind};
 use image::{GenericImageView, RgbaImage};
 use log::info;
 use sctk::compositor::{CompositorHandler, CompositorState};
@@ -34,11 +34,14 @@ use wayland_client::protocol::wl_pointer::WlPointer;
 use wayland_client::protocol::wl_seat::WlSeat;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::protocol::{wl_output, wl_surface};
-use wayland_client::{delegate_noop, Connection, Dispatch, EventQueue, Proxy, QueueHandle};
+use wayland_client::{Connection, Dispatch, EventQueue, Proxy, QueueHandle, delegate_noop};
+use wayland_protocols::wp::text_input::zv3::client::zwp_text_input_v3::{
+    ContentHint, ContentPurpose,
+};
 use wayland_protocols::wp::text_input::zv3::client::{
     zwp_text_input_manager_v3, zwp_text_input_v3,
 };
-use wayland_protocols::wp::text_input::zv3::client::zwp_text_input_v3::{ContentHint, ContentPurpose};
+use crate::annotator::rectangle::{RectangleAnnotationTool, RectangleState};
 
 /// GlobalState 存储了 Wayland 的全局状态和协议处理器。
 pub struct GlobalState {
@@ -169,6 +172,9 @@ impl Application {
                         Default::default(),
                     );
                     annotator_state.background_texture_handle = Some(texture_handle);
+
+                    annotator_state.current_annotation_tool = Some(ToolType::Rectangle);
+
                     annotator_state
                 });
 
@@ -197,30 +203,50 @@ impl Application {
                                 ),
                             );
 
-                            ui.vertical_centered(|ui| {
-                                ui.heading("标题在背景之上");
-                                ui.button("按钮也在背景之上");
-                                ui.text_edit_multiline(&mut annotator_state.editing_text);
+                            match annotator_state.current_annotation_tool {
+                                Some(ToolType::Rectangle) => {
+                                    ui.add(RectangleAnnotationTool::new(
+                                        annotator_state
+                                    ));
+                                }
+
+                                _ => {}
+                            }
+
+                            annotator_state.annotations_stack.iter().for_each(|annotation| {
+                                annotation.downcast_ref::<RectangleState>().unwrap().show(ui);
                             });
+
+
+                            // Area::new(Id::from("text_edit")).movable(true).current_pos(annotator_state.pos).show(ctx, |ui| {
+                            //     let response = ui.add(TextEdit::multiline(&mut annotator_state.editing_text)
+                            //         .background_color(Color32::TRANSPARENT));
+                            //     let vec = response.drag_motion();
+                            //     annotator_state.pos.x += vec.x;
+                            //     annotator_state.pos.y += vec.y;
+                            // });
+                            //
+                            // ui.painter().clip_rect()
 
                             let mut shapes = Vec::new();
 
                             // 添加多个形状
-                            shapes.push(egui::Shape::rect_filled(
-                                egui::Rect::from_min_size(
-                                    egui::pos2(10.0, 10.0),
-                                    egui::vec2(100.0, 50.0),
+                            shapes.push(egui::Shape::rect_stroke(
+                                egui::Rect::from_two_pos(
+                                    egui::pos2(0.0, 0.0),
+                                    egui::pos2(100.0, 100.0),
                                 ),
                                 0.0,
-                                egui::Color32::BLUE,
+                                Stroke::new(1.0, egui::Color32::GOLD),
+                                StrokeKind::Middle
                             ));
-
-                            shapes.push(egui::Shape::line_segment(
-                                [egui::pos2(150.0, 30.0), egui::pos2(300.0, 80.0)],
-                                egui::Stroke::new(2.0, egui::Color32::RED),
-                            ));
-
-                            // 一次性绘制所有形状
+                            //
+                            // shapes.push(egui::Shape::line_segment(
+                            //     [egui::pos2(150.0, 30.0), egui::pos2(300.0, 80.0)],
+                            //     egui::Stroke::new(2.0, egui::Color32::RED),
+                            // ));
+                            //
+                            // // 一次性绘制所有形状
                             ui.painter().extend(shapes);
                         });
                 })
@@ -285,9 +311,7 @@ impl Application {
                     let new_size = preferred_size.to_logical(scale_factor);
                     w.resize(new_size, &mut self.global_state.gpu.as_mut().unwrap());
                 }
-                w.draw(
-                    &self.global_state,
-                );
+                w.draw(&self.global_state);
             }
         })
     }
@@ -479,7 +503,8 @@ impl SeatHandler for Application {
 
             self.global_state.keyboard = Some(keyboard);
 
-            self.global_state.text_input = self.global_state
+            self.global_state.text_input = self
+                .global_state
                 .text_input_manager
                 .as_ref()
                 .map(|text_input_manager| text_input_manager.get_text_input(&seat, qh, ()));
