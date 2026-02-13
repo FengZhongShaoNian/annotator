@@ -1,6 +1,7 @@
 use crate::annotator::{Annotation, AnnotatorState, HitTarget, StrokeType};
-use egui::{pos2, vec2, Color32, CornerRadius, CursorIcon, Pos2, Rect, Response, Sense, Stroke, StrokeKind, Ui, Widget};
+use egui::{pos2, vec2, Color32, CornerRadius, CursorIcon, Pos2, Rangef, Rect, Response, Sense, Shape, Stroke, StrokeKind, Ui, Widget};
 use log::debug;
+use crate::annotator::cursor::Crosshair;
 
 #[derive(Debug, Copy, Clone)]
 pub struct RectangleStyle {
@@ -448,15 +449,19 @@ impl Widget for RectangleAnnotationTool<'_> {
         let sense_area = Rect::from_min_size(Pos2::ZERO, ui.available_size());
         let response = ui.allocate_rect(sense_area, Sense::click_and_drag());
 
-        let Some(pointer_pos) = response.interact_pointer_pos() else {
+        ui.ctx().set_cursor_icon(CursorIcon::None);
+
+        let Some(pointer_pos) = ui.ctx().pointer_hover_pos() else {
             return response;
         };
+
+        Crosshair::new(pointer_pos, Color32::RED, 1.0).paint_with(ui.painter());
 
         let tool_state = &mut self.annotator_state.rectangle_annotation_tool_state;
 
 
         if response.clicked() {
-            let mut rectangle_state = tool_state.current_annotation.as_mut();
+            let rectangle_state = tool_state.current_annotation.as_mut();
             if let Some(ref rectangle_state) = rectangle_state {
                 let hit_target = rectangle_state.rect.hit_test(&pointer_pos, rectangle_state.style.stroke.width);
                 println!("hit_target: {:?}, pointer:{:?}", hit_target, pointer_pos);
@@ -508,7 +513,8 @@ impl Widget for RectangleAnnotationTool<'_> {
 
         if response.dragged() {
             println!("dragged");
-            if let Some(ref drag_start_pos) = tool_state.drag_start_pos {
+            // if let Some(ref drag_start_pos) = tool_state.drag_start_pos {
+            if let Some(ref drag_start_pos) = ui.ctx().input(|i| i.pointer.press_origin()) {
                 println!("drag_start_pos: {:?}", drag_start_pos);
                 println!("pointer pos: {:?}", pointer_pos);
                 let rect = Rect::from_two_pos(*drag_start_pos, pointer_pos);

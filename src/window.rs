@@ -6,15 +6,18 @@ use crate::gpu::GpuContext;
 use crate::sub_surface_view::SubSurfaceView;
 use crate::surface_view::SurfaceView;
 use crate::view::{SubView, View};
-use egui::{FullOutput, ImeEvent, PlatformOutput};
+use egui::{CursorIcon, FullOutput, ImeEvent, PlatformOutput};
 use egui_wgpu::wgpu;
 use raw_window_handle::{
     RawDisplayHandle, RawWindowHandle, WaylandDisplayHandle, WaylandWindowHandle,
 };
+use sctk::seat::pointer::{PointerEventKind};
 use sctk::shell::xdg::window::{Window as XdgWindow, WindowDecorations};
 use sctk::shell::WaylandSurface;
 use std::ptr::NonNull;
 use std::sync::Arc;
+use log::warn;
+use wayland_backend::client::ObjectId;
 use wayland_client::protocol::wl_surface;
 use wayland_client::{Proxy, QueueHandle};
 use wayland_protocols::wp::fractional_scale::v1::client::wp_fractional_scale_v1::WpFractionalScaleV1;
@@ -40,6 +43,8 @@ pub struct AppWindow {
     /// 一个物理尺寸，用于在首次获取到缩放倍数后调整窗口的大小
     pub preferred_size: Option<PhysicalSize<u32>>,
     window_context: WindowContext,
+    /// 当前鼠标指针所在的表面
+    surface_under_mouse: Option<ObjectId>
 }
 
 pub(crate) struct WindowConfiguration {
@@ -186,6 +191,7 @@ impl AppWindow {
             keyboard_focus: false,
             preferred_size: window_config.preferred_size,
             window_context: Default::default(),
+            surface_under_mouse: None,
         };
 
         window
@@ -294,6 +300,15 @@ impl AppWindow {
         globals: &GlobalState,
     ) {
         let event_surface = &event.surface;
+        match event.kind {
+            PointerEventKind::Enter{..} => {
+                self.surface_under_mouse = Some(event_surface.id());
+            }
+            PointerEventKind::Leave{..} => {
+                self.surface_under_mouse = None;
+            }
+            _ => {}
+        }
         if event_surface == self.main_view.surface() {
             self.main_view.handle_pointer_event(event, globals);
 
@@ -412,12 +427,18 @@ impl AppWindow {
         {
             let output = self.main_view.draw(global_state, window_context);
             Self::update_ime_position_if_necessary(&output, global_state);
+            if self.surface_under_mouse == Some(self.main_view.surface().id()) {
+                Self::update_cursor_icon_if_necessary(&output, global_state);
+            }
         }
 
         // 2. 渲染子视图
         for i in 0..self.sub_views.len() {
             let output = self.sub_views[i].view_mut().draw(global_state, window_context);
             Self::update_ime_position_if_necessary(&output, global_state);
+            if self.surface_under_mouse == Some(self.sub_views[i].view().surface().id()) {
+                Self::update_cursor_icon_if_necessary(&output, global_state);
+            }
         }
     }
 
@@ -435,6 +456,61 @@ impl AppWindow {
                 );
                 text_input.commit();
             }
+        }
+    }
+
+    fn update_cursor_icon_if_necessary(output: &Option<PlatformOutput>, global_state: &GlobalState) {
+        if let (Some(platform_output), Some(themed_pointer)) = (output, global_state.themed_pointer.as_ref()) {
+            use sctk::seat::pointer::CursorIcon as SctkCursorIcon;
+            let cursor_icon = match platform_output.cursor_icon {
+                CursorIcon::Default => Some(SctkCursorIcon::Default),
+                CursorIcon::None => None,
+                CursorIcon::ContextMenu => Some(SctkCursorIcon::ContextMenu),
+                CursorIcon::Help => Some(SctkCursorIcon::Help),
+                CursorIcon::PointingHand => Some(SctkCursorIcon::Pointer),
+                CursorIcon::Progress => Some(SctkCursorIcon::Progress),
+                CursorIcon::Wait => Some(SctkCursorIcon::Wait),
+                CursorIcon::Cell => Some(SctkCursorIcon::Cell),
+                CursorIcon::Crosshair => Some(SctkCursorIcon::Crosshair),
+                CursorIcon::Text => Some(SctkCursorIcon::Text),
+                CursorIcon::VerticalText => Some(SctkCursorIcon::VerticalText),
+                CursorIcon::Alias => Some(SctkCursorIcon::Alias),
+                CursorIcon::Copy => Some(SctkCursorIcon::Copy),
+                CursorIcon::Move => Some(SctkCursorIcon::Move),
+                CursorIcon::NoDrop => Some(SctkCursorIcon::NoDrop),
+                CursorIcon::NotAllowed => Some(SctkCursorIcon::NotAllowed),
+                CursorIcon::Grab => Some(SctkCursorIcon::Grab),
+                CursorIcon::Grabbing => Some(SctkCursorIcon::Grabbing),
+                CursorIcon::AllScroll => Some(SctkCursorIcon::AllScroll),
+                CursorIcon::ResizeHorizontal => Some(SctkCursorIcon::EwResize),
+                CursorIcon::ResizeNeSw => Some(SctkCursorIcon::SwResize),
+                CursorIcon::ResizeNwSe => Some(SctkCursorIcon::NwResize),
+                CursorIcon::ResizeVertical => Some(SctkCursorIcon::NsResize),
+                CursorIcon::ResizeEast => Some(SctkCursorIcon::EResize),
+                CursorIcon::ResizeSouthEast => Some(SctkCursorIcon::SeResize),
+                CursorIcon::ResizeSouth => Some(SctkCursorIcon::SResize),
+                CursorIcon::ResizeSouthWest => Some(SctkCursorIcon::SwResize),
+                CursorIcon::ResizeWest => Some(SctkCursorIcon::WResize),
+                CursorIcon::ResizeNorthWest => Some(SctkCursorIcon::NwResize),
+                CursorIcon::ResizeNorth => Some(SctkCursorIcon::NResize),
+                CursorIcon::ResizeNorthEast => Some(SctkCursorIcon::NeResize),
+                CursorIcon::ResizeColumn => Some(SctkCursorIcon::ColResize),
+                CursorIcon::ResizeRow => Some(SctkCursorIcon::RowResize),
+                CursorIcon::ZoomIn => Some(SctkCursorIcon::ZoomIn),
+                CursorIcon::ZoomOut => Some(SctkCursorIcon::ZoomOut),
+            };
+
+            if let Some(cursor_icon) = cursor_icon {
+                let connection = &global_state.connection;
+                if let Err(e) = themed_pointer.set_cursor(connection, cursor_icon){
+                    warn!("Failed to set cursor icon: {:?}", e);
+                }
+            }else {
+                if let Err(e) = themed_pointer.hide_cursor(){
+                    warn!("Failed to hide cursor icon: {:?}", e);
+                }
+            }
+
         }
     }
 }

@@ -1,3 +1,4 @@
+use std::cell::{Cell, RefCell};
 use crate::annotator::{Annotation, AnnotatorState, ToolType};
 use crate::dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize};
 use crate::global::{ReadGlobal, UpdateGlobal};
@@ -9,7 +10,7 @@ use crate::wp_viewporter::ViewporterState;
 use egui::load::SizedTexture;
 use egui::{Area, Color32, ColorImage, Id, Image, ImageSource, ImeEvent, Order, Pos2, Rect, RichText, TextEdit, Vec2, pos2, vec2, Stroke, StrokeKind};
 use image::{GenericImageView, RgbaImage};
-use log::info;
+use log::{info, warn};
 use sctk::compositor::{CompositorHandler, CompositorState};
 use sctk::output::{OutputHandler, OutputState};
 use sctk::reexports::calloop::{EventLoop, LoopHandle};
@@ -22,19 +23,20 @@ use sctk::seat::{
 use sctk::shell::xdg::XdgShell;
 use sctk::shell::xdg::window::{Window, WindowConfigure, WindowHandler};
 use sctk::subcompositor::SubcompositorState;
-use sctk::{
-    delegate_compositor, delegate_keyboard, delegate_output, delegate_pointer, delegate_registry,
-    delegate_seat, delegate_subcompositor, delegate_xdg_shell, delegate_xdg_window,
-    registry_handlers,
-};
-use std::sync::Arc;
-use wayland_client::globals::registry_queue_init;
+use sctk::{delegate_compositor, delegate_keyboard, delegate_output, delegate_pointer, delegate_registry, delegate_seat, delegate_shm, delegate_subcompositor, delegate_xdg_shell, delegate_xdg_window, registry_handlers};
+use std::sync::{Arc, Mutex, RwLock};
+use sctk::globals::GlobalData;
+use sctk::seat::pointer::{CursorIcon, PointerData, PointerDataExt, ThemeSpec, ThemedPointer};
+use sctk::shm::{Shm, ShmHandler};
+use wayland_client::globals::{registry_queue_init, GlobalList};
 use wayland_client::protocol::wl_keyboard::WlKeyboard;
 use wayland_client::protocol::wl_pointer::WlPointer;
 use wayland_client::protocol::wl_seat::WlSeat;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::protocol::{wl_output, wl_surface};
-use wayland_client::{Connection, Dispatch, EventQueue, Proxy, QueueHandle, delegate_noop};
+use wayland_client::{Connection, Dispatch, EventQueue, Proxy, QueueHandle, delegate_noop, delegate_dispatch};
+use wayland_protocols::wp::cursor_shape::v1::client::wp_cursor_shape_device_v1::WpCursorShapeDeviceV1;
+use wayland_protocols::wp::cursor_shape::v1::client::wp_cursor_shape_manager_v1::WpCursorShapeManagerV1;
 use wayland_protocols::wp::text_input::zv3::client::zwp_text_input_v3::{
     ContentHint, ContentPurpose,
 };
@@ -72,8 +74,11 @@ pub struct GlobalState {
     pub last_serial: u32,
     /// 键盘实例。
     keyboard: Option<WlKeyboard>,
+
     /// 指针实例。
-    pointer: Option<WlPointer>,
+    pub themed_pointer: Option<ThemedPointer<PointerData>>,
+    shm_state: Shm,
+
     /// 事件循环句柄。
     loop_handle: LoopHandle<'static, Application>,
     pub text_input_manager: Option<zwp_text_input_manager_v3::ZwpTextInputManagerV3>,
@@ -113,9 +118,9 @@ impl Application {
         let event_loop: EventLoop<Application> =
             EventLoop::try_new().expect("Failed to initialize the event loop!");
 
-        let text_input_manager = globals.bind(&qh, 1..=1, ()).ok();
-
         let seat_state = SeatState::new(&globals, &qh);
+        let shm_state = Shm::bind(&globals, &qh).expect("wl shm not available");
+        let text_input_manager = globals.bind(&qh, 1..=1, ()).ok();
         let mut app = Self {
             global_state: GlobalState {
                 connection: conn,
@@ -132,7 +137,8 @@ impl Application {
                 seat_state,
                 last_serial: 0,
                 keyboard: None,
-                pointer: None,
+                themed_pointer: None,
+                shm_state,
                 loop_handle: event_loop.handle(),
                 text_input_manager,
                 text_input: None,
@@ -227,27 +233,6 @@ impl Application {
                             // });
                             //
                             // ui.painter().clip_rect()
-
-                            let mut shapes = Vec::new();
-
-                            // 添加多个形状
-                            shapes.push(egui::Shape::rect_stroke(
-                                egui::Rect::from_two_pos(
-                                    egui::pos2(0.0, 0.0),
-                                    egui::pos2(100.0, 100.0),
-                                ),
-                                0.0,
-                                Stroke::new(1.0, egui::Color32::GOLD),
-                                StrokeKind::Middle
-                            ));
-                            //
-                            // shapes.push(egui::Shape::line_segment(
-                            //     [egui::pos2(150.0, 30.0), egui::pos2(300.0, 80.0)],
-                            //     egui::Stroke::new(2.0, egui::Color32::RED),
-                            // ));
-                            //
-                            // // 一次性绘制所有形状
-                            ui.painter().extend(shapes);
                         });
                 })
             }),
@@ -274,6 +259,7 @@ impl Application {
                     egui::CentralPanel::default()
                         .frame(egui::Frame::new())
                         .show(ctx, |ui| {
+                            ui.ctx().set_cursor_icon(egui::CursorIcon::Default);
                             if ui.button("Line").clicked() {
                                 println!("点击了直线工具 ");
                             }
@@ -334,8 +320,11 @@ delegate_xdg_window!(Application);
 
 delegate_seat!(Application);
 delegate_keyboard!(Application);
-delegate_pointer!(Application);
+delegate_dispatch!(Application: [ WlPointer: PointerData] => SeatState);
+delegate_dispatch!(Application: [ WpCursorShapeManagerV1: GlobalData] => SeatState);
+delegate_dispatch!(Application: [ WpCursorShapeDeviceV1: GlobalData] => SeatState);
 delegate_noop!(Application: ignore zwp_text_input_manager_v3::ZwpTextInputManagerV3);
+delegate_shm!(Application);
 
 impl CompositorHandler for Application {
     fn scale_factor_changed(
@@ -510,14 +499,23 @@ impl SeatHandler for Application {
                 .map(|text_input_manager| text_input_manager.get_text_input(&seat, qh, ()));
         }
 
-        if capability == Capability::Pointer && self.global_state.pointer.is_none() {
+        if capability == Capability::Pointer && self.global_state.themed_pointer.is_none() {
             println!("Set pointer capability");
-            let pointer = self
+            let surface = self.global_state.compositor_state.create_surface(qh);
+            let pointer_data = PointerData::new(seat.clone());
+            let themed_pointer = self
                 .global_state
                 .seat_state
-                .get_pointer(qh, &seat)
+                .get_pointer_with_theme_and_data(
+                    qh,
+                    &seat,
+                    self.global_state.shm_state.wl_shm(),
+                    surface,
+                    ThemeSpec::default(),
+                    pointer_data
+                )
                 .expect("Failed to create pointer");
-            self.global_state.pointer = Some(pointer);
+            self.global_state.themed_pointer.replace(themed_pointer);
         }
     }
 
@@ -533,9 +531,9 @@ impl SeatHandler for Application {
             self.global_state.keyboard.take().unwrap().release();
         }
 
-        if capability == Capability::Pointer && self.global_state.pointer.is_some() {
+        if capability == Capability::Pointer && self.global_state.themed_pointer.is_some() {
             println!("Unset pointer capability");
-            self.global_state.pointer.take().unwrap().release();
+            self.global_state.themed_pointer.take().unwrap().pointer().release();
         }
     }
 
@@ -662,6 +660,14 @@ impl PointerHandler for Application {
                 }
             }
 
+            let enter_event = matches!(event.kind, PointerEventKind::Enter {..});
+            if let Some(themed_cursor) = self.global_state.themed_pointer.as_ref() && enter_event{
+                let connection = &self.global_state.connection;
+                if let Err(e) = themed_cursor.set_cursor(connection, CursorIcon::Default) {
+                    warn!("Failed tp set cursor: {:?}", e);
+                }
+            }
+
             if let Some(idx) = target_window_idx {
                 self.windows[idx].handle_pointer_event(event, &self.global_state);
             }
@@ -735,5 +741,38 @@ impl Dispatch<zwp_text_input_v3::ZwpTextInputV3, ()> for Application {
             }
             _ => {}
         }
+    }
+}
+
+impl ShmHandler for Application {
+    fn shm_state(&mut self) -> &mut Shm {
+        &mut self.global_state.shm_state
+    }
+}
+
+
+impl Dispatch<WpCursorShapeDeviceV1, GlobalData, Application> for SeatState {
+    fn event(
+        _: &mut Application,
+        _: &WpCursorShapeDeviceV1,
+        _: <WpCursorShapeDeviceV1 as Proxy>::Event,
+        _: &GlobalData,
+        _: &Connection,
+        _: &QueueHandle<Application>,
+    ) {
+        unreachable!("wp_cursor_shape_manager has no events")
+    }
+}
+
+impl Dispatch<WpCursorShapeManagerV1, GlobalData, Application> for SeatState {
+    fn event(
+        _: &mut Application,
+        _: &WpCursorShapeManagerV1,
+        _: <WpCursorShapeManagerV1 as Proxy>::Event,
+        _: &GlobalData,
+        _: &Connection,
+        _: &QueueHandle<Application>,
+    ) {
+        unreachable!("wp_cursor_device_manager has no events")
     }
 }

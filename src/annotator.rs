@@ -1,4 +1,5 @@
 pub mod rectangle;
+mod cursor;
 
 use std::any::Any;
 use crate::annotator::rectangle::RectangleAnnotationToolState;
