@@ -1,14 +1,14 @@
-pub mod rectangle;
 mod cursor;
+pub mod rectangle;
 
-use std::any::Any;
 use crate::annotator::rectangle::RectangleAnnotationToolState;
 use crate::global::Global;
 use egui::{
-    Area, Color32, Pos2, Rect, Response, Sense, Stroke, TextureHandle, Ui, Vec2, Widget, pos2,
-    vec2, widgets,
+    Area, Color32, CursorIcon, Pos2, Rect, Response, Sense, Stroke, TextureHandle, Ui, Vec2,
+    Widget, pos2, vec2, widgets,
 };
 use rustc_hash::FxHashMap;
+use std::any::Any;
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum StrokeType {
@@ -65,9 +65,57 @@ pub enum HitTarget {
     Outside,
 }
 
+impl HitTarget {
+    /// 根据HitTarget获取对应的光标
+    pub fn get_cursor(&self) -> Option<CursorIcon> {
+        match self {
+            HitTarget::TopLeftCorner => Some(CursorIcon::ResizeNorthWest),
+            HitTarget::TopRightCorner => Some(CursorIcon::ResizeNorthEast),
+            HitTarget::BottomRightCorner => Some(CursorIcon::ResizeSouthEast),
+            HitTarget::BottomLeftCorner => Some(CursorIcon::ResizeSouthWest),
+            HitTarget::TopEdge => Some(CursorIcon::ResizeNorth),
+            HitTarget::RightEdge => Some(CursorIcon::ResizeEast),
+            HitTarget::BottomEdge => Some(CursorIcon::ResizeSouth),
+            HitTarget::LeftEdge => Some(CursorIcon::ResizeWest),
+            _ => None,
+        }
+    }
+    
+    pub fn get_drag_action(&self) -> DragAction {
+        match self {
+            HitTarget::TopLeftCorner => DragAction::AdjustTopLeftCorner,
+            HitTarget::TopRightCorner => DragAction::AdjustTopRightCorner,
+            HitTarget::BottomRightCorner => DragAction::AdjustBottomRightCorner,
+            HitTarget::BottomLeftCorner => DragAction::AdjustBottomLeftCorner,
+            HitTarget::TopEdge => DragAction::AdjustTopEdge,
+            HitTarget::RightEdge => DragAction::AdjustRightEdge,
+            HitTarget::BottomEdge => DragAction::AdjustBottomEdge,
+            HitTarget::LeftEdge => DragAction::AdjustLeftEdge,
+            _ => DragAction::None,
+        }
+    }
+}
+
+#[derive(Debug, Eq, PartialEq, Copy, Clone)]
+pub enum DragAction {
+    // 调整边
+    AdjustTopEdge,
+    AdjustBottomEdge,
+    AdjustLeftEdge,
+    AdjustRightEdge,
+
+    // 调整角
+    AdjustTopLeftCorner,
+    AdjustTopRightCorner,
+    AdjustBottomLeftCorner,
+    AdjustBottomRightCorner,
+    
+    None
+}
+
+
 /// 标注工具的类型
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
-#[derive(Hash)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, Hash)]
 pub enum ToolType {
     /// 矩形
     Rectangle,
@@ -106,9 +154,8 @@ pub enum ToolType {
     Eraser,
 }
 
-pub trait Annotation : Widget {
+pub trait Annotation: Widget {
     type State;
-    
     fn show(&self, ui: &mut Ui) -> Response;
 }
 
@@ -123,7 +170,7 @@ pub struct AnnotatorState {
 
     /// "重做"栈：因"撤销"操作而从annotations_stack中弹出的内容会被放入这里，以支持重做
     pub redo_stack: Vec<Box<dyn Any>>,
-    
+
     /// 矩形标注工具的状态
     pub rectangle_annotation_tool_state: RectangleAnnotationToolState,
 
