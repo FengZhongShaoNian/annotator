@@ -5,7 +5,7 @@ use crate::dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize};
 use crate::global::{ReadGlobal, UpdateGlobal};
 use crate::gpu::GpuContext;
 use crate::view::{BuildViewFn, SubView};
-use crate::window::{AppWindow, WindowConfiguration};
+use crate::window::{AppWindow, WindowConfiguration, WindowId};
 use crate::wp_fractional_scaling::FractionalScalingManager;
 use crate::wp_viewporter::ViewporterState;
 use egui::load::SizedTexture;
@@ -36,6 +36,7 @@ use sctk::{
     registry_handlers,
 };
 use std::cell::{Cell, RefCell};
+use std::cmp::PartialEq;
 use std::sync::{Arc, Mutex, RwLock};
 use wayland_client::globals::{GlobalList, registry_queue_init};
 use wayland_client::protocol::wl_keyboard::WlKeyboard;
@@ -165,10 +166,31 @@ impl Application {
         &mut self,
         window_config: WindowConfiguration,
         build_root_view: BuildViewFn,
-    ) {
+    ) -> WindowId {
         let window = AppWindow::new(self, window_config, build_root_view);
-
+        let window_id = window.window_id();
         self.windows.push(window);
+        window_id
+    }
+
+    pub fn with_window_mut<F>(&mut self, window_id: WindowId, func: F)
+    where
+        F: FnOnce(&mut GlobalState, &mut Option<&mut AppWindow>),
+    {
+        let mut target_window_idx = None;
+        for (idx, w) in self.windows.iter().enumerate() {
+            if w.window_id() == window_id {
+                target_window_idx = Some(idx);
+                break;
+            }
+        }
+        let mut window = if let Some(idx) = target_window_idx {
+            Some(&mut self.windows[idx])
+        } else {
+            None
+        };
+        let global_state = &mut self.global_state;
+        func(global_state, &mut window);
     }
 
     pub fn scale_factor_changed(

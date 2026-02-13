@@ -19,7 +19,7 @@ mod wp_viewporter;
 use crate::annotator::rectangle::{RectangleAnnotationTool, RectangleState};
 use crate::annotator::{Annotation, AnnotatorState, ToolType};
 use crate::application::Application;
-use crate::dpi::{LogicalSize, PhysicalSize};
+use crate::dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize};
 use crate::window::WindowConfiguration;
 use egui::load::SizedTexture;
 use egui::{ColorImage, Image, ImageSource, Rect, pos2, vec2};
@@ -48,7 +48,7 @@ fn main() {
             LogicalSize::new(800, 600),
             Some(PhysicalSize::new(image.width(), image.height())),
         );
-        app.open_window(
+        let window_id = app.open_window(
             window_config,
             Box::new(move |input, egui_ctx, window_ctx| {
                 let image_width = image.width();
@@ -131,6 +131,40 @@ fn main() {
                 })
             }),
         );
+
+        let position_calculator = Arc::new(
+            |parent_surface_size: &PhysicalSize<u32>, subview_size: &PhysicalSize<u32>| {
+                let subview_width = &subview_size.width;
+                PhysicalPosition::new(
+                    parent_surface_size.width - subview_width,
+                    parent_surface_size.height + 10,
+                )
+            },
+        );
+
+        app.with_window_mut(window_id, |global_state, window| {
+            let window = window.as_mut().unwrap();
+            // 创建工具条
+            window.create_sub_surface_view(
+                global_state,
+                LogicalSize::new(600, 38),
+                LogicalPosition::new(0i32, 0i32),
+                Box::new(|input, egui_ctx, annotator_ctx| {
+                    // 构建 UI 的具体内容
+                    egui_ctx.run(input, |ctx| {
+                        egui::CentralPanel::default()
+                            .frame(egui::Frame::new())
+                            .show(ctx, |ui| {
+                                ui.ctx().set_cursor_icon(egui::CursorIcon::Default);
+                                if ui.button("Line").clicked() {
+                                    println!("点击了直线工具 ");
+                                }
+                            });
+                    })
+                }),
+                Some(position_calculator),
+            );
+        });
     }
 
     app.run();

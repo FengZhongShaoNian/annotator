@@ -47,6 +47,10 @@ pub struct AppWindow {
     surface_under_mouse: Option<ObjectId>
 }
 
+/// 窗口的Id
+#[derive(Debug, Eq, PartialEq)]
+pub struct WindowId(ObjectId);
+
 pub struct WindowConfiguration {
     size: LogicalSize<u32>,
     preferred_size: Option<PhysicalSize<u32>>,
@@ -204,35 +208,34 @@ impl AppWindow {
     /// - `build_view`: 构建子视图 UI 的回调函数，接收窗口实例和 egui Context，返回 FullOutput
     pub fn create_sub_surface_view(
         &mut self,
-        app: &mut Application,
+        global_state: &mut GlobalState,
         size: LogicalSize<u32>,
         position: LogicalPosition<i32>,
         build_view: BuildViewFn,
         position_calculator: Option<Arc<crate::view::RelativePositionCalculator>>,
     ) -> &mut SubSurfaceView {
         let (sub_surface_handle, surface) =
-            app.global_state.sub_compositor_state.create_subsurface(
+            global_state.sub_compositor_state.create_subsurface(
                 self.main_view.surface().clone(),
-                &app.global_state.queue_handle,
+                &global_state.queue_handle,
             );
 
-        let viewport = app
-            .global_state
+        let viewport = global_state
             .viewporter_state
             .as_ref()
-            .map(|v| v.get_viewport(&surface, &app.global_state.queue_handle))
+            .map(|v| v.get_viewport(&surface, &global_state.queue_handle))
             .expect("Failed to retrieve viewport");
 
         // Create the raw window handle for the surface.
         let raw_display_handle = RawDisplayHandle::Wayland(WaylandDisplayHandle::new(
-            NonNull::new(app.global_state.connection.backend().display_ptr() as *mut _).unwrap(),
+            NonNull::new(global_state.connection.backend().display_ptr() as *mut _).unwrap(),
         ));
         let raw_window_handle = RawWindowHandle::Wayland(WaylandWindowHandle::new(
             NonNull::new(surface.id().as_ptr() as *mut _).unwrap(),
         ));
 
         // 初始化 wgpu
-        let instance = &mut app.global_state.gpu.as_mut().unwrap().instance;
+        let instance = &mut global_state.gpu.as_mut().unwrap().instance;
         let wgpu_surface = unsafe {
             instance
                 .create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
@@ -243,7 +246,7 @@ impl AppWindow {
         };
 
         let surface_caps =
-            wgpu_surface.get_capabilities(&app.global_state.gpu.as_mut().unwrap().adapter);
+            wgpu_surface.get_capabilities(&global_state.gpu.as_mut().unwrap().adapter);
 
         let surface_format = surface_caps.formats[0];
         let config = wgpu::SurfaceConfiguration {
@@ -261,7 +264,7 @@ impl AppWindow {
             view_formats: vec![],
         };
 
-        wgpu_surface.configure(&app.global_state.gpu.as_mut().unwrap().device, &config);
+        wgpu_surface.configure(&global_state.gpu.as_mut().unwrap().device, &config);
 
         let mut subview = SubSurfaceView::new(
             surface.clone(),
@@ -508,5 +511,9 @@ impl AppWindow {
             }
 
         }
+    }
+    
+    pub fn window_id(&self) -> WindowId {
+        WindowId(self.main_view.surface().id())
     }
 }
