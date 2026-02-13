@@ -1,5 +1,6 @@
 mod cursor;
 pub mod rectangle;
+pub(crate) mod svg_button;
 
 use crate::annotator::rectangle::RectangleAnnotationToolState;
 use crate::global::Global;

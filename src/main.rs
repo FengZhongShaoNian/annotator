@@ -17,12 +17,16 @@ mod view;
 mod wp_viewporter;
 
 use crate::annotator::rectangle::{RectangleAnnotationTool, RectangleState};
+use crate::annotator::svg_button::SvgButton;
 use crate::annotator::{Annotation, AnnotatorState, ToolType};
 use crate::application::Application;
 use crate::dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize};
+use crate::icon::Icons;
 use crate::window::WindowConfiguration;
 use egui::load::SizedTexture;
-use egui::{ColorImage, Image, ImageSource, Rect, pos2, vec2};
+use egui::{
+    Color32, ColorImage, Frame, Image, ImageSource, Rect, Shadow, include_image, pos2, vec2,
+};
 use log::error;
 use std::env;
 use std::sync::Arc;
@@ -84,7 +88,7 @@ fn main() {
                 // 构建 UI 的具体内容
                 egui_ctx.run(input, move |ctx| {
                     egui::CentralPanel::default()
-                        .frame(egui::Frame::new())
+                        .frame(Frame::new())
                         .show(ctx, |ui| {
                             let bg_image = Image::new(ImageSource::Texture(
                                 SizedTexture::from_handle(&texture_handle),
@@ -92,6 +96,7 @@ fn main() {
 
                             let frame_size = PhysicalSize::new(image_width, image_height)
                                 .to_logical(ctx.pixels_per_point() as f64);
+
                             bg_image.paint_at(
                                 ui,
                                 Rect::from_min_size(
@@ -147,18 +152,265 @@ fn main() {
             // 创建工具条
             window.create_sub_surface_view(
                 global_state,
-                LogicalSize::new(600, 38),
+                LogicalSize::new(600, 32),
                 LogicalPosition::new(0i32, 0i32),
-                Box::new(|input, egui_ctx, annotator_ctx| {
+                Box::new(|input, egui_ctx, window_ctx| {
+                    let annotator_state = window_ctx.global_mut::<AnnotatorState>();
                     // 构建 UI 的具体内容
-                    egui_ctx.run(input, |ctx| {
+                    egui_ctx.run(input, move |ctx| {
                         egui::CentralPanel::default()
-                            .frame(egui::Frame::new())
+                            .frame(Frame::new().fill(Color32::from_hex("#333333").unwrap())
+                                .shadow(Shadow {
+                                offset: [2, 3],
+                                blur: 10,
+                                spread: 0,
+                                color: Color32::from_rgba_premultiplied(0, 0, 0, 80),
+                            }))
                             .show(ctx, |ui| {
                                 ui.ctx().set_cursor_icon(egui::CursorIcon::Default);
-                                if ui.button("Line").clicked() {
-                                    println!("点击了直线工具 ");
-                                }
+                                ui.spacing_mut().item_spacing = vec2(1.0, 0.0);
+
+                                let active_tool = annotator_state.current_annotation_tool;
+
+                                ui.horizontal(|ui| {
+                                    if ui
+                                        .add(SvgButton::new(
+                                            Icons::DrawRectangle.get_image(),
+                                            LogicalSize::new(32., 32.),
+                                            true,
+                                            matches!(active_tool, Some(ToolType::Rectangle)),
+                                        ))
+                                        .clicked()
+                                    {
+                                        if matches!(active_tool, Some(ToolType::Rectangle)) {
+                                            annotator_state.current_annotation_tool = None;
+                                        } else {
+                                            annotator_state.current_annotation_tool =
+                                                Some(ToolType::Rectangle);
+                                        }
+                                    }
+                                    if ui
+                                        .add(SvgButton::new(
+                                            Icons::DrawEllipse.get_image(),
+                                            LogicalSize::new(32., 32.),
+                                            true,
+                                            matches!(active_tool, Some(ToolType::Ellipse)),
+                                        ))
+                                        .clicked()
+                                    {
+                                        if matches!(active_tool, Some(ToolType::Ellipse)) {
+                                            annotator_state.current_annotation_tool = None;
+                                        } else {
+                                            annotator_state.current_annotation_tool =
+                                                Some(ToolType::Ellipse);
+                                        }
+                                    }
+
+                                    if ui
+                                        .add(SvgButton::new(
+                                            Icons::DrawLine.get_image(),
+                                            LogicalSize::new(32., 32.),
+                                            true,
+                                            matches!(active_tool, Some(ToolType::StraightLine)),
+                                        ))
+                                        .clicked()
+                                    {
+                                        if matches!(active_tool, Some(ToolType::StraightLine)) {
+                                            annotator_state.current_annotation_tool = None;
+                                        } else {
+                                            annotator_state.current_annotation_tool =
+                                                Some(ToolType::StraightLine);
+                                        }
+                                    }
+                                    if ui
+                                        .add(SvgButton::new(
+                                            Icons::DrawArrow.get_image(),
+                                            LogicalSize::new(32., 32.),
+                                            true,
+                                            matches!(active_tool, Some(ToolType::Arrow)),
+                                        ))
+                                        .clicked()
+                                    {
+                                        if matches!(active_tool, Some(ToolType::Arrow)) {
+                                            annotator_state.current_annotation_tool = None;
+                                        } else {
+                                            annotator_state.current_annotation_tool =
+                                                Some(ToolType::Arrow);
+                                        }
+                                    }
+
+                                    if ui
+                                        .add(SvgButton::new(
+                                            Icons::DrawFreehand.get_image(),
+                                            LogicalSize::new(32., 32.),
+                                            true,
+                                            matches!(active_tool, Some(ToolType::Pencil)),
+                                        ))
+                                        .clicked()
+                                    {
+                                        if matches!(active_tool, Some(ToolType::Pencil)) {
+                                            annotator_state.current_annotation_tool = None;
+                                        } else {
+                                            annotator_state.current_annotation_tool =
+                                                Some(ToolType::Pencil);
+                                        }
+                                    }
+
+                                    if ui
+                                        .add(SvgButton::new(
+                                            Icons::DrawHighlight.get_image(),
+                                            LogicalSize::new(32., 32.),
+                                            true,
+                                            matches!(active_tool, Some(ToolType::MarkerPen)),
+                                        ))
+                                        .clicked()
+                                    {
+                                        if matches!(active_tool, Some(ToolType::MarkerPen)) {
+                                            annotator_state.current_annotation_tool = None;
+                                        } else {
+                                            annotator_state.current_annotation_tool =
+                                                Some(ToolType::MarkerPen);
+                                        }
+                                    }
+
+                                    if ui
+                                        .add(SvgButton::new(
+                                            Icons::PixelArtTrace.get_image(),
+                                            LogicalSize::new(32., 32.),
+                                            true,
+                                            matches!(active_tool, Some(ToolType::Mosaic)),
+                                        ))
+                                        .clicked()
+                                    {
+                                        if matches!(active_tool, Some(ToolType::Mosaic)) {
+                                            annotator_state.current_annotation_tool = None;
+                                        } else {
+                                            annotator_state.current_annotation_tool =
+                                                Some(ToolType::Mosaic);
+                                        }
+                                    }
+
+                                    if ui
+                                        .add(SvgButton::new(
+                                            Icons::BlurFx.get_image(),
+                                            LogicalSize::new(32., 32.),
+                                            true,
+                                            matches!(active_tool, Some(ToolType::Blur)),
+                                        ))
+                                        .clicked()
+                                    {
+                                        if matches!(active_tool, Some(ToolType::Blur)) {
+                                            annotator_state.current_annotation_tool = None;
+                                        } else {
+                                            annotator_state.current_annotation_tool =
+                                                Some(ToolType::Blur);
+                                        }
+                                    }
+
+                                    if ui
+                                        .add(SvgButton::new(
+                                            Icons::DrawText.get_image(),
+                                            LogicalSize::new(32., 32.),
+                                            true,
+                                            matches!(active_tool, Some(ToolType::Text)),
+                                        ))
+                                        .clicked()
+                                    {
+                                        if matches!(active_tool, Some(ToolType::Text)) {
+                                            annotator_state.current_annotation_tool = None;
+                                        } else {
+                                            annotator_state.current_annotation_tool =
+                                                Some(ToolType::Text);
+                                        }
+                                    }
+
+                                    if ui
+                                        .add(SvgButton::new(
+                                            Icons::DrawNumber.get_image(),
+                                            LogicalSize::new(32., 32.),
+                                            true,
+                                            matches!(active_tool, Some(ToolType::SerialNumber)),
+                                        ))
+                                        .clicked()
+                                    {
+                                        if matches!(active_tool, Some(ToolType::SerialNumber)) {
+                                            annotator_state.current_annotation_tool = None;
+                                        } else {
+                                            annotator_state.current_annotation_tool =
+                                                Some(ToolType::SerialNumber);
+                                        }
+                                    }
+
+                                    if ui
+                                        .add(SvgButton::new(
+                                            Icons::DrawEraser.get_image(),
+                                            LogicalSize::new(32., 32.),
+                                            false,
+                                            matches!(active_tool, Some(ToolType::Eraser)),
+                                        ))
+                                        .clicked()
+                                    {
+                                        if matches!(active_tool, Some(ToolType::Eraser)) {
+                                            annotator_state.current_annotation_tool = None;
+                                        } else {
+                                            annotator_state.current_annotation_tool =
+                                                Some(ToolType::Eraser);
+                                        }
+                                    }
+
+                                    if ui
+                                        .add(SvgButton::new(
+                                            Icons::EditUndo.get_image(),
+                                            LogicalSize::new(32., 32.),
+                                            false,
+                                            false,
+                                        ))
+                                        .clicked()
+                                    {}
+
+                                    if ui
+                                        .add(SvgButton::new(
+                                            Icons::EditRedo.get_image(),
+                                            LogicalSize::new(32., 32.),
+                                            false,
+                                            false,
+                                        ))
+                                        .clicked()
+                                    {}
+
+                                    if ui
+                                        .add(SvgButton::new(
+                                            Icons::DocumentSave.get_image(),
+                                            LogicalSize::new(32., 32.),
+                                            false,
+                                            false,
+                                        ))
+                                        .clicked()
+                                    {}
+
+                                    if ui
+                                        .add(SvgButton::new(
+                                            Icons::EditCopy.get_image(),
+                                            LogicalSize::new(32., 32.),
+                                            false,
+                                            false,
+                                        ))
+                                        .clicked()
+                                    {}
+                                    if ui
+                                        .add(SvgButton::new(
+                                            Icons::DialogOk.get_image(),
+                                            LogicalSize::new(32., 32.),
+                                            false,
+                                            false,
+                                        ))
+                                        .clicked()
+                                    {}
+
+                                    if active_tool != annotator_state.current_annotation_tool {
+                                        println!("标注工具由{:?}切换为{:?}", active_tool, annotator_state.current_annotation_tool);
+                                    }
+                                });
                             });
                     })
                 }),

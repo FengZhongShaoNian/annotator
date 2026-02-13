@@ -1,3 +1,5 @@
+use egui::{include_image, Image, ImageSource};
+
 pub enum Icons {
     DrawRectangle,
     DrawEllipse,
@@ -19,59 +21,61 @@ pub enum Icons {
 }
 
 impl Icons {
-    pub fn as_bytes(&self) -> &'static [u8] {
-        match self {
+    pub fn get_image(&self) -> Image {
+        let image_source = match self {
             Icons::DrawRectangle => {
-                include_bytes!("../assets/icons/draw-rectangle.svg")
+                include_image!("../assets/icons/draw-rectangle.svg")
             }
             Icons::DrawEllipse => {
-                include_bytes!("../assets/icons/draw-ellipse.svg")
+                include_image!("../assets/icons/draw-ellipse.svg")
             }
             Icons::DrawLine => {
-                include_bytes!("../assets/icons/draw-line.svg")
+                include_image!("../assets/icons/draw-line.svg")
             }
             Icons::DrawArrow => {
-                include_bytes!("../assets/icons/draw-arrow.svg")
+                include_image!("../assets/icons/draw-arrow.svg")
             }
             Icons::DrawFreehand => {
-                include_bytes!("../assets/icons/draw-freehand.svg")
+                include_image!("../assets/icons/draw-freehand.svg")
             }
             Icons::DrawHighlight => {
-                include_bytes!("../assets/icons/draw-highlight.svg")
+                include_image!("../assets/icons/draw-highlight.svg")
             }
             Icons::PixelArtTrace => {
-                include_bytes!("../assets/icons/pixelart-trace.svg")
+                include_image!("../assets/icons/pixelart-trace.svg")
             }
             Icons::BlurFx => {
-                include_bytes!("../assets/icons/blurfx.svg")
+                include_image!("../assets/icons/blurfx.svg")
             }
             Icons::DrawText => {
-                include_bytes!("../assets/icons/draw-text.svg")
+                include_image!("../assets/icons/draw-text.svg")
             }
             Icons::DrawNumber => {
-                include_bytes!("../assets/icons/draw-number.svg")
+                include_image!("../assets/icons/draw-number.svg")
             }
             Icons::DrawEraser => {
-                include_bytes!("../assets/icons/draw-eraser.svg")
+                include_image!("../assets/icons/draw-eraser.svg")
             }
             Icons::EditUndo => {
-                include_bytes!("../assets/icons/edit-undo.svg")
+                include_image!("../assets/icons/edit-undo.svg")
             }
             Icons::EditRedo => {
-                include_bytes!("../assets/icons/edit-redo.svg")
+                include_image!("../assets/icons/edit-redo.svg")
             }
             Icons::DocumentSave => {
-                include_bytes!("../assets/icons/document-save.svg")
+                include_image!("../assets/icons/document-save.svg")
             }
             Icons::EditCopy => {
-                include_bytes!("../assets/icons/edit-copy.svg")
+                include_image!("../assets/icons/edit-copy.svg")
             }
             Icons::DialogOk => {
-                include_bytes!("../assets/icons/dialog-ok.svg")
+                include_image!("../assets/icons/dialog-ok.svg")
             }
             Icons::Sticky =>{
-                include_bytes!("../assets/icons/sticky.svg")
+                include_image!("../assets/icons/sticky.svg")
             }
-        }
+        };
+        Image::new(image_source)
     }
+    
 }

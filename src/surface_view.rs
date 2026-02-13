@@ -50,6 +50,7 @@ impl<'window> SurfaceView<'window> {
 
         // 初始化 Egui 环境
         let egui_ctx = egui::Context::default();
+        egui_extras::install_image_loaders(&egui_ctx);
         setup_chinese_fonts(&egui_ctx);
 
         let egui_input = EguiInput::new();
