@@ -5,8 +5,8 @@ use crate::gpu;
 use crate::gpu::GpuContext;
 use crate::sub_surface_view::SubSurfaceView;
 use crate::surface_view::SurfaceView;
-use crate::view::{SubView, View};
-use egui::{CursorIcon, FullOutput, ImeEvent, PlatformOutput};
+use crate::view::{BuildViewFn, SubView, View};
+use egui::{CursorIcon, ImeEvent, PlatformOutput};
 use egui_wgpu::wgpu;
 use raw_window_handle::{
     RawDisplayHandle, RawWindowHandle, WaylandDisplayHandle, WaylandWindowHandle,
@@ -47,7 +47,7 @@ pub struct AppWindow {
     surface_under_mouse: Option<ObjectId>
 }
 
-pub(crate) struct WindowConfiguration {
+pub struct WindowConfiguration {
     size: LogicalSize<u32>,
     preferred_size: Option<PhysicalSize<u32>>,
 }
@@ -71,9 +71,7 @@ impl AppWindow {
     pub fn new(
         app: &mut Application,
         window_config: WindowConfiguration,
-        build_root_view: Box<
-            dyn Fn(egui::RawInput, &mut egui::Context, &mut WindowContext) -> FullOutput,
-        >,
+        build_root_view: BuildViewFn,
     ) -> AppWindow {
         // 创建主表面
         let main_surface = app
@@ -209,9 +207,7 @@ impl AppWindow {
         app: &mut Application,
         size: LogicalSize<u32>,
         position: LogicalPosition<i32>,
-        build_view: Box<
-            dyn Fn(egui::RawInput, &mut egui::Context, &mut WindowContext) -> FullOutput,
-        >,
+        build_view: BuildViewFn,
         position_calculator: Option<Arc<crate::view::RelativePositionCalculator>>,
     ) -> &mut SubSurfaceView {
         let (sub_surface_handle, surface) =

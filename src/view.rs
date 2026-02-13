@@ -5,7 +5,7 @@ use crate::surface_view::SurfaceView;
 use crate::window::AppWindow;
 use log::info;
 use std::sync::Arc;
-use egui::{ImeEvent, PlatformOutput};
+use egui::{FullOutput, ImeEvent, PlatformOutput, RawInput};
 use wayland_client::QueueHandle;
 use wayland_client::protocol::wl_surface;
 use wayland_client::protocol::wl_surface::WlSurface;
@@ -27,7 +27,7 @@ pub trait View {
     fn handle_pointer_event(
         &mut self,
         event: &sctk::seat::pointer::PointerEvent,
-        global_state: &crate::application::GlobalState,
+        global_state: &GlobalState,
     );
 
     /// 使用 GPU 上下文进行重绘。
@@ -47,3 +47,5 @@ pub trait SubView {
 
     fn position_calculator(&mut self) -> Option<Arc<RelativePositionCalculator>>;
 }
+
+pub type BuildViewFn = Box<dyn Fn(RawInput, &mut egui::Context, &mut WindowContext) -> FullOutput>;

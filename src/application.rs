@@ -1,20 +1,26 @@
-use std::cell::{Cell, RefCell};
+use crate::annotator::rectangle::{RectangleAnnotationTool, RectangleState};
 use crate::annotator::{Annotation, AnnotatorState, ToolType};
+use crate::context::WindowContext;
 use crate::dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize};
 use crate::global::{ReadGlobal, UpdateGlobal};
 use crate::gpu::GpuContext;
-use crate::view::SubView;
-use crate::window::AppWindow;
+use crate::view::{BuildViewFn, SubView};
+use crate::window::{AppWindow, WindowConfiguration};
 use crate::wp_fractional_scaling::FractionalScalingManager;
 use crate::wp_viewporter::ViewporterState;
 use egui::load::SizedTexture;
-use egui::{Area, Color32, ColorImage, Id, Image, ImageSource, ImeEvent, Order, Pos2, Rect, RichText, TextEdit, Vec2, pos2, vec2, Stroke, StrokeKind};
+use egui::{
+    Area, Color32, ColorImage, Id, Image, ImageSource, ImeEvent, Order, Pos2, Rect, RichText,
+    Stroke, StrokeKind, TextEdit, Vec2, pos2, vec2,
+};
 use image::{GenericImageView, RgbaImage};
 use log::{info, warn};
 use sctk::compositor::{CompositorHandler, CompositorState};
+use sctk::globals::GlobalData;
 use sctk::output::{OutputHandler, OutputState};
 use sctk::reexports::calloop::{EventLoop, LoopHandle};
 use sctk::registry::{ProvidesRegistryState, RegistryState};
+use sctk::seat::pointer::{CursorIcon, PointerData, PointerDataExt, ThemeSpec, ThemedPointer};
 use sctk::seat::{
     Capability, SeatHandler, SeatState,
     keyboard::{KeyEvent, KeyboardHandler, Keysym, Modifiers, RawModifiers},
@@ -22,19 +28,24 @@ use sctk::seat::{
 };
 use sctk::shell::xdg::XdgShell;
 use sctk::shell::xdg::window::{Window, WindowConfigure, WindowHandler};
-use sctk::subcompositor::SubcompositorState;
-use sctk::{delegate_compositor, delegate_keyboard, delegate_output, delegate_pointer, delegate_registry, delegate_seat, delegate_shm, delegate_subcompositor, delegate_xdg_shell, delegate_xdg_window, registry_handlers};
-use std::sync::{Arc, Mutex, RwLock};
-use sctk::globals::GlobalData;
-use sctk::seat::pointer::{CursorIcon, PointerData, PointerDataExt, ThemeSpec, ThemedPointer};
 use sctk::shm::{Shm, ShmHandler};
-use wayland_client::globals::{registry_queue_init, GlobalList};
+use sctk::subcompositor::SubcompositorState;
+use sctk::{
+    delegate_compositor, delegate_keyboard, delegate_output, delegate_pointer, delegate_registry,
+    delegate_seat, delegate_shm, delegate_subcompositor, delegate_xdg_shell, delegate_xdg_window,
+    registry_handlers,
+};
+use std::cell::{Cell, RefCell};
+use std::sync::{Arc, Mutex, RwLock};
+use wayland_client::globals::{GlobalList, registry_queue_init};
 use wayland_client::protocol::wl_keyboard::WlKeyboard;
 use wayland_client::protocol::wl_pointer::WlPointer;
 use wayland_client::protocol::wl_seat::WlSeat;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::protocol::{wl_output, wl_surface};
-use wayland_client::{Connection, Dispatch, EventQueue, Proxy, QueueHandle, delegate_noop, delegate_dispatch};
+use wayland_client::{
+    Connection, Dispatch, EventQueue, Proxy, QueueHandle, delegate_dispatch, delegate_noop,
+};
 use wayland_protocols::wp::cursor_shape::v1::client::wp_cursor_shape_device_v1::WpCursorShapeDeviceV1;
 use wayland_protocols::wp::cursor_shape::v1::client::wp_cursor_shape_manager_v1::WpCursorShapeManagerV1;
 use wayland_protocols::wp::text_input::zv3::client::zwp_text_input_v3::{
@@ -43,7 +54,6 @@ use wayland_protocols::wp::text_input::zv3::client::zwp_text_input_v3::{
 use wayland_protocols::wp::text_input::zv3::client::{
     zwp_text_input_manager_v3, zwp_text_input_v3,
 };
-use crate::annotator::rectangle::{RectangleAnnotationTool, RectangleState};
 
 /// GlobalState 存储了 Wayland 的全局状态和协议处理器。
 pub struct GlobalState {
@@ -151,123 +161,12 @@ impl Application {
         app
     }
 
-    pub fn open_image(&mut self, image: RgbaImage) {
-        let image_width = image.width();
-        let image_height = image.height();
-        let window_config = crate::window::WindowConfiguration::new(
-            LogicalSize::new(image_width, image_height),
-            Some(PhysicalSize::new(image_width, image_height)),
-        );
-        let mut window = AppWindow::new(
-            self,
-            window_config,
-            Box::new(move |input, egui_ctx, window_ctx| {
-                // 将图像数据上传到 GPU 并获取纹理句柄
-                let annotator_state: &AnnotatorState = window_ctx.get_global_or_insert_with(|| {
-                    let mut annotator_state = AnnotatorState::default();
-                    // 创建 ColorImage
-                    // 注意：RgbaImage 的 bytes 应该是连续的 RGBA 数据
-                    let background_image = Arc::new(ColorImage::from_rgba_premultiplied(
-                        [image_width as usize, image_height as usize],
-                        image.as_raw(),
-                    ));
-                    // Load the texture only once.
-                    let texture_handle = egui_ctx.load_texture(
-                        "background-image",
-                        egui::ImageData::Color(background_image),
-                        Default::default(),
-                    );
-                    annotator_state.background_texture_handle = Some(texture_handle);
-
-                    annotator_state.current_annotation_tool = Some(ToolType::Rectangle);
-
-                    annotator_state
-                });
-
-                // 将图像数据上传到 GPU 并获取纹理句柄
-                let texture_handle = annotator_state.background_texture_handle.as_ref().unwrap();
-                let texture_handle = texture_handle.clone();
-
-                let annotator_state = window_ctx.global_mut::<AnnotatorState>();
-
-                // 构建 UI 的具体内容
-                egui_ctx.run(input, move |ctx| {
-                    egui::CentralPanel::default()
-                        .frame(egui::Frame::new())
-                        .show(ctx, |ui| {
-                            let bg_image = Image::new(ImageSource::Texture(
-                                SizedTexture::from_handle(&texture_handle),
-                            ));
-
-                            let frame_size = PhysicalSize::new(image_width, image_height)
-                                .to_logical(ctx.pixels_per_point() as f64);
-                            bg_image.paint_at(
-                                ui,
-                                Rect::from_min_size(
-                                    pos2(0., 0.),
-                                    vec2(frame_size.width, frame_size.height),
-                                ),
-                            );
-
-                            match annotator_state.current_annotation_tool {
-                                Some(ToolType::Rectangle) => {
-                                    ui.add(RectangleAnnotationTool::new(
-                                        annotator_state
-                                    ));
-                                }
-
-                                _ => {}
-                            }
-
-                            annotator_state.annotations_stack.iter().for_each(|annotation| {
-                                annotation.downcast_ref::<RectangleState>().unwrap().show(ui);
-                            });
-
-
-                            // Area::new(Id::from("text_edit")).movable(true).current_pos(annotator_state.pos).show(ctx, |ui| {
-                            //     let response = ui.add(TextEdit::multiline(&mut annotator_state.editing_text)
-                            //         .background_color(Color32::TRANSPARENT));
-                            //     let vec = response.drag_motion();
-                            //     annotator_state.pos.x += vec.x;
-                            //     annotator_state.pos.y += vec.y;
-                            // });
-                            //
-                            // ui.painter().clip_rect()
-                        });
-                })
-            }),
-        );
-
-        let position_calculator = Arc::new(
-            |parent_surface_size: &PhysicalSize<u32>, subview_size: &PhysicalSize<u32>| {
-                let subview_width = &subview_size.width;
-                PhysicalPosition::new(
-                    parent_surface_size.width - subview_width,
-                    parent_surface_size.height + 10,
-                )
-            },
-        );
-
-        // 创建工具条
-        window.create_sub_surface_view(
-            self,
-            LogicalSize::new(600, 38),
-            LogicalPosition::new(image_width as i32 - 600, (image_height + 10) as i32),
-            Box::new(|input, egui_ctx, annotator_ctx| {
-                // 构建 UI 的具体内容
-                egui_ctx.run(input, |ctx| {
-                    egui::CentralPanel::default()
-                        .frame(egui::Frame::new())
-                        .show(ctx, |ui| {
-                            ui.ctx().set_cursor_icon(egui::CursorIcon::Default);
-                            if ui.button("Line").clicked() {
-                                println!("点击了直线工具 ");
-                            }
-                        });
-                })
-            }),
-            Some(position_calculator),
-        );
+    pub fn open_window(
+        &mut self,
+        window_config: WindowConfiguration,
+        build_root_view: BuildViewFn,
+    ) {
+        let window = AppWindow::new(self, window_config, build_root_view);
 
         self.windows.push(window);
     }
@@ -512,7 +411,7 @@ impl SeatHandler for Application {
                     self.global_state.shm_state.wl_shm(),
                     surface,
                     ThemeSpec::default(),
-                    pointer_data
+                    pointer_data,
                 )
                 .expect("Failed to create pointer");
             self.global_state.themed_pointer.replace(themed_pointer);
@@ -533,7 +432,12 @@ impl SeatHandler for Application {
 
         if capability == Capability::Pointer && self.global_state.themed_pointer.is_some() {
             println!("Unset pointer capability");
-            self.global_state.themed_pointer.take().unwrap().pointer().release();
+            self.global_state
+                .themed_pointer
+                .take()
+                .unwrap()
+                .pointer()
+                .release();
         }
     }
 
@@ -660,8 +564,10 @@ impl PointerHandler for Application {
                 }
             }
 
-            let enter_event = matches!(event.kind, PointerEventKind::Enter {..});
-            if let Some(themed_cursor) = self.global_state.themed_pointer.as_ref() && enter_event{
+            let enter_event = matches!(event.kind, PointerEventKind::Enter { .. });
+            if let Some(themed_cursor) = self.global_state.themed_pointer.as_ref()
+                && enter_event
+            {
                 let connection = &self.global_state.connection;
                 if let Err(e) = themed_cursor.set_cursor(connection, CursorIcon::Default) {
                     warn!("Failed tp set cursor: {:?}", e);
@@ -749,7 +655,6 @@ impl ShmHandler for Application {
         &mut self.global_state.shm_state
     }
 }
-
 
 impl Dispatch<WpCursorShapeDeviceV1, GlobalData, Application> for SeatState {
     fn event(

@@ -3,7 +3,7 @@ use crate::context::WindowContext;
 use crate::dpi::{LogicalSize, PhysicalSize};
 use crate::egui_input::EguiInput;
 use crate::gpu::GpuContext;
-use crate::view::View;
+use crate::view::{BuildViewFn, View};
 use egui::{FullOutput, ImeEvent, PlatformOutput, RawInput};
 use egui_wgpu::wgpu::TextureFormat;
 use egui_wgpu::{RendererOptions, wgpu};
@@ -34,7 +34,7 @@ pub struct SurfaceView<'window> {
     /// Egui Skia 渲染器
     egui_renderer: Option<egui_wgpu::Renderer>,
     /// 用于构建UI的函数
-    build_view: Box<dyn Fn(RawInput, &mut egui::Context, &mut WindowContext) -> FullOutput>,
+    build_view: BuildViewFn,
 }
 
 impl<'window> SurfaceView<'window> {
@@ -44,9 +44,7 @@ impl<'window> SurfaceView<'window> {
         wgpu_surface_configuration: wgpu::SurfaceConfiguration,
         size: LogicalSize<u32>,
         viewport: WpViewport,
-        build_view: Box<
-            dyn Fn(egui::RawInput, &mut egui::Context, &mut WindowContext) -> FullOutput,
-        >,
+        build_view: BuildViewFn,
     ) -> Self {
         viewport.set_destination(size.width as i32, size.height as i32);
 
