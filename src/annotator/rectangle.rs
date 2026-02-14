@@ -392,8 +392,6 @@ mod tests {
 }
 
 impl Annotation for RectangleState {
-    type State = Self;
-
     fn show(&self, ui: &mut Ui) -> Response{
         ui.add(self.clone())
     }

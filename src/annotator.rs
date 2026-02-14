@@ -156,7 +156,6 @@ pub enum ToolType {
 }
 
 pub trait Annotation: Widget {
-    type State;
     fn show(&self, ui: &mut Ui) -> Response;
 }
 
