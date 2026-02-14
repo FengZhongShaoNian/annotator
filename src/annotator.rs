@@ -179,3 +179,372 @@ pub struct AnnotatorState {
 }
 
 impl Global for AnnotatorState {}
+
+
+trait SmallRect {
+    /// 将一个点扩展成一个小矩形
+    fn rect(&self, width: f32, height: f32) -> Rect;
+}
+
+impl SmallRect for Pos2 {
+    fn rect(&self, width: f32, height: f32) -> Rect {
+        let pos = self;
+        let half_width = width / 2f32;
+        let half_height = height / 2f32;
+        let top_left_pos = pos2(pos.x - half_width, pos.y - half_height);
+        let right_bottom_pos = pos2(pos.x + half_width, pos.y + half_height);
+        Rect::from_two_pos(top_left_pos, right_bottom_pos)
+    }
+}
+
+
+pub trait HitTest {
+    /// 对矩形做碰撞检测
+    /// 矩形的stroke_kind固定为StrokeKind::Middle
+    fn hit_test(&self, pointer_pos: &Pos2, stroke_width: f32) -> HitTarget;
+}
+
+impl HitTest for Rect {
+    /// 对矩形的4条边做碰撞检测（不会特别精准），返回发生碰撞的边
+    /// 矩形的stroke_kind固定为StrokeKind::Middle
+    fn hit_test(&self, pointer_pos: &Pos2, stroke_width: f32) -> HitTarget {
+        // 允许一定的误差
+        let tolerance = 6.;
+
+        let tolerance = if tolerance > stroke_width {
+            tolerance
+        } else {
+            stroke_width
+        };
+        let half = tolerance / 2.;
+
+        let mut edges = Vec::new();
+
+        // 矩形：
+        //  (min.x, min.y)   (max.x, min.y)
+        //
+        //  (min.x, max.y)   (max.x, max.y)
+
+        let min_pos = self.min;
+        let max_pos = self.max;
+
+        // 把每一条边当作一个小矩形来对待
+        // 上边
+        let small_rect = Rect::from_two_pos(
+            pos2(min_pos.x - half, min_pos.y - half),
+            pos2(max_pos.x + half, min_pos.y + half),
+        );
+        if small_rect.contains(*pointer_pos) {
+            edges.push(HitTarget::TopEdge);
+        }
+
+        // 右边
+        let small_rect = Rect::from_two_pos(
+            pos2(max_pos.x - half, min_pos.y - half),
+            pos2(max_pos.x + half, max_pos.y + half),
+        );
+        if small_rect.contains(*pointer_pos) {
+            edges.push(HitTarget::RightEdge);
+        }
+
+        // 下边
+        let small_rect = Rect::from_two_pos(
+            pos2(min_pos.x - half, max_pos.y - half),
+            pos2(max_pos.x + half, max_pos.y + half),
+        );
+        if small_rect.contains(*pointer_pos) {
+            edges.push(HitTarget::BottomEdge);
+        }
+
+        // 左边
+        let small_rect = Rect::from_two_pos(
+            pos2(min_pos.x - half, min_pos.y - half),
+            pos2(min_pos.x + half, max_pos.y + half),
+        );
+        if small_rect.contains(*pointer_pos) {
+            edges.push(HitTarget::LeftEdge);
+        }
+
+        if edges.contains(&HitTarget::TopEdge) && edges.contains(&HitTarget::LeftEdge) {
+            return HitTarget::TopLeftCorner;
+        }
+
+        if edges.contains(&HitTarget::TopEdge) && edges.contains(&HitTarget::RightEdge) {
+            return HitTarget::TopRightCorner;
+        }
+
+        if edges.contains(&HitTarget::BottomEdge) && edges.contains(&HitTarget::RightEdge) {
+            return HitTarget::BottomRightCorner;
+        }
+
+        if edges.contains(&HitTarget::BottomEdge) && edges.contains(&HitTarget::LeftEdge) {
+            return HitTarget::BottomLeftCorner;
+        }
+
+        if edges.is_empty() {
+            if self.contains(*pointer_pos) {
+                return HitTarget::Inside;
+            }
+        }else {
+            return *edges.first().unwrap();
+        }
+
+        HitTarget::Outside
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // 创建测试用的矩形 (x: 0-100, y: 0-50)
+    fn test_rect() -> Rect {
+        Rect::from_two_pos(pos2(0.0, 0.0), pos2(100.0, 50.0))
+    }
+
+    // 测试基本边界情况
+    #[test]
+    fn test_hit_test_basic_edges() {
+        let rect = test_rect();
+
+        // 测试上边 - 中点
+        assert_eq!(
+            rect.hit_test(&pos2(50.0, 0.0), 1.0),
+            HitTarget::TopEdge
+        );
+
+        // 测试上边 - 偏移3像素内 (tolerance=6, half=3)
+        assert_eq!(
+            rect.hit_test(&pos2(50.0, 2.9), 1.0),
+            HitTarget::TopEdge
+        );
+
+        // 测试下边
+        assert_eq!(
+            rect.hit_test(&pos2(50.0, 50.0), 1.0),
+            HitTarget::BottomEdge
+        );
+
+        // 测试左边
+        assert_eq!(
+            rect.hit_test(&pos2(0.0, 25.0), 1.0),
+            HitTarget::LeftEdge
+        );
+
+        // 测试右边
+        assert_eq!(
+            rect.hit_test(&pos2(100.0, 25.0), 1.0),
+            HitTarget::RightEdge
+        );
+    }
+
+    // 测试角点检测
+    #[test]
+    fn test_hit_test_corners() {
+        let rect = test_rect();
+
+        // 左上角
+        assert_eq!(
+            rect.hit_test(&pos2(0.0, 0.0), 1.0),
+            HitTarget::TopLeftCorner
+        );
+
+        // 右上角
+        assert_eq!(
+            rect.hit_test(&pos2(100.0, 0.0), 1.0),
+            HitTarget::TopRightCorner
+        );
+
+        // 左下角
+        assert_eq!(
+            rect.hit_test(&pos2(0.0, 50.0), 1.0),
+            HitTarget::BottomLeftCorner
+        );
+
+        // 右下角
+        assert_eq!(
+            rect.hit_test(&pos2(100.0, 50.0), 1.0),
+            HitTarget::BottomRightCorner
+        );
+    }
+
+    // 测试角点区域扩展 (tolerance=6, half=3)
+    #[test]
+    fn test_hit_test_corner_extended() {
+        let rect = test_rect();
+
+        // 左上角扩展区域 (x: -3 to 3, y: -3 to 3)
+        assert_eq!(
+            rect.hit_test(&pos2(2.9, 2.9), 1.0),
+            HitTarget::TopLeftCorner
+        );
+
+        // 右上角扩展区域 (x: 97 to 103, y: -3 to 3)
+        assert_eq!(
+            rect.hit_test(&pos2(97.1, 2.9), 1.0),
+            HitTarget::TopRightCorner
+        );
+    }
+
+    // 测试内部和外部
+    #[test]
+    fn test_hit_test_inside_outside() {
+        let rect = test_rect();
+
+        // 内部中心点
+        assert_eq!(
+            rect.hit_test(&pos2(50.0, 25.0), 1.0),
+            HitTarget::Inside
+        );
+
+        // 内部但不是中心
+        assert_eq!(
+            rect.hit_test(&pos2(10.0, 10.0), 1.0),
+            HitTarget::Inside
+        );
+
+        // 完全外部
+        assert_eq!(
+            rect.hit_test(&pos2(-10.0, 25.0), 1.0),
+            HitTarget::Outside
+        );
+
+        assert_eq!(
+            rect.hit_test(&pos2(50.0, -10.0), 1.0),
+            HitTarget::Outside
+        );
+
+        assert_eq!(
+            rect.hit_test(&pos2(150.0, 25.0), 1.0),
+            HitTarget::Outside
+        );
+    }
+
+    // 测试边缘扩展区域
+    #[test]
+    fn test_hit_test_edge_extended() {
+        let rect = test_rect();
+
+        // 上边扩展区域 (y: -3 to 3)
+        assert_eq!(
+            rect.hit_test(&pos2(50.0, -2.9), 1.0),
+            HitTarget::TopEdge
+        );
+
+        // 超出扩展区域
+        assert_eq!(
+            rect.hit_test(&pos2(50.0, -3.1), 1.0),
+            HitTarget::Outside
+        );
+
+        // 下边扩展区域 (y: 47 to 53)
+        assert_eq!(
+            rect.hit_test(&pos2(50.0, 52.9), 1.0),
+            HitTarget::BottomEdge
+        );
+
+        // 左边扩展区域 (x: -3 to 3)
+        assert_eq!(
+            rect.hit_test(&pos2(-2.9, 25.0), 1.0),
+            HitTarget::LeftEdge
+        );
+
+        // 右边扩展区域 (x: 97 to 103)
+        assert_eq!(
+            rect.hit_test(&pos2(102.9, 25.0), 1.0),
+            HitTarget::RightEdge
+        );
+    }
+
+    // 测试不同 stroke_width 值
+    #[test]
+    fn test_hit_test_different_stroke_width() {
+        let rect = test_rect();
+
+        // stroke_width=1.0，tolerance=6
+        assert_eq!(
+            rect.hit_test(&pos2(50.0, 2.9), 1.0),
+            HitTarget::TopEdge
+        );
+
+        assert_eq!(
+            rect.hit_test(&pos2(50.0, 3.1), 1.0),
+            HitTarget::Inside  // 在扩展区域外，但在矩形内
+        );
+
+        // stroke_width=10.0，tolerance=10，half=5
+        // 现在扩展区域更大
+        assert_eq!(
+            rect.hit_test(&pos2(50.0, 4.9), 10.0),
+            HitTarget::TopEdge
+        );
+
+        assert_eq!(
+            rect.hit_test(&pos2(50.0, 5.1), 10.0),
+            HitTarget::Inside  // 在扩展区域外，但在矩形内
+        );
+
+        // stroke_width=20.0，tolerance=20，half=10
+        // 扩展区域非常大
+        assert_eq!(
+            rect.hit_test(&pos2(50.0, 9.9), 20.0),
+            HitTarget::TopEdge
+        );
+
+        // 注意：当扩展区域非常大时，甚至可能覆盖到矩形内部
+        // 测试一个在矩形内部但在扩展区域内的点
+        assert_eq!(
+            rect.hit_test(&pos2(50.0, 8.0), 20.0),
+            HitTarget::TopEdge
+        );
+    }
+
+    // 测试边界条件和特殊情况
+    #[test]
+    fn test_hit_test_edge_cases() {
+        let rect = test_rect();
+
+        // 点在边上但x坐标超出矩形范围（但在扩展区域内）
+        assert_eq!(
+            rect.hit_test(&pos2(-2.9, 0.0), 1.0),
+            HitTarget::TopLeftCorner  // 同时在上边和左边
+        );
+
+        // 点在角的扩展区域边缘
+        assert_eq!(
+            rect.hit_test(&pos2(3.0, 3.0), 1.0),
+            HitTarget::TopLeftCorner
+        );
+
+        // 点刚好在扩展区域边界上
+        assert_eq!(
+            rect.hit_test(&pos2(103.0, 3.0), 1.0),
+            HitTarget::TopRightCorner
+        );
+
+        // 负坐标测试
+        let rect2 = Rect::from_two_pos(pos2(-50.0, -50.0), pos2(50.0, 50.0));
+        assert_eq!(
+            rect2.hit_test(&pos2(0.0, -50.0), 1.0),
+            HitTarget::TopEdge
+        );
+    }
+
+    // 性能测试：测试多个点
+    #[test]
+    fn test_hit_test_multiple_points() {
+        let rect = test_rect();
+        let stroke_width = 1.0;
+
+        // 创建测试点网格
+        for x in -10..=110 {
+            for y in -10..=60 {
+                let x = x as f32;
+                let y = y as f32;
+                let point = pos2(x, y);
+                let _result = rect.hit_test(&point, stroke_width);
+                // 这里我们不验证具体结果，只是确保不会panic
+            }
+        }
+    }
+}
