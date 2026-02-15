@@ -38,6 +38,10 @@ impl RectangleState {
     pub fn new(rect: Rect, style: RectangleStyle, active: bool) -> Self {
         Self { rect, style, active }
     }
+
+    pub fn deactivate(&mut self){
+        self.active = false;
+    }
 }
 
 impl Annotation for RectangleState {

@@ -409,6 +409,32 @@ fn main() {
 
                                     if active_tool != annotator_state.current_annotation_tool {
                                         println!("标注工具由{:?}切换为{:?}", active_tool, annotator_state.current_annotation_tool);
+
+                                        if let Some(tool) = active_tool {
+                                            match tool {
+                                                ToolType::Rectangle => {
+                                                    let rectangle_state = annotator_state.annotations_stack
+                                                        .last_mut()
+                                                        .map(|annotation|annotation.downcast_mut::<RectangleState>())
+                                                        .flatten();
+                                                    if let Some(rectangle_state) = rectangle_state {
+                                                        rectangle_state.deactivate();
+                                                    }
+                                                }
+                                                ToolType::Ellipse => {}
+                                                ToolType::StraightLine => {}
+                                                ToolType::Arrow => {}
+                                                ToolType::Pencil => {}
+                                                ToolType::MarkerPen => {}
+                                                ToolType::Mosaic => {}
+                                                ToolType::Blur => {}
+                                                ToolType::Text => {}
+                                                ToolType::SerialNumber => {}
+                                                ToolType::Watermark => {}
+                                                ToolType::Eraser => {}
+                                            }
+                                        }
+
                                     }
                                 });
                             });
