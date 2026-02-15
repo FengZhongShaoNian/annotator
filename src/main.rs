@@ -159,7 +159,7 @@ fn main() {
                     // 构建 UI 的具体内容
                     egui_ctx.run(input, move |ctx| {
                         egui::CentralPanel::default()
-                            .frame(Frame::new().fill(Color32::from_hex("#333333").unwrap())
+                            .frame(Frame::new().fill(Color32::from_hex("#393b40").unwrap())
                                 .shadow(Shadow {
                                 offset: [2, 3],
                                 blur: 10,
@@ -175,6 +175,7 @@ fn main() {
                                 ui.horizontal(|ui| {
                                     if ui
                                         .add(SvgButton::new(
+                                            "rectangle-tool".into(),
                                             Icons::DrawRectangle.get_image(),
                                             LogicalSize::new(32., 32.),
                                             true,
@@ -191,6 +192,7 @@ fn main() {
                                     }
                                     if ui
                                         .add(SvgButton::new(
+                                            "ellipse-tool".into(),
                                             Icons::DrawEllipse.get_image(),
                                             LogicalSize::new(32., 32.),
                                             true,
@@ -208,6 +210,7 @@ fn main() {
 
                                     if ui
                                         .add(SvgButton::new(
+                                            "straight-line-tool".into(),
                                             Icons::DrawLine.get_image(),
                                             LogicalSize::new(32., 32.),
                                             true,
@@ -224,6 +227,7 @@ fn main() {
                                     }
                                     if ui
                                         .add(SvgButton::new(
+                                            "arrow-tool".into(),
                                             Icons::DrawArrow.get_image(),
                                             LogicalSize::new(32., 32.),
                                             true,
@@ -241,6 +245,7 @@ fn main() {
 
                                     if ui
                                         .add(SvgButton::new(
+                                            "pencil-tool".into(),
                                             Icons::DrawFreehand.get_image(),
                                             LogicalSize::new(32., 32.),
                                             true,
@@ -258,6 +263,7 @@ fn main() {
 
                                     if ui
                                         .add(SvgButton::new(
+                                            "marker-pen-tool".into(),
                                             Icons::DrawHighlight.get_image(),
                                             LogicalSize::new(32., 32.),
                                             true,
@@ -275,6 +281,7 @@ fn main() {
 
                                     if ui
                                         .add(SvgButton::new(
+                                            "mosaic-tool".into(),
                                             Icons::PixelArtTrace.get_image(),
                                             LogicalSize::new(32., 32.),
                                             true,
@@ -292,6 +299,7 @@ fn main() {
 
                                     if ui
                                         .add(SvgButton::new(
+                                            "blur-tool".into(),
                                             Icons::BlurFx.get_image(),
                                             LogicalSize::new(32., 32.),
                                             true,
@@ -309,6 +317,7 @@ fn main() {
 
                                     if ui
                                         .add(SvgButton::new(
+                                            "text-tool".into(),
                                             Icons::DrawText.get_image(),
                                             LogicalSize::new(32., 32.),
                                             true,
@@ -326,6 +335,7 @@ fn main() {
 
                                     if ui
                                         .add(SvgButton::new(
+                                            "serial-number-tool".into(),
                                             Icons::DrawNumber.get_image(),
                                             LogicalSize::new(32., 32.),
                                             true,
@@ -343,6 +353,7 @@ fn main() {
 
                                     if ui
                                         .add(SvgButton::new(
+                                            "eraser-tool".into(),
                                             Icons::DrawEraser.get_image(),
                                             LogicalSize::new(32., 32.),
                                             false,
@@ -360,6 +371,7 @@ fn main() {
 
                                     if ui
                                         .add(SvgButton::new(
+                                            "undo-tool".into(),
                                             Icons::EditUndo.get_image(),
                                             LogicalSize::new(32., 32.),
                                             false,
@@ -370,6 +382,7 @@ fn main() {
 
                                     if ui
                                         .add(SvgButton::new(
+                                            "redo-tool".into(),
                                             Icons::EditRedo.get_image(),
                                             LogicalSize::new(32., 32.),
                                             false,
@@ -380,6 +393,7 @@ fn main() {
 
                                     if ui
                                         .add(SvgButton::new(
+                                            "save-tool".into(),
                                             Icons::DocumentSave.get_image(),
                                             LogicalSize::new(32., 32.),
                                             false,
@@ -390,6 +404,7 @@ fn main() {
 
                                     if ui
                                         .add(SvgButton::new(
+                                            "copy-tool".into(),
                                             Icons::EditCopy.get_image(),
                                             LogicalSize::new(32., 32.),
                                             false,
@@ -399,6 +414,7 @@ fn main() {
                                     {}
                                     if ui
                                         .add(SvgButton::new(
+                                            "ok-tool".into(),
                                             Icons::DialogOk.get_image(),
                                             LogicalSize::new(32., 32.),
                                             false,
