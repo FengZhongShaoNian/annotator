@@ -218,7 +218,7 @@ impl AppWindow {
     /// - `build_view`: 构建子视图 UI 的回调函数，接收窗口实例和 egui Context，返回 FullOutput
     pub fn create_sub_surface_view(
         &mut self,
-        global_state: &mut GlobalState,
+        global_state: &GlobalState,
         size: LogicalSize<u32>,
         position: LogicalPosition<i32>,
         build_view: BuildViewFn,
