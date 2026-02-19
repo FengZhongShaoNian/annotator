@@ -176,7 +176,7 @@ impl Application {
 
     pub fn with_window_mut<F>(&mut self, window_id: WindowId, func: F)
     where
-        F: FnOnce(&mut GlobalState, &mut Option<&mut AppWindow>),
+        F: FnOnce(&GlobalState, &mut Option<&mut AppWindow>),
     {
         let mut target_window_idx = None;
         for (idx, w) in self.windows.iter().enumerate() {
@@ -190,7 +190,7 @@ impl Application {
         } else {
             None
         };
-        let global_state = &mut self.global_state;
+        let global_state = &self.global_state;
         func(global_state, &mut window);
     }
 
