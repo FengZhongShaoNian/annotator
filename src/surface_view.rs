@@ -82,7 +82,7 @@ impl<'window> View for SurfaceView<'window> {
         self.scale_factor
     }
 
-    fn set_scale_factor(&mut self, scale_factor: f64, gpu: &mut GpuContext) {
+    fn set_scale_factor(&mut self, scale_factor: f64, gpu: &GpuContext) {
         self.scale_factor = scale_factor;
 
         let physical_size = self.size.to_physical(scale_factor);
@@ -101,7 +101,7 @@ impl<'window> View for SurfaceView<'window> {
         &self.viewport
     }
 
-    fn resize(&mut self, new_size: LogicalSize<u32>, gpu: &mut GpuContext) {
+    fn resize(&mut self, new_size: LogicalSize<u32>, gpu: &GpuContext) {
         info!("Resize viewport to: {:?}", new_size);
 
         let physical_size = new_size.to_physical(self.scale_factor());
@@ -152,7 +152,8 @@ impl<'window> View for SurfaceView<'window> {
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
-        let gpu = global_state.gpu.as_ref().unwrap();
+        let gpu_context = global_state.gpu.borrow();
+        let gpu = gpu_context.as_ref().unwrap();
 
         // 创建命令编码器
         let device = &gpu.device;
@@ -234,7 +235,7 @@ impl<'window> View for SurfaceView<'window> {
 }
 
 impl<'window> SurfaceView<'window> {
-    fn resize_surface(&mut self, physical_size: PhysicalSize<u32>, gpu: &&mut GpuContext) {
+    fn resize_surface(&mut self, physical_size: PhysicalSize<u32>, gpu: &GpuContext) {
         let surface_config = &mut self.wgpu_surface_configuration;
         surface_config.width = physical_size.width;
         surface_config.height = physical_size.height;

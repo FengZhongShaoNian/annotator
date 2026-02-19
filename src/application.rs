@@ -78,7 +78,7 @@ pub struct GlobalState {
     /// 队列句柄。
     pub queue_handle: QueueHandle<Application>,
     /// GPU 上下文（EGL/Skia）。
-    pub gpu: Option<GpuContext>,
+    pub gpu: RefCell<Option<GpuContext>>,
     /// 座位状态（管理输入设备）。
     pub seat_state: SeatState,
     /// 最近一次的序列号（用于同步）。
@@ -144,7 +144,7 @@ impl Application {
                 xdg_shell_state: XdgShell::bind(&globals, &qh).expect("xdg shell not available"),
                 event_queue: None,
                 queue_handle: qh,
-                gpu: None,
+                gpu: RefCell::new(None),
                 seat_state,
                 last_serial: 0,
                 keyboard: None,
@@ -208,8 +208,10 @@ impl Application {
         self.windows.iter_mut().for_each(|w| {
             // 如果窗口的scale_factor不存在，意味着窗口尚未开始绘制
             let old_scale_factor_is_none = w.scale_factor().is_none();
+            let gpu_context = self.global_state.gpu.borrow();
+            let gpu_context = gpu_context.as_ref().unwrap();
             if w.contains_surface(surface) {
-                w.set_scale_factor(scale_factor, self.global_state.gpu.as_mut().unwrap());
+                w.set_scale_factor(scale_factor, gpu_context);
             }
             if old_scale_factor_is_none && w.first_configure == false {
                 // 为了能正确绘制，窗口需要等待首次配置完成并且获取到了缩放倍数，再开始首次绘制
@@ -217,7 +219,7 @@ impl Application {
                 // 如果窗口设置了preferred_size，那么根据这个尺寸调整窗口大小
                 if let Some(preferred_size) = w.preferred_size {
                     let new_size = preferred_size.to_logical(scale_factor);
-                    w.resize(new_size, &mut self.global_state.gpu.as_mut().unwrap());
+                    w.resize(new_size, gpu_context);
                 }
                 w.draw(&self.global_state);
             }
@@ -374,7 +376,6 @@ impl WindowHandler for Application {
                 app_window.first_configure = false;
 
                 if app_window.scale_factor().is_some() {
-                    let gpu = self.global_state.gpu.as_mut().unwrap();
                     app_window.draw(&self.global_state);
                 }
             }

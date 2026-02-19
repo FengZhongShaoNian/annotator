@@ -81,7 +81,7 @@ impl AppWindow {
     /// - `app`: 应用实例
     /// - `build_root_view`: 构建根视图 UI 的回调函数，接收窗口实例和 egui Context，返回 FullOutput
     pub fn new(
-        global_state: &mut GlobalState,
+        global_state: &GlobalState,
         window_config: WindowConfiguration,
         build_root_view: BuildViewFn,
     ) -> AppWindow {
@@ -109,7 +109,8 @@ impl AppWindow {
         ));
 
         // 初始化 wgpu
-        let wgpu_surface = if global_state.gpu.is_none() {
+        let wgpu_initialized = global_state.gpu.borrow().as_ref().is_some();
+        let wgpu_surface = if !wgpu_initialized {
             let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
                 backends: wgpu::Backends::all(),
                 ..Default::default()
@@ -124,11 +125,13 @@ impl AppWindow {
                     .unwrap()
             };
             let gpu_context = GpuContext::new(instance, &surface).unwrap();
-            global_state.gpu = Some(gpu_context);
+            global_state.gpu.replace(Some(gpu_context));
 
             surface
         } else {
-            let instance = &global_state.gpu.as_mut().unwrap().instance;
+            let gpu_context = global_state.gpu.borrow();
+            let gpu_context = gpu_context.as_ref().unwrap();
+            let instance = &gpu_context.instance;
             let surface = unsafe {
                 instance
                     .create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
@@ -140,8 +143,10 @@ impl AppWindow {
             surface
         };
 
+        let gpu_context = global_state.gpu.borrow();
+        let gpu_context = gpu_context.as_ref().unwrap();
         let surface_caps =
-            wgpu_surface.get_capabilities(&global_state.gpu.as_mut().unwrap().adapter);
+            wgpu_surface.get_capabilities(&gpu_context.adapter);
 
         let surface_format = surface_caps.formats[0];
         let config = wgpu::SurfaceConfiguration {
@@ -159,7 +164,7 @@ impl AppWindow {
             view_formats: vec![],
         };
 
-        wgpu_surface.configure(&global_state.gpu.as_mut().unwrap().device, &config);
+        wgpu_surface.configure(&gpu_context.device, &config);
 
         // 初始化分数缩放和视口
         let fractional_scale = global_state
@@ -238,7 +243,9 @@ impl AppWindow {
         ));
 
         // 初始化 wgpu
-        let instance = &mut global_state.gpu.as_mut().unwrap().instance;
+        let gpu_context = global_state.gpu.borrow();
+        let gpu_context = gpu_context.as_ref().unwrap();
+        let instance = &gpu_context.instance;
         let wgpu_surface = unsafe {
             instance
                 .create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
@@ -249,7 +256,7 @@ impl AppWindow {
         };
 
         let surface_caps =
-            wgpu_surface.get_capabilities(&global_state.gpu.as_mut().unwrap().adapter);
+            wgpu_surface.get_capabilities(&gpu_context.adapter);
 
         let surface_format = surface_caps.formats[0];
         let config = wgpu::SurfaceConfiguration {
@@ -267,7 +274,7 @@ impl AppWindow {
             view_formats: vec![],
         };
 
-        wgpu_surface.configure(&global_state.gpu.as_mut().unwrap().device, &config);
+        wgpu_surface.configure(&gpu_context.device, &config);
 
         let mut subview = SubSurfaceView::new(
             surface.clone(),
@@ -379,7 +386,7 @@ impl AppWindow {
         &self.scale_factor
     }
 
-    pub fn set_scale_factor(&mut self, new_scale_factor: f64, gpu: &mut GpuContext) {
+    pub fn set_scale_factor(&mut self, new_scale_factor: f64, gpu: &GpuContext) {
         self.scale_factor = Some(new_scale_factor);
         self.main_view.set_scale_factor(new_scale_factor, gpu);
         for sub_view in &mut self.sub_views {
@@ -394,7 +401,7 @@ impl AppWindow {
         }
     }
 
-    pub fn resize(&mut self, new_size: LogicalSize<u32>, gpu: &mut GpuContext) {
+    pub fn resize(&mut self, new_size: LogicalSize<u32>, gpu: &GpuContext) {
         self.main_view.resize(new_size, gpu);
         for sub_view in &mut self.sub_views {
             let position_calculate_fn = sub_view.position_calculator();

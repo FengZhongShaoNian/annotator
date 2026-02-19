@@ -14,11 +14,11 @@ use crate::context::WindowContext;
 
 pub trait View {
     fn scale_factor(&self) -> f64;
-    fn set_scale_factor(&mut self, scale_factor: f64, gpu: &mut GpuContext);
+    fn set_scale_factor(&mut self, scale_factor: f64, gpu: &GpuContext);
     fn size(&self) -> LogicalSize<u32>;
     fn viewport_size(&self) -> PhysicalSize<u32>;
     fn viewport(&self) -> &WpViewport;
-    fn resize(&mut self, new_size: LogicalSize<u32>, gpu: &mut GpuContext);
+    fn resize(&mut self, new_size: LogicalSize<u32>, gpu: &GpuContext);
     fn surface(&self) -> &WlSurface;
 
     fn handle_keyboard_event(&mut self, event: sctk::seat::keyboard::KeyEvent, pressed: bool, repeat: bool);
