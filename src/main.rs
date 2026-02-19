@@ -50,6 +50,7 @@ fn main() {
         let image = image.to_rgba8();
         let window_config = WindowConfiguration::new(
             app.app_id.to_string(),
+            "".to_string(),
             LogicalSize::new(800, 600),
             Some(PhysicalSize::new(image.width(), image.height())),
         );

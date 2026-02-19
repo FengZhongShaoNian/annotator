@@ -55,6 +55,7 @@ pub struct SubSurfaceViewId(ObjectId);
 
 pub struct WindowConfiguration {
     app_id: String,
+    title: String,
     size: LogicalSize<u32>,
     preferred_size: Option<PhysicalSize<u32>>,
 }
@@ -62,11 +63,13 @@ pub struct WindowConfiguration {
 impl WindowConfiguration {
     pub fn new(
         app_id: String,
+        title: String,
         size: LogicalSize<u32>,
         preferred_size: Option<PhysicalSize<u32>>,
     ) -> Self {
         WindowConfiguration {
             app_id,
+            title,
             size,
             preferred_size,
         }
@@ -96,7 +99,7 @@ impl AppWindow {
             WindowDecorations::None,
             &global_state.queue_handle,
         );
-        xdg_window.set_title("Image Annotator");
+        xdg_window.set_title(window_config.title);
         xdg_window.set_app_id(window_config.app_id);
         xdg_window.commit();
 
