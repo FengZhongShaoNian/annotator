@@ -275,11 +275,10 @@ impl CompositorHandler for Application {
     fn frame(
         &mut self,
         _conn: &Connection,
-        qh: &QueueHandle<Self>,
-        surface: &wl_surface::WlSurface,
+        _qh: &QueueHandle<Self>,
+        surface: &WlSurface,
         _time: u32,
     ) {
-        let gpu = &mut self.global_state.gpu;
         for window in &mut self.windows {
             // 只在主 Surface (main_view) 的帧回调到达时触发重绘
             // 这样可以保证渲染频率与显示刷新率同步，避免过度提交
@@ -294,7 +293,7 @@ impl CompositorHandler for Application {
         &mut self,
         _conn: &Connection,
         _qh: &QueueHandle<Self>,
-        _surface: &wl_surface::WlSurface,
+        _surface: &WlSurface,
         _output: &wl_output::WlOutput,
     ) {
         // Not needed for this example.
@@ -305,7 +304,7 @@ impl CompositorHandler for Application {
         &mut self,
         _conn: &Connection,
         _qh: &QueueHandle<Self>,
-        _surface: &wl_surface::WlSurface,
+        _surface: &WlSurface,
         _output: &wl_output::WlOutput,
     ) {
         // Not needed for this example.
@@ -359,7 +358,7 @@ impl WindowHandler for Application {
     fn configure(
         &mut self,
         _conn: &Connection,
-        qh: &QueueHandle<Self>,
+        _qh: &QueueHandle<Self>,
         window: &Window,
         configure: WindowConfigure,
         _serial: u32,
