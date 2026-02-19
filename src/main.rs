@@ -49,6 +49,7 @@ fn main() {
         // We'll need the image in RGBA for drawing it
         let image = image.to_rgba8();
         let window_config = WindowConfiguration::new(
+            app.app_id.to_string(),
             LogicalSize::new(800, 600),
             Some(PhysicalSize::new(image.width(), image.height())),
         );

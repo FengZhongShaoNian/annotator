@@ -167,7 +167,8 @@ impl Application {
         window_config: WindowConfiguration,
         build_root_view: BuildViewFn,
     ) -> WindowId {
-        let window = AppWindow::new(self, window_config, build_root_view);
+        let global_state = &mut self.global_state;
+        let window = AppWindow::new(global_state, window_config, build_root_view);
         let window_id = window.window_id();
         self.windows.push(window);
         window_id

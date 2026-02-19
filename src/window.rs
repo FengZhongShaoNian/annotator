@@ -8,15 +8,15 @@ use crate::surface_view::SurfaceView;
 use crate::view::{BuildViewFn, SubView, View};
 use egui::{CursorIcon, ImeEvent, PlatformOutput};
 use egui_wgpu::wgpu;
+use log::warn;
 use raw_window_handle::{
     RawDisplayHandle, RawWindowHandle, WaylandDisplayHandle, WaylandWindowHandle,
 };
-use sctk::seat::pointer::{PointerEventKind};
-use sctk::shell::xdg::window::{Window as XdgWindow, WindowDecorations};
+use sctk::seat::pointer::PointerEventKind;
 use sctk::shell::WaylandSurface;
+use sctk::shell::xdg::window::{Window as XdgWindow, WindowDecorations};
 use std::ptr::NonNull;
 use std::sync::Arc;
-use log::warn;
 use wayland_backend::client::ObjectId;
 use wayland_client::protocol::wl_surface;
 use wayland_client::{Proxy, QueueHandle};
@@ -44,21 +44,29 @@ pub struct AppWindow {
     pub preferred_size: Option<PhysicalSize<u32>>,
     window_context: WindowContext,
     /// 当前鼠标指针所在的表面
-    surface_under_mouse: Option<ObjectId>
+    surface_under_mouse: Option<ObjectId>,
 }
 
 /// 窗口的Id
 #[derive(Debug, Eq, PartialEq)]
 pub struct WindowId(ObjectId);
 
+pub struct SubSurfaceViewId(ObjectId);
+
 pub struct WindowConfiguration {
+    app_id: String,
     size: LogicalSize<u32>,
     preferred_size: Option<PhysicalSize<u32>>,
 }
 
 impl WindowConfiguration {
-    pub fn new(size: LogicalSize<u32>, preferred_size: Option<PhysicalSize<u32>>) -> Self {
+    pub fn new(
+        app_id: String,
+        size: LogicalSize<u32>,
+        preferred_size: Option<PhysicalSize<u32>>,
+    ) -> Self {
         WindowConfiguration {
+            app_id,
             size,
             preferred_size,
         }
@@ -73,36 +81,35 @@ impl AppWindow {
     /// - `app`: 应用实例
     /// - `build_root_view`: 构建根视图 UI 的回调函数，接收窗口实例和 egui Context，返回 FullOutput
     pub fn new(
-        app: &mut Application,
+        global_state: &mut GlobalState,
         window_config: WindowConfiguration,
         build_root_view: BuildViewFn,
     ) -> AppWindow {
         // 创建主表面
-        let main_surface = app
-            .global_state
+        let main_surface = global_state
             .compositor_state
-            .create_surface(&app.global_state.queue_handle);
+            .create_surface(&global_state.queue_handle);
 
         // 创建 XDG 窗口并设置属性
-        let xdg_window = app.global_state.xdg_shell_state.create_window(
+        let xdg_window = global_state.xdg_shell_state.create_window(
             main_surface.clone(),
             WindowDecorations::None,
-            &app.global_state.queue_handle,
+            &global_state.queue_handle,
         );
         xdg_window.set_title("Image Annotator");
-        xdg_window.set_app_id(app.app_id);
+        xdg_window.set_app_id(window_config.app_id);
         xdg_window.commit();
 
         // Create the raw window handle for the surface.
         let raw_display_handle = RawDisplayHandle::Wayland(WaylandDisplayHandle::new(
-            NonNull::new(app.global_state.connection.backend().display_ptr() as *mut _).unwrap(),
+            NonNull::new(global_state.connection.backend().display_ptr() as *mut _).unwrap(),
         ));
         let raw_window_handle = RawWindowHandle::Wayland(WaylandWindowHandle::new(
             NonNull::new(xdg_window.wl_surface().id().as_ptr() as *mut _).unwrap(),
         ));
 
         // 初始化 wgpu
-        let wgpu_surface = if app.global_state.gpu.is_none() {
+        let wgpu_surface = if global_state.gpu.is_none() {
             let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
                 backends: wgpu::Backends::all(),
                 ..Default::default()
@@ -116,12 +123,12 @@ impl AppWindow {
                     })
                     .unwrap()
             };
-            let gpu_context = gpu::GpuContext::new(instance, &surface).unwrap();
-            app.global_state.gpu = Some(gpu_context);
+            let gpu_context = GpuContext::new(instance, &surface).unwrap();
+            global_state.gpu = Some(gpu_context);
 
             surface
         } else {
-            let instance = &app.global_state.gpu.as_mut().unwrap().instance;
+            let instance = &global_state.gpu.as_mut().unwrap().instance;
             let surface = unsafe {
                 instance
                     .create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
@@ -134,7 +141,7 @@ impl AppWindow {
         };
 
         let surface_caps =
-            wgpu_surface.get_capabilities(&app.global_state.gpu.as_mut().unwrap().adapter);
+            wgpu_surface.get_capabilities(&global_state.gpu.as_mut().unwrap().adapter);
 
         let surface_format = surface_caps.formats[0];
         let config = wgpu::SurfaceConfiguration {
@@ -152,20 +159,18 @@ impl AppWindow {
             view_formats: vec![],
         };
 
-        wgpu_surface.configure(&app.global_state.gpu.as_mut().unwrap().device, &config);
+        wgpu_surface.configure(&global_state.gpu.as_mut().unwrap().device, &config);
 
         // 初始化分数缩放和视口
-        let fractional_scale = app
-            .global_state
+        let fractional_scale = global_state
             .fractional_scaling_manager
             .as_ref()
-            .map(|ref m| m.fractional_scaling(&main_surface, &app.global_state.queue_handle));
-        let main_viewport = app
-            .global_state
+            .map(|ref m| m.fractional_scaling(&main_surface, &global_state.queue_handle));
+        let main_viewport = global_state
             .viewporter_state
             .as_ref()
             .map(|ref viewporter_state| {
-                viewporter_state.get_viewport(&main_surface, &app.global_state.queue_handle)
+                viewporter_state.get_viewport(&main_surface, &global_state.queue_handle)
             })
             .expect("Failed to retrieve viewport");
 
@@ -180,7 +185,7 @@ impl AppWindow {
             build_root_view,
         );
 
-        let qh = app.global_state.queue_handle.clone();
+        let qh = global_state.queue_handle.clone();
 
         let window = Self {
             main_view,
@@ -213,12 +218,10 @@ impl AppWindow {
         position: LogicalPosition<i32>,
         build_view: BuildViewFn,
         position_calculator: Option<Arc<crate::view::RelativePositionCalculator>>,
-    ) -> &mut SubSurfaceView {
-        let (sub_surface_handle, surface) =
-            global_state.sub_compositor_state.create_subsurface(
-                self.main_view.surface().clone(),
-                &global_state.queue_handle,
-            );
+    ) -> SubSurfaceViewId {
+        let (sub_surface_handle, surface) = global_state
+            .sub_compositor_state
+            .create_subsurface(self.main_view.surface().clone(), &global_state.queue_handle);
 
         let viewport = global_state
             .viewporter_state
@@ -276,21 +279,14 @@ impl AppWindow {
             build_view,
             position_calculator,
         );
+        let subview_id = SubSurfaceViewId(subview.view().surface().id());
         subview.set_position(position);
 
         subview.view_mut().surface().commit(); // Initial commit
 
         self.sub_views.push(Box::new(subview));
 
-        // 返回刚添加的视图的引用。由于使用 Box<dyn SubView>，我们需要进行 downcast。
-        // 为了简单起见，这里假设我们知道它是 SubSurfaceView 类型。
-        let last_idx = self.sub_views.len() - 1;
-        let boxed_view = &mut self.sub_views[last_idx];
-        // SAFETY: 我们刚刚存入的就是 SubSurfaceView
-        unsafe {
-            let ptr = boxed_view.as_mut() as *mut dyn SubView as *mut SubSurfaceView;
-            &mut *ptr
-        }
+        subview_id
     }
 
     pub fn handle_pointer_event(
@@ -300,10 +296,10 @@ impl AppWindow {
     ) {
         let event_surface = &event.surface;
         match event.kind {
-            PointerEventKind::Enter{..} => {
+            PointerEventKind::Enter { .. } => {
                 self.surface_under_mouse = Some(event_surface.id());
             }
-            PointerEventKind::Leave{..} => {
+            PointerEventKind::Leave { .. } => {
                 self.surface_under_mouse = None;
             }
             _ => {}
@@ -334,8 +330,14 @@ impl AppWindow {
         }
     }
 
-    pub fn handle_keyboard_event(&mut self, event: sctk::seat::keyboard::KeyEvent, pressed: bool, repeat: bool) {
-        self.main_view.handle_keyboard_event(event.clone(), pressed, repeat);
+    pub fn handle_keyboard_event(
+        &mut self,
+        event: sctk::seat::keyboard::KeyEvent,
+        pressed: bool,
+        repeat: bool,
+    ) {
+        self.main_view
+            .handle_keyboard_event(event.clone(), pressed, repeat);
         self.sub_views.iter_mut().for_each(|sub_view| {
             sub_view
                 .view_mut()
@@ -433,7 +435,9 @@ impl AppWindow {
 
         // 2. 渲染子视图
         for i in 0..self.sub_views.len() {
-            let output = self.sub_views[i].view_mut().draw(global_state, window_context);
+            let output = self.sub_views[i]
+                .view_mut()
+                .draw(global_state, window_context);
             Self::update_ime_position_if_necessary(&output, global_state);
             if self.surface_under_mouse == Some(self.sub_views[i].view().surface().id()) {
                 Self::update_cursor_icon_if_necessary(&output, global_state);
@@ -441,7 +445,10 @@ impl AppWindow {
         }
     }
 
-    fn update_ime_position_if_necessary(output: &Option<PlatformOutput>, global_state: &GlobalState) {
+    fn update_ime_position_if_necessary(
+        output: &Option<PlatformOutput>,
+        global_state: &GlobalState,
+    ) {
         if let (Some(platform_output), Some(text_input)) =
             (output, global_state.text_input.as_ref())
         {
@@ -458,8 +465,13 @@ impl AppWindow {
         }
     }
 
-    fn update_cursor_icon_if_necessary(output: &Option<PlatformOutput>, global_state: &GlobalState) {
-        if let (Some(platform_output), Some(themed_pointer)) = (output, global_state.themed_pointer.as_ref()) {
+    fn update_cursor_icon_if_necessary(
+        output: &Option<PlatformOutput>,
+        global_state: &GlobalState,
+    ) {
+        if let (Some(platform_output), Some(themed_pointer)) =
+            (output, global_state.themed_pointer.as_ref())
+        {
             use sctk::seat::pointer::CursorIcon as SctkCursorIcon;
             let cursor_icon = match platform_output.cursor_icon {
                 CursorIcon::Default => Some(SctkCursorIcon::Default),
@@ -501,18 +513,17 @@ impl AppWindow {
 
             if let Some(cursor_icon) = cursor_icon {
                 let connection = &global_state.connection;
-                if let Err(e) = themed_pointer.set_cursor(connection, cursor_icon){
+                if let Err(e) = themed_pointer.set_cursor(connection, cursor_icon) {
                     warn!("Failed to set cursor icon: {:?}", e);
                 }
-            }else {
-                if let Err(e) = themed_pointer.hide_cursor(){
+            } else {
+                if let Err(e) = themed_pointer.hide_cursor() {
                     warn!("Failed to hide cursor icon: {:?}", e);
                 }
             }
-
         }
     }
-    
+
     pub fn window_id(&self) -> WindowId {
         WindowId(self.main_view.surface().id())
     }
