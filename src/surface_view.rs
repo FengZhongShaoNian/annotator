@@ -227,8 +227,13 @@ impl<'window> View for SurfaceView<'window> {
         // 请求frame回调以确保持续渲染
         self.surface.frame(&global_state.queue_handle, self.surface.clone());
 
-        // 提交缓冲区到表面，然后提交
+        // 提交缓冲区到表面
         frame.present();
+
+        // 释放不再需要的纹理
+        for id in &egui_output.textures_delta.free {
+            egui_renderer.free_texture(id);
+        }
 
         Some(egui_output.platform_output)
     }
