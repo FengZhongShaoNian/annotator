@@ -1,16 +1,22 @@
-use crate::application::{Application, GlobalState};
+use crate::application::GlobalState;
+use crate::context::WindowContext;
 use crate::dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize};
 use crate::gpu::GpuContext;
-use crate::surface_view::SurfaceView;
-use crate::window::AppWindow;
-use log::info;
+use egui::{FullOutput, ImeEvent, OrderedViewportIdMap, PlatformOutput, RawInput, ViewportOutput};
 use std::sync::Arc;
-use egui::{FullOutput, ImeEvent, PlatformOutput, RawInput};
-use wayland_client::QueueHandle;
-use wayland_client::protocol::wl_surface;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_protocols::wp::viewporter::client::wp_viewport::WpViewport;
-use crate::context::WindowContext;
+
+pub struct EguiOutput {
+    /// Non-rendering related output.
+    pub platform_output: PlatformOutput,
+
+    /// All the active viewports, including the root.
+    ///
+    /// It is up to the integration to spawn a native window for each viewport,
+    /// and to close any window that no longer has a viewport in this map.
+    pub viewport_output: OrderedViewportIdMap<ViewportOutput>,
+}
 
 pub trait View {
     fn scale_factor(&self) -> f64;
@@ -31,7 +37,7 @@ pub trait View {
     );
 
     /// 使用 GPU 上下文进行重绘。
-    fn draw(&mut self, global_state: &GlobalState, window_context: &mut WindowContext) -> Option<PlatformOutput>;
+    fn draw(&mut self, global_state: &GlobalState, window_context: &mut WindowContext) -> Option<EguiOutput>;
 }
 
 /// 一个函数，可以根据父表面的尺寸和子表面自身的尺寸重新计算子表面的位置

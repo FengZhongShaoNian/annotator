@@ -3,7 +3,7 @@ use crate::context::WindowContext;
 use crate::dpi::{LogicalSize, PhysicalSize};
 use crate::egui_input::EguiInput;
 use crate::gpu::GpuContext;
-use crate::view::{BuildViewFn, View};
+use crate::view::{BuildViewFn, EguiOutput, View};
 use egui::{FullOutput, ImeEvent, PlatformOutput, RawInput};
 use egui_wgpu::wgpu::TextureFormat;
 use egui_wgpu::{RendererOptions, wgpu};
@@ -138,7 +138,7 @@ impl<'window> View for SurfaceView<'window> {
     }
 
     /// 使用 GPU 渲染视图内容
-    fn draw(&mut self, global_state: &GlobalState, window_context: &mut WindowContext) -> Option<PlatformOutput> {
+    fn draw(&mut self, global_state: &GlobalState, window_context: &mut WindowContext) -> Option<EguiOutput> {
         let egui_output = self.run_egui(window_context);
 
         // 获取当前帧纹理
@@ -235,7 +235,10 @@ impl<'window> View for SurfaceView<'window> {
             egui_renderer.free_texture(id);
         }
 
-        Some(egui_output.platform_output)
+        Some(EguiOutput {
+            platform_output: egui_output.platform_output,
+            viewport_output: egui_output.viewport_output,
+        })
     }
 }
 

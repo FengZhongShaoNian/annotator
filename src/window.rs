@@ -5,7 +5,7 @@ use crate::gpu;
 use crate::gpu::GpuContext;
 use crate::sub_surface_view::SubSurfaceView;
 use crate::surface_view::SurfaceView;
-use crate::view::{BuildViewFn, SubView, View};
+use crate::view::{BuildViewFn, EguiOutput, SubView, View};
 use egui::{CursorIcon, ImeEvent, PlatformOutput};
 use egui_wgpu::wgpu;
 use log::warn;
@@ -148,8 +148,7 @@ impl AppWindow {
 
         let gpu_context = global_state.gpu.borrow();
         let gpu_context = gpu_context.as_ref().unwrap();
-        let surface_caps =
-            wgpu_surface.get_capabilities(&gpu_context.adapter);
+        let surface_caps = wgpu_surface.get_capabilities(&gpu_context.adapter);
 
         let surface_format = surface_caps.formats[0];
         let config = wgpu::SurfaceConfiguration {
@@ -258,8 +257,7 @@ impl AppWindow {
                 .unwrap()
         };
 
-        let surface_caps =
-            wgpu_surface.get_capabilities(&gpu_context.adapter);
+        let surface_caps = wgpu_surface.get_capabilities(&gpu_context.adapter);
 
         let surface_format = surface_caps.formats[0];
         let config = wgpu::SurfaceConfiguration {
@@ -436,32 +434,40 @@ impl AppWindow {
 
         // 1. 渲染主视图
         {
-            let output = self.main_view.draw(global_state, window_context);
-            Self::update_ime_position_if_necessary(&output, global_state);
-            if self.surface_under_mouse == Some(self.main_view.surface().id()) {
-                Self::update_cursor_icon_if_necessary(&output, global_state);
+            if let Some(EguiOutput {
+                platform_output,
+                viewport_output,
+            }) = self.main_view.draw(global_state, window_context)
+            {
+                Self::update_ime_position_if_necessary(&platform_output, global_state);
+                if self.surface_under_mouse == Some(self.main_view.surface().id()) {
+                    Self::update_cursor_icon_if_necessary(&platform_output, global_state);
+                }
             }
         }
 
         // 2. 渲染子视图
         for i in 0..self.sub_views.len() {
-            let output = self.sub_views[i]
+            if let Some(EguiOutput {
+                platform_output,
+                viewport_output,
+            }) = self.sub_views[i]
                 .view_mut()
-                .draw(global_state, window_context);
-            Self::update_ime_position_if_necessary(&output, global_state);
-            if self.surface_under_mouse == Some(self.sub_views[i].view().surface().id()) {
-                Self::update_cursor_icon_if_necessary(&output, global_state);
+                .draw(global_state, window_context)
+            {
+                Self::update_ime_position_if_necessary(&platform_output, global_state);
+                if self.surface_under_mouse == Some(self.sub_views[i].view().surface().id()) {
+                    Self::update_cursor_icon_if_necessary(&platform_output, global_state);
+                }
             }
         }
     }
 
     fn update_ime_position_if_necessary(
-        output: &Option<PlatformOutput>,
+        platform_output: &PlatformOutput,
         global_state: &GlobalState,
     ) {
-        if let (Some(platform_output), Some(text_input)) =
-            (output, global_state.text_input.as_ref())
-        {
+        if let Some(text_input) = global_state.text_input.as_ref() {
             if let Some(ime) = platform_output.ime {
                 let cursor_rect = ime.cursor_rect;
                 text_input.set_cursor_rectangle(
@@ -476,12 +482,10 @@ impl AppWindow {
     }
 
     fn update_cursor_icon_if_necessary(
-        output: &Option<PlatformOutput>,
+        platform_output: &PlatformOutput,
         global_state: &GlobalState,
     ) {
-        if let (Some(platform_output), Some(themed_pointer)) =
-            (output, global_state.themed_pointer.as_ref())
-        {
+        if let Some(themed_pointer) = global_state.themed_pointer.as_ref() {
             use sctk::seat::pointer::CursorIcon as SctkCursorIcon;
             let cursor_icon = match platform_output.cursor_icon {
                 CursorIcon::Default => Some(SctkCursorIcon::Default),
