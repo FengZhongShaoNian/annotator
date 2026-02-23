@@ -17,6 +17,7 @@ mod view;
 mod wp_viewporter;
 
 use crate::annotator::rectangle::{RectangleAnnotationTool, RectangleState};
+use crate::annotator::ellipse::{EllipseAnnotationTool, EllipseState};
 use crate::annotator::svg_button::SvgButton;
 use crate::annotator::{Annotation, AnnotatorState, ToolType};
 use crate::application::Application;
@@ -24,9 +25,7 @@ use crate::dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize};
 use crate::icon::Icons;
 use crate::window::WindowConfiguration;
 use egui::load::SizedTexture;
-use egui::{
-    Color32, ColorImage, Frame, Image, ImageSource, Rect, Shadow, include_image, pos2, vec2,
-};
+use egui::{Color32, ColorImage, Frame, Image, ImageSource, Rect, Shadow, pos2, vec2, Area, Id, TextEdit, Widget};
 use log::error;
 use std::env;
 use std::sync::Arc;
@@ -112,6 +111,10 @@ fn main() {
                                     ui.add(RectangleAnnotationTool::new(annotator_state));
                                 }
 
+                                Some(ToolType::Ellipse) => {
+                                    ui.add(EllipseAnnotationTool::new(annotator_state));
+                                }
+
                                 _ => {}
                             }
 
@@ -119,10 +122,11 @@ fn main() {
                                 .annotations_stack
                                 .iter()
                                 .for_each(|annotation| {
-                                    annotation
-                                        .downcast_ref::<RectangleState>()
-                                        .unwrap()
-                                        .show(ui);
+                                    if let Some(rectangle_annotation) = annotation.downcast_ref::<RectangleState>() {
+                                        rectangle_annotation.show(ui);
+                                    }else if let Some(ellipse_annotation) = annotation.downcast_ref::<EllipseState>() {
+                                        ellipse_annotation.show(ui);
+                                    }
                                 });
 
                             // Area::new(Id::from("text_edit")).movable(true).current_pos(annotator_state.pos).show(ctx, |ui| {
@@ -439,7 +443,15 @@ fn main() {
                                                         rectangle_state.deactivate();
                                                     }
                                                 }
-                                                ToolType::Ellipse => {}
+                                                ToolType::Ellipse => {
+                                                    let ellipse_state = annotator_state.annotations_stack
+                                                        .last_mut()
+                                                        .map(|annotation|annotation.downcast_mut::<EllipseState>())
+                                                        .flatten();
+                                                    if let Some(ellipse_state) = ellipse_state {
+                                                        ellipse_state.deactivate();
+                                                    }
+                                                }
                                                 ToolType::StraightLine => {}
                                                 ToolType::Arrow => {}
                                                 ToolType::Pencil => {}

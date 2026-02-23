@@ -1,6 +1,7 @@
 mod cursor;
 pub mod rectangle;
 pub(crate) mod svg_button;
+pub(crate) mod ellipse;
 
 use crate::annotator::rectangle::RectangleAnnotationToolState;
 use crate::global::Global;
@@ -10,6 +11,7 @@ use egui::{
 };
 use rustc_hash::FxHashMap;
 use std::any::Any;
+use crate::annotator::ellipse::EllipseAnnotationToolState;
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum StrokeType {
@@ -173,6 +175,9 @@ pub struct AnnotatorState {
 
     /// 矩形标注工具的状态
     pub rectangle_annotation_tool_state: RectangleAnnotationToolState,
+    
+    /// 椭圆标注工具的状态
+    pub ellipse_annotation_tool_state: EllipseAnnotationToolState,
 
     /// 当前激活的标注工具
     pub current_annotation_tool: Option<ToolType>,
