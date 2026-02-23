@@ -1,7 +1,5 @@
 use crate::annotator::cursor::Crosshair;
-use crate::annotator::{
-    Annotation, AnnotatorState, DragAction, HitTarget, HitTest, SmallRect, StrokeType, ToolType,
-};
+use crate::annotator::{Annotation, AnnotatorState, DragAction, HitTarget, HitTest, PainterExt, SmallRect, StrokeType, ToolType};
 use egui::epaint::{EllipseShape, RectShape};
 use egui::{
     Color32, CornerRadius, CursorIcon, Pos2, Rangef, Rect, Response, Sense, Shape, Stroke,
@@ -79,104 +77,8 @@ impl Widget for EllipseState {
 
         if self.active {
             // 绘制虚线矩形框以及外框上的各个角以及边上的小矩形
-            let width = 6f32;
-            let height = 6f32;
-            let top_left_pos = self.rect.left_top().add(vec2(
-                -1. * self.style.stroke.width / 2f32,
-                -1. * self.style.stroke.width / 2f32,
-            ));
-            let top_right_pos = self.rect.right_top().add(vec2(
-                1. * self.style.stroke.width / 2f32,
-                -1. * self.style.stroke.width / 2f32,
-            ));
-            let bottom_right_pos = self.rect.right_bottom().add(vec2(
-                1. * self.style.stroke.width / 2f32,
-                1. * self.style.stroke.width / 2f32,
-            ));
-            let bottom_left_pos = self.rect.left_bottom().add(vec2(
-                -1. * self.style.stroke.width / 2f32,
-                1. * self.style.stroke.width / 2f32,
-            ));
-
-            let path = vec![
-                top_left_pos,
-                top_right_pos,
-                bottom_right_pos,
-                bottom_left_pos,
-                top_left_pos,
-            ];
-
-            // 绘制虚线矩形外框
-            let dashed_rectangle =
-                Shape::dashed_line(&path, Stroke::new(1., Color32::WHITE), 3., 5.);
-            painter.add(dashed_rectangle);
-
-            let center_left_edge = pos2(top_left_pos.x, top_left_pos.y + self.rect.height() / 2f32);
-            let center_right_edge =
-                pos2(top_right_pos.x, top_right_pos.y + self.rect.height() / 2f32);
-            let center_top_edge = pos2(top_left_pos.x + self.rect.width() / 2f32, top_left_pos.y);
-            let center_bottom_edge = pos2(
-                bottom_left_pos.x + self.rect.width() / 2f32,
-                bottom_left_pos.y,
-            );
-
-            painter.rect(
-                top_left_pos.rect(width, height),
-                0,
-                Color32::TRANSPARENT,
-                Stroke::new(1f32, Color32::WHITE),
-                StrokeKind::Middle,
-            );
-            painter.rect(
-                top_right_pos.rect(width, height),
-                0,
-                Color32::TRANSPARENT,
-                Stroke::new(1f32, Color32::WHITE),
-                StrokeKind::Middle,
-            );
-            painter.rect(
-                bottom_right_pos.rect(width, height),
-                0,
-                Color32::TRANSPARENT,
-                Stroke::new(1f32, Color32::WHITE),
-                StrokeKind::Middle,
-            );
-            painter.rect(
-                bottom_left_pos.rect(width, height),
-                0,
-                Color32::TRANSPARENT,
-                Stroke::new(1f32, Color32::WHITE),
-                StrokeKind::Middle,
-            );
-
-            painter.rect(
-                center_left_edge.rect(width, height),
-                0,
-                Color32::TRANSPARENT,
-                Stroke::new(1f32, Color32::WHITE),
-                StrokeKind::Middle,
-            );
-            painter.rect(
-                center_right_edge.rect(width, height),
-                0,
-                Color32::TRANSPARENT,
-                Stroke::new(1f32, Color32::WHITE),
-                StrokeKind::Middle,
-            );
-            painter.rect(
-                center_top_edge.rect(width, height),
-                0,
-                Color32::TRANSPARENT,
-                Stroke::new(1f32, Color32::WHITE),
-                StrokeKind::Middle,
-            );
-            painter.rect(
-                center_bottom_edge.rect(width, height),
-                0,
-                Color32::TRANSPARENT,
-                Stroke::new(1f32, Color32::WHITE),
-                StrokeKind::Middle,
-            );
+            painter.rectangle(&self.rect.expand(self.style.stroke.width/2.), Color32::TRANSPARENT, Stroke::new(1., Color32::WHITE), StrokeKind::Middle, StrokeType::DashedLine);
+            painter.small_rects(&self.rect);
         }
         response
     }

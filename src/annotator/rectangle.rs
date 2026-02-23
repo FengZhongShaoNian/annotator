@@ -1,4 +1,4 @@
-use crate::annotator::{Annotation, AnnotatorState, DragAction, HitTarget, HitTest, SmallRect, StrokeType, ToolType};
+use crate::annotator::{Annotation, AnnotatorState, DragAction, HitTarget, HitTest, PainterExt, SmallRect, StrokeType, ToolType};
 use egui::{pos2, vec2, Color32, CornerRadius, CursorIcon, Pos2, Rangef, Rect, Response, Sense, Shape, Stroke, StrokeKind, Ui, Widget};
 use log::debug;
 use crate::annotator::cursor::Crosshair;
@@ -55,35 +55,13 @@ impl Widget for RectangleState {
         let response = ui.allocate_rect(self.rect, Sense::hover());
         let painter = ui.painter();
         if let Some(fill_color) = self.style.fill_color {
-            painter.rect(self.rect, 0, fill_color, self.style.stroke, StrokeKind::Middle);
+            painter.rectangle(&self.rect, fill_color, self.style.stroke, StrokeKind::Middle, self.style.stroke_type);
         } else {
-            painter.rect(self.rect, 0, Color32::TRANSPARENT, self.style.stroke, StrokeKind::Middle);
+            painter.rectangle(&self.rect, Color32::TRANSPARENT, self.style.stroke, StrokeKind::Middle, self.style.stroke_type);
         }
 
         if self.active {
-            // 绘制各个角以及边上的小矩形
-            let width = 6f32;
-            let height = 6f32;
-            let top_left_pos = self.rect.left_top();
-            let top_right_pos = self.rect.right_top();
-            let bottom_right_pos = self.rect.right_bottom();
-            let bottom_left_pos = self.rect.left_bottom();
-
-            let center_left_edge = pos2(top_left_pos.x, top_left_pos.y + self.rect.height() / 2f32);
-            let center_right_edge = pos2(top_right_pos.x, top_right_pos.y + self.rect.height() / 2f32);
-            let center_top_edge = pos2(top_left_pos.x + self.rect.width() / 2f32, top_left_pos.y);
-            let center_bottom_edge = pos2(bottom_left_pos.x + self.rect.width() / 2f32, bottom_left_pos.y);
-
-            painter.rect(top_left_pos.rect(width, height), 0, Color32::TRANSPARENT, Stroke::new(1f32, Color32::WHITE), StrokeKind::Middle);
-            painter.rect(top_right_pos.rect(width, height), 0, Color32::TRANSPARENT, Stroke::new(1f32, Color32::WHITE), StrokeKind::Middle);
-            painter.rect(bottom_right_pos.rect(width, height), 0, Color32::TRANSPARENT, Stroke::new(1f32, Color32::WHITE), StrokeKind::Middle);
-            painter.rect(bottom_left_pos.rect(width, height), 0, Color32::TRANSPARENT, Stroke::new(1f32, Color32::WHITE), StrokeKind::Middle);
-
-            painter.rect(center_left_edge.rect(width, height), 0, Color32::TRANSPARENT, Stroke::new(1f32, Color32::WHITE), StrokeKind::Middle);
-            painter.rect(center_right_edge.rect(width, height), 0, Color32::TRANSPARENT, Stroke::new(1f32, Color32::WHITE), StrokeKind::Middle);
-            painter.rect(center_top_edge.rect(width, height), 0, Color32::TRANSPARENT, Stroke::new(1f32, Color32::WHITE), StrokeKind::Middle);
-            painter.rect(center_bottom_edge.rect(width, height), 0, Color32::TRANSPARENT, Stroke::new(1f32, Color32::WHITE), StrokeKind::Middle);
-
+            painter.small_rects(&self.rect);
         }
         response
     }

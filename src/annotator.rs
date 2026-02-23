@@ -3,15 +3,13 @@ pub mod rectangle;
 pub(crate) mod svg_button;
 pub(crate) mod ellipse;
 
+use crate::annotator::ellipse::EllipseAnnotationToolState;
 use crate::annotator::rectangle::RectangleAnnotationToolState;
 use crate::global::Global;
-use egui::{
-    Area, Color32, CursorIcon, Pos2, Rect, Response, Sense, Stroke, TextureHandle, Ui, Vec2,
-    Widget, pos2, vec2, widgets,
-};
-use rustc_hash::FxHashMap;
+use egui::{pos2, vec2, Color32, CornerRadius, CursorIcon, Painter, Pos2, Rect, Response, Shape, Stroke, StrokeKind, TextureHandle, Ui, Widget};
 use std::any::Any;
-use crate::annotator::ellipse::EllipseAnnotationToolState;
+use std::cmp::max;
+use std::ops::Add;
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum StrokeType {
@@ -22,13 +20,7 @@ pub enum StrokeType {
     DashedLine,
 
     /// 点线
-    DottedLine,
-
-    /// 点划线
-    DashDotLine,
-
-    /// 双点划线
-    DashDotDotLine,
+    DottedLine
 }
 
 /// 描述一个矩形的四条边
@@ -551,5 +543,110 @@ mod tests {
                 // 这里我们不验证具体结果，只是确保不会panic
             }
         }
+    }
+}
+
+pub trait PainterExt {
+    /// 为一个矩形绘制各个角以及边上的小矩形
+    fn small_rects(&self, rect: &Rect);
+
+    /// 绘制矩形
+    fn rectangle(&self, rect: &Rect,
+                        fill_color: impl Into<Color32>,
+                        stroke: impl Into<Stroke>,
+                        stroke_kind: StrokeKind,
+                        stroke_type: StrokeType);
+}
+
+impl PainterExt for Painter {
+    fn small_rects(&self, rect: &Rect) {
+        let painter = self;
+
+        let width = 6f32;
+        let height = 6f32;
+        let top_left_pos = rect.left_top();
+        let top_right_pos = rect.right_top();
+        let bottom_right_pos = rect.right_bottom();
+        let bottom_left_pos = rect.left_bottom();
+
+        let center_left_edge = pos2(top_left_pos.x, top_left_pos.y + rect.height() / 2f32);
+        let center_right_edge = pos2(top_right_pos.x, top_right_pos.y + rect.height() / 2f32);
+        let center_top_edge = pos2(top_left_pos.x + rect.width() / 2f32, top_left_pos.y);
+        let center_bottom_edge = pos2(bottom_left_pos.x + rect.width() / 2f32, bottom_left_pos.y);
+
+        painter.rect(top_left_pos.rect(width, height), 0, Color32::TRANSPARENT, Stroke::new(1f32, Color32::WHITE), StrokeKind::Middle);
+        painter.rect(top_right_pos.rect(width, height), 0, Color32::TRANSPARENT, Stroke::new(1f32, Color32::WHITE), StrokeKind::Middle);
+        painter.rect(bottom_right_pos.rect(width, height), 0, Color32::TRANSPARENT, Stroke::new(1f32, Color32::WHITE), StrokeKind::Middle);
+        painter.rect(bottom_left_pos.rect(width, height), 0, Color32::TRANSPARENT, Stroke::new(1f32, Color32::WHITE), StrokeKind::Middle);
+
+        painter.rect(center_left_edge.rect(width, height), 0, Color32::TRANSPARENT, Stroke::new(1f32, Color32::WHITE), StrokeKind::Middle);
+        painter.rect(center_right_edge.rect(width, height), 0, Color32::TRANSPARENT, Stroke::new(1f32, Color32::WHITE), StrokeKind::Middle);
+        painter.rect(center_top_edge.rect(width, height), 0, Color32::TRANSPARENT, Stroke::new(1f32, Color32::WHITE), StrokeKind::Middle);
+        painter.rect(center_bottom_edge.rect(width, height), 0, Color32::TRANSPARENT, Stroke::new(1f32, Color32::WHITE), StrokeKind::Middle);
+    }
+
+    fn rectangle(&self,
+                        rect: &Rect,
+                        fill_color: impl Into<Color32>,
+                        stroke: impl Into<Stroke>,
+                        stroke_kind: StrokeKind,
+                        stroke_type: StrokeType) {
+
+        let stroke = stroke.into();
+        let path = match stroke_kind {
+            StrokeKind::Middle => {
+                let half_stroke_width = stroke.width / 2.0;
+                let stroke_rect = rect.expand(half_stroke_width);
+                vec![
+                    stroke_rect.left_top(),
+                    stroke_rect.right_top(),
+                    stroke_rect.right_bottom(),
+                    stroke_rect.left_bottom(),
+                    stroke_rect.left_top(),
+                ]
+            }
+            StrokeKind::Inside => {
+                let stroke_width = stroke.width;
+                let stroke_rect = rect.expand(-stroke_width);
+                vec![
+                    stroke_rect.left_top(),
+                    stroke_rect.right_top(),
+                    stroke_rect.right_bottom(),
+                    stroke_rect.left_bottom(),
+                    stroke_rect.left_top(),
+                ]
+            }
+            StrokeKind::Outside => {
+                let stroke_width = stroke.width;
+                let stroke_rect = rect.expand(stroke_width);
+                vec![
+                    stroke_rect.left_top(),
+                    stroke_rect.right_top(),
+                    stroke_rect.right_bottom(),
+                    stroke_rect.left_bottom(),
+                    stroke_rect.left_top(),
+                ]
+            }
+        };
+
+        let shapes = match stroke_type {
+            StrokeType::SolidLine => {
+                vec![
+                    Shape::line(vec![path[0], path[1]], stroke),
+                    Shape::line(vec![path[1], path[2]], stroke),
+                    Shape::line(vec![path[2], path[3]], stroke),
+                    Shape::line(vec![path[3], path[0]], stroke),
+                ]
+            }
+            StrokeType::DashedLine => {
+                Shape::dashed_line(&path, stroke, max(5, (stroke.width*2.).ceil() as i32) as f32, max(5, (stroke.width*2.).ceil() as i32) as f32)
+            }
+            StrokeType::DottedLine => {
+                Shape::dotted_line(&path, stroke.color, max(5, (stroke.width*2.).ceil() as i32) as f32, stroke.width/2.)
+            }
+        };
+
+        self.add(Shape::rect_filled(rect.clone(), 0., fill_color));
+        self.add(shapes);
     }
 }
