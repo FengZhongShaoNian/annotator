@@ -77,7 +77,6 @@ impl Widget for EllipseState {
 
         if self.active {
             // 绘制虚线矩形框以及外框上的各个角以及边上的小矩形
-            painter.rectangle(&self.rect.expand(self.style.stroke.width/2.), Color32::TRANSPARENT, Stroke::new(1., Color32::WHITE), StrokeKind::Middle, StrokeType::DashedLine);
             painter.small_rects(&self.rect);
         }
         response
