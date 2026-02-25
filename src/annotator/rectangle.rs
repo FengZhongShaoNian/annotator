@@ -1,7 +1,14 @@
-use crate::annotator::{Annotation, AnnotatorState, DragAction, HitTarget, HitTest, PainterExt, SmallRect, StrokeType, ToolType};
-use egui::{pos2, vec2, Color32, CornerRadius, CursorIcon, Pos2, Rangef, Rect, Response, Sense, Shape, Stroke, StrokeKind, Ui, Widget};
-use log::debug;
 use crate::annotator::cursor::Crosshair;
+use crate::annotator::{
+    Annotation, AnnotatorState, DragAction, HitTarget, HitTest, PainterExt, SmallRect, StrokeType,
+    ToolType,
+};
+use egui::{
+    Color32, CornerRadius, CursorIcon, Id, Pos2, Rangef, Rect, Response, Sense, Shape, Stroke,
+    StrokeKind, Ui, Widget, pos2, vec2,
+};
+use log::debug;
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Copy, Clone)]
 pub struct RectangleStyle {
@@ -16,7 +23,7 @@ pub struct RectangleStyle {
 impl Default for RectangleStyle {
     fn default() -> Self {
         Self {
-            stroke: Stroke::new(1., Color32::from_rgb(255, 0,0)),
+            stroke: Stroke::new(1., Color32::from_rgb(255, 0, 0)),
             stroke_type: StrokeType::SolidLine,
             fill_color: None,
         }
@@ -36,16 +43,20 @@ pub struct RectangleState {
 
 impl RectangleState {
     pub fn new(rect: Rect, style: RectangleStyle, active: bool) -> Self {
-        Self { rect, style, active }
+        Self {
+            rect,
+            style,
+            active,
+        }
     }
 
-    pub fn deactivate(&mut self){
+    pub fn deactivate(&mut self) {
         self.active = false;
     }
 }
 
 impl Annotation for RectangleState {
-    fn show(&self, ui: &mut Ui) -> Response{
+    fn show(&self, ui: &mut Ui) -> Response {
         ui.add(self.clone())
     }
 }
@@ -55,9 +66,21 @@ impl Widget for RectangleState {
         let response = ui.allocate_rect(self.rect, Sense::hover());
         let painter = ui.painter();
         if let Some(fill_color) = self.style.fill_color {
-            painter.rectangle(&self.rect, fill_color, self.style.stroke, StrokeKind::Middle, self.style.stroke_type);
+            painter.rectangle(
+                &self.rect,
+                fill_color,
+                self.style.stroke,
+                StrokeKind::Middle,
+                self.style.stroke_type,
+            );
         } else {
-            painter.rectangle(&self.rect, Color32::TRANSPARENT, self.style.stroke, StrokeKind::Middle, self.style.stroke_type);
+            painter.rectangle(
+                &self.rect,
+                Color32::TRANSPARENT,
+                self.style.stroke,
+                StrokeKind::Middle,
+                self.style.stroke_type,
+            );
         }
 
         if self.active {
@@ -90,27 +113,36 @@ pub struct RectangleAnnotationTool<'a> {
     annotator_state: &'a mut AnnotatorState,
 }
 
+const MAX_STROKE_WIDTH: f32 = 62.;
+
 impl<'a> RectangleAnnotationTool<'a> {
-    pub fn new(
-        annotator_state: &'a mut AnnotatorState,
-    ) -> Self {
-        Self {
-            annotator_state,
+    pub fn new(annotator_state: &'a mut AnnotatorState) -> Self {
+        Self { annotator_state }
+    }
+
+    fn hit_test(annotation: &Option<&RectangleState>, pos: Pos2) -> Option<HitTarget> {
+        match annotation {
+            Some(rectangle_state) => Some(
+                rectangle_state
+                    .rect
+                    .hit_test(&pos, rectangle_state.style.stroke.width),
+            ),
+            _ => None,
         }
     }
 
-    fn hit_test(annotation: &Option<&RectangleState>, pos: Pos2) -> Option<HitTarget>{
-        match annotation {
-            Some(rectangle_state)  => {
-                Some(rectangle_state.rect.hit_test(&pos, rectangle_state.style.stroke.width))
-            }
-            _ => {
-                None
-            }
+    fn increase_stroke(tool_state: &mut RectangleAnnotationToolState) {
+        if tool_state.style.stroke.width + 1. < MAX_STROKE_WIDTH {
+            tool_state.style.stroke.width += 1.;
+        }
+    }
+
+    fn decrease_stroke(tool_state: &mut RectangleAnnotationToolState) {
+        if tool_state.style.stroke.width - 1. > 0. {
+            tool_state.style.stroke.width -= 1.;
         }
     }
 }
-
 
 impl Widget for RectangleAnnotationTool<'_> {
     fn ui(self, ui: &mut Ui) -> Response {
@@ -123,12 +155,44 @@ impl Widget for RectangleAnnotationTool<'_> {
 
         let annotator_state = self.annotator_state;
         // 从标注栈的栈顶中获取最近的一个矩形标注
-        let last_annotation = annotator_state.annotations_stack
+        let last_annotation = annotator_state
+            .annotations_stack
             .last()
             .map(|annotation| annotation.downcast_ref::<RectangleState>())
             .flatten();
 
-        { // 检测鼠标碰撞并绘制光标
+        let tool_state = &mut annotator_state.rectangle_annotation_tool_state;
+        // 滚动鼠标滚轮调整线条大小
+        let scroll_delta = ui.ctx().input(|i| i.smooth_scroll_delta);
+        if scroll_delta != egui::Vec2::ZERO {
+            ui.ctx().memory_mut(|memory| {
+                let id = Id::from("RectangleAnnotationTool.wheel.instant");
+                let now = Instant::now();
+                if let Some(previous_scroll) = memory.data.get_temp::<Instant>(id) {
+                    let duration = now.checked_duration_since(previous_scroll);
+                    if let Some(duration) = duration {
+                        if duration > Duration::from_millis(300) {
+                            if scroll_delta.y > 0. {
+                                Self::decrease_stroke(tool_state);
+                            } else if scroll_delta.y < 0. {
+                                Self::increase_stroke(tool_state);
+                            }
+                            memory.data.insert_temp(id, now);
+                        }
+                    }
+                } else {
+                    if scroll_delta.y > 0. {
+                        Self::decrease_stroke(tool_state);
+                    } else if scroll_delta.y < 0. {
+                        Self::increase_stroke(tool_state);
+                    }
+                    memory.data.insert_temp(id, Instant::now());
+                }
+            });
+        }
+
+        {
+            // 检测鼠标碰撞并绘制光标
 
             // 判断当前鼠标是否位于此矩形标注上
             let hit_target = Self::hit_test(&last_annotation, pointer_pos);
@@ -137,18 +201,19 @@ impl Widget for RectangleAnnotationTool<'_> {
                 let cursor_icon = hit_target.get_cursor();
                 if let Some(cursor_icon) = cursor_icon {
                     ui.ctx().set_cursor_icon(cursor_icon);
-                }else {
+                } else {
                     ui.ctx().set_cursor_icon(CursorIcon::None);
                     // 绘制自定义光标
-                    Crosshair::new(pointer_pos, Color32::RED, 1.0).paint_with(ui.painter());
+                    Crosshair::new(pointer_pos, Color32::RED, tool_state.style.stroke.width)
+                        .paint_with(ui.painter());
                 }
             } else {
                 ui.ctx().set_cursor_icon(CursorIcon::None);
                 // 绘制自定义光标
-                Crosshair::new(pointer_pos, Color32::RED, 1.0).paint_with(ui.painter());
+                Crosshair::new(pointer_pos, Color32::RED, tool_state.style.stroke.width)
+                    .paint_with(ui.painter());
             }
         }
-
 
         let tool_state = &mut annotator_state.rectangle_annotation_tool_state;
 
@@ -157,9 +222,13 @@ impl Widget for RectangleAnnotationTool<'_> {
             let drag_started_pos = ui.ctx().input(|i| i.pointer.press_origin()).unwrap();
             let hit_target = Self::hit_test(&last_annotation, drag_started_pos);
             match hit_target {
-                Some(hit_target) if hit_target != HitTarget::Inside && hit_target != HitTarget::Outside => {
+                Some(hit_target)
+                    if hit_target != HitTarget::Inside && hit_target != HitTarget::Outside =>
+                {
                     // 调整现有的标注
-                    let mut annotation = annotator_state.annotations_stack.pop()
+                    let mut annotation = annotator_state
+                        .annotations_stack
+                        .pop()
                         .map(|annotation| annotation.downcast::<RectangleState>().ok())
                         .flatten()
                         .map(|state| state.clone())
@@ -171,11 +240,13 @@ impl Widget for RectangleAnnotationTool<'_> {
                 _ => {
                     if last_annotation.is_some() {
                         // 把栈顶的矩形标注设为非激活状态
-                        annotator_state.annotations_stack
+                        annotator_state
+                            .annotations_stack
                             .last_mut()
                             .map(|annotation| {
-                                let mut rectangle_state = annotation.downcast_mut::<RectangleState>();
-                                if let Some(rectangle_state) =  rectangle_state.as_mut() {
+                                let mut rectangle_state =
+                                    annotation.downcast_mut::<RectangleState>();
+                                if let Some(rectangle_state) = rectangle_state.as_mut() {
                                     rectangle_state.active = false;
                                 }
                             });
@@ -216,12 +287,13 @@ impl Widget for RectangleAnnotationTool<'_> {
                     }
 
                     DragAction::None => {
-                        let drag_started_pos = ui.ctx().input(|i| i.pointer.press_origin()).unwrap();
+                        let drag_started_pos =
+                            ui.ctx().input(|i| i.pointer.press_origin()).unwrap();
                         rectangle_state.rect = Rect::from_two_pos(drag_started_pos, pointer_pos);
                     }
                 }
                 ui.add(rectangle_state.clone());
-            }else {
+            } else {
                 let drag_started_pos = ui.ctx().input(|i| i.pointer.press_origin()).unwrap();
                 let rect = Rect::from_two_pos(drag_started_pos, pointer_pos);
                 let rectangle_state = RectangleState::new(rect, tool_state.style, true);
@@ -240,5 +312,3 @@ impl Widget for RectangleAnnotationTool<'_> {
         response
     }
 }
-
-

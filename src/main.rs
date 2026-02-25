@@ -177,16 +177,7 @@ fn main() {
                     // 构建 UI 的具体内容
                     egui_ctx.run(input, move |ctx| {
                         egui::CentralPanel::default()
-                            .frame(
-                                Frame::new()
-                                    .fill(Color32::from_hex("#393b40").unwrap())
-                                    .shadow(Shadow {
-                                        offset: [2, 3],
-                                        blur: 10,
-                                        spread: 0,
-                                        color: Color32::from_rgba_premultiplied(0, 0, 0, 80),
-                                    }),
-                            )
+                            .frame(Frame::new().fill(Color32::from_hex("#393b40").unwrap()))
                             .show(ctx, |ui| {
                                 ui.ctx().set_cursor_icon(egui::CursorIcon::Default);
                                 ui.spacing_mut().item_spacing = vec2(1.0, 0.0);
@@ -525,22 +516,13 @@ fn main() {
             window.create_sub_surface_view(
                 "secondly-toolbar".into(),
                 global_state,
-                LogicalSize::new(600, 32),
+                LogicalSize::new(600, 62),
                 LogicalPosition::new(0i32, 0i32),
                 Box::new(|input, egui_ctx, window_ctx| {
                     // 构建 UI 的具体内容
                     egui_ctx.run(input, move |ctx| {
                         egui::CentralPanel::default()
-                            .frame(
-                                Frame::new()
-                                    .fill(Color32::from_hex("#393b40").unwrap())
-                                    .shadow(Shadow {
-                                        offset: [2, 3],
-                                        blur: 10,
-                                        spread: 0,
-                                        color: Color32::from_rgba_premultiplied(0, 0, 0, 80),
-                                    }),
-                            )
+                            .frame(Frame::new().fill(Color32::from_hex("#393b40").unwrap()))
                             .show(ctx, |ui| {
                                 ui.ctx().set_cursor_icon(egui::CursorIcon::Default);
                                 ui.spacing_mut().item_spacing = vec2(1.0, 0.0);
@@ -555,6 +537,7 @@ fn main() {
                                     window_ctx
                                         .commands
                                         .push_back(Command::HideView(current_view_id));
+                                    return;
                                 }
                             });
                     })
