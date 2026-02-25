@@ -18,7 +18,23 @@ pub struct EguiOutput {
     pub viewport_output: OrderedViewportIdMap<ViewportOutput>,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+pub struct ViewId(pub Arc<str>);
+
+impl From<String> for ViewId {
+    fn from(s: String) -> Self {
+        Self(s.into())
+    }
+}
+
+impl From<&str> for ViewId {
+    fn from(s: &str) -> Self {
+        Self(s.into())
+    }
+}
+
 pub trait View {
+    fn id(&self) -> ViewId;
     fn scale_factor(&self) -> f64;
     fn set_scale_factor(&mut self, scale_factor: f64, gpu: &GpuContext);
     fn size(&self) -> LogicalSize<u32>;
@@ -35,6 +51,9 @@ pub trait View {
         event: &sctk::seat::pointer::PointerEvent,
         global_state: &GlobalState,
     );
+    fn visible(&self) -> bool;
+    
+    fn set_visible(&mut self, visible: bool);
 
     /// 使用 GPU 上下文进行重绘。
     fn draw(&mut self, global_state: &GlobalState, window_context: &mut WindowContext) -> Option<EguiOutput>;

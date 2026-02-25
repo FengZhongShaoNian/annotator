@@ -3,19 +3,19 @@ use crate::context::WindowContext;
 use crate::dpi::{LogicalSize, PhysicalSize};
 use crate::egui_input::EguiInput;
 use crate::gpu::GpuContext;
-use crate::view::{BuildViewFn, EguiOutput, View};
-use egui::{FullOutput, ImeEvent, PlatformOutput, RawInput};
+use crate::view::{BuildViewFn, EguiOutput, View, ViewId};
+use egui::{FullOutput, ImeEvent, RawInput};
 use egui_wgpu::wgpu::TextureFormat;
 use egui_wgpu::{RendererOptions, wgpu};
 use log::info;
 use sctk::seat::keyboard::{KeyEvent, Modifiers};
 use sctk::seat::pointer::PointerEvent;
-use wayland_client::QueueHandle;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_protocols::wp::viewporter::client::wp_viewport::WpViewport;
 use crate::font::setup_chinese_fonts;
 
 pub struct SurfaceView<'window> {
+    id: ViewId,
     /// Wayland Surface 句柄
     surface: WlSurface,
     /// WGPU 渲染表面
@@ -35,10 +35,12 @@ pub struct SurfaceView<'window> {
     egui_renderer: Option<egui_wgpu::Renderer>,
     /// 用于构建UI的函数
     build_view: BuildViewFn,
+    visible: bool,
 }
 
 impl<'window> SurfaceView<'window> {
     pub fn new(
+        id: ViewId,
         surface: WlSurface,
         wgpu_surface: wgpu::Surface<'window>,
         wgpu_surface_configuration: wgpu::SurfaceConfiguration,
@@ -56,6 +58,7 @@ impl<'window> SurfaceView<'window> {
         let egui_input = EguiInput::new();
 
         Self {
+            id,
             surface,
             wgpu_surface,
             wgpu_surface_configuration,
@@ -66,6 +69,7 @@ impl<'window> SurfaceView<'window> {
             egui_input,
             egui_renderer: None,
             build_view,
+            visible: true,
         }
     }
 
@@ -78,6 +82,10 @@ impl<'window> SurfaceView<'window> {
 }
 
 impl<'window> View for SurfaceView<'window> {
+    fn id(&self) -> ViewId {
+        self.id.clone()
+    }
+    
     fn scale_factor(&self) -> f64 {
         self.scale_factor
     }
@@ -136,9 +144,21 @@ impl<'window> View for SurfaceView<'window> {
         self.egui_input
             .handle_pointer_event(event);
     }
+    fn visible(&self) -> bool {
+        self.visible
+    }
+    
+    fn set_visible(&mut self, visible: bool) {
+        self.visible = visible;
+    }
 
     /// 使用 GPU 渲染视图内容
     fn draw(&mut self, global_state: &GlobalState, window_context: &mut WindowContext) -> Option<EguiOutput> {
+        if !self.visible {
+            self.surface.attach(None, 0, 0);
+            self.surface.commit();
+            return None;
+        }
         let egui_output = self.run_egui(window_context);
 
         // 获取当前帧纹理
@@ -266,6 +286,8 @@ impl<'window> SurfaceView<'window> {
             egui::vec2(self.size.width as f32, self.size.height as f32),
         );
         raw_input.screen_rect = Some(screen_rect);
+
+        window_context.current_view_id = Some(self.id.clone());
 
         let build_ui_fn = &self.build_view;
         let egui_output = build_ui_fn(raw_input, &mut self.egui_ctx, window_context);

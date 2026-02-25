@@ -16,6 +16,7 @@ mod surface_view;
 mod view;
 mod wp_viewporter;
 
+use std::any::{type_name, TypeId};
 use crate::annotator::rectangle::{RectangleAnnotationTool, RectangleState};
 use crate::annotator::ellipse::{EllipseAnnotationTool, EllipseState};
 use crate::annotator::svg_button::SvgButton;
@@ -29,6 +30,8 @@ use egui::{Color32, ColorImage, Frame, Image, ImageSource, Rect, Shadow, pos2, v
 use log::error;
 use std::env;
 use std::sync::Arc;
+use anyhow::Context;
+use crate::context::Command;
 
 fn main() {
     env_logger::init();
@@ -157,11 +160,11 @@ fn main() {
             let window = window.as_mut().unwrap();
             // 创建工具条
             window.create_sub_surface_view(
+                "primary-toolbar".into(),
                 global_state,
                 LogicalSize::new(600, 32),
                 LogicalPosition::new(0i32, 0i32),
                 Box::new(|input, egui_ctx, window_ctx| {
-                    let annotator_state = window_ctx.global_mut::<AnnotatorState>();
                     // 构建 UI 的具体内容
                     egui_ctx.run(input, move |ctx| {
                         egui::CentralPanel::default()
@@ -176,6 +179,12 @@ fn main() {
                                 ui.ctx().set_cursor_icon(egui::CursorIcon::Default);
                                 ui.spacing_mut().item_spacing = vec2(1.0, 0.0);
 
+                                let current_view_id = window_ctx.current_view_id.clone().unwrap();
+                                let annotator_state = window_ctx.globals_by_type
+                                    .get_mut(&TypeId::of::<AnnotatorState>())
+                                    .map(|any_state| any_state.downcast_mut::<AnnotatorState>().unwrap())
+                                    .with_context(|| format!("no state of type {} exists", type_name::<AnnotatorState>()))
+                                    .unwrap();
                                 let active_tool = annotator_state.current_annotation_tool;
 
                                 ui.horizontal(|ui| {
@@ -427,7 +436,10 @@ fn main() {
                                             false,
                                         ))
                                         .clicked()
-                                    {}
+                                    {
+                                        annotator_state.current_annotation_tool = None;
+                                        window_ctx.commands.push_back(Command::HideView(current_view_id));
+                                    }
 
                                     if active_tool != annotator_state.current_annotation_tool {
                                         println!("标注工具由{:?}切换为{:?}", active_tool, annotator_state.current_annotation_tool);

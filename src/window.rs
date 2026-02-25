@@ -1,11 +1,11 @@
+use std::cmp::PartialEq;
 use crate::application::{Application, GlobalState};
-use crate::context::WindowContext;
+use crate::context::{Command, WindowContext};
 use crate::dpi::{LogicalPosition, LogicalSize, PhysicalSize};
-use crate::gpu;
 use crate::gpu::GpuContext;
 use crate::sub_surface_view::SubSurfaceView;
 use crate::surface_view::SurfaceView;
-use crate::view::{BuildViewFn, EguiOutput, SubView, View};
+use crate::view::{BuildViewFn, EguiOutput, SubView, View, ViewId};
 use egui::{CursorIcon, ImeEvent, PlatformOutput};
 use egui_wgpu::wgpu;
 use log::warn;
@@ -51,7 +51,7 @@ pub struct AppWindow {
 #[derive(Debug, Eq, PartialEq)]
 pub struct WindowId(ObjectId);
 
-pub struct SubSurfaceViewId(ObjectId);
+pub struct SurfaceId(ObjectId);
 
 pub struct WindowConfiguration {
     app_id: String,
@@ -184,6 +184,7 @@ impl AppWindow {
         // 初始化主视图 (SurfaceView)
         let main_size = LogicalSize::new(window_config.size.width, window_config.size.height);
         let main_view = SurfaceView::new(
+            "main-view".into(),
             main_surface.clone(),
             wgpu_surface,
             config,
@@ -220,12 +221,13 @@ impl AppWindow {
     /// - `build_view`: 构建子视图 UI 的回调函数，接收窗口实例和 egui Context，返回 FullOutput
     pub fn create_sub_surface_view(
         &mut self,
+        id: ViewId,
         global_state: &GlobalState,
         size: LogicalSize<u32>,
         position: LogicalPosition<i32>,
         build_view: BuildViewFn,
         position_calculator: Option<Arc<crate::view::RelativePositionCalculator>>,
-    ) -> SubSurfaceViewId {
+    ) -> SurfaceId {
         let (sub_surface_handle, surface) = global_state
             .sub_compositor_state
             .create_subsurface(self.main_view.surface().clone(), &global_state.queue_handle);
@@ -278,6 +280,7 @@ impl AppWindow {
         wgpu_surface.configure(&gpu_context.device, &config);
 
         let mut subview = SubSurfaceView::new(
+            id,
             surface.clone(),
             wgpu_surface,
             config,
@@ -287,7 +290,7 @@ impl AppWindow {
             build_view,
             position_calculator,
         );
-        let subview_id = SubSurfaceViewId(subview.view().surface().id());
+        let subview_id = SurfaceId(subview.view().surface().id());
         subview.set_position(position);
 
         subview.view_mut().surface().commit(); // Initial commit
@@ -458,6 +461,22 @@ impl AppWindow {
                 Self::update_ime_position_if_necessary(&platform_output, global_state);
                 if self.surface_under_mouse == Some(self.sub_views[i].view().surface().id()) {
                     Self::update_cursor_icon_if_necessary(&platform_output, global_state);
+                }
+            }
+        }
+
+        while let Some(command) = window_context.commands.pop_front(){
+            match command {
+                Command::HideView(view_id) => {
+                    if view_id == self.main_view.id() {
+                        self.main_view.set_visible(false);
+                    }else {
+                        self.sub_views.iter_mut().for_each(|sub_view| {
+                            if sub_view.view_mut().id() == view_id {
+                                sub_view.view_mut().set_visible(false);
+                            }
+                        })
+                    }
                 }
             }
         }

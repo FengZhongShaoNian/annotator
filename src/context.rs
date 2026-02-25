@@ -1,13 +1,34 @@
 use crate::global::Global;
+use crate::view::ViewId;
 use anyhow::Context;
 use rustc_hash::FxHashMap;
 use std::any::{type_name, Any, TypeId};
-use egui::output::IMEOutput;
+use std::collections::VecDeque;
 
-#[derive(Default)]
 pub struct WindowContext {
     /// 按类型存储全局变量
-    globals_by_type: FxHashMap<TypeId, Box<dyn Any>>,
+    pub globals_by_type: FxHashMap<TypeId, Box<dyn Any>>,
+
+    /// 提供给BuildViewFn使用
+    pub current_view_id: Option<ViewId>,
+
+    /// BuildViewFn中会添加一些命令，这些命令会在BuildViewFn执行完成后被执行
+    pub commands: VecDeque<Command>,
+}
+
+#[derive(Clone)]
+pub enum Command {
+    HideView(ViewId),
+}
+
+impl Default for WindowContext {
+    fn default() -> Self {
+        Self {
+            globals_by_type: FxHashMap::default(),
+            current_view_id: None,
+            commands: VecDeque::new(),
+        }
+    }
 }
 
 impl WindowContext {

@@ -1,7 +1,7 @@
 use crate::context::WindowContext;
 use crate::dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize};
 use crate::surface_view::SurfaceView;
-use crate::view::{BuildViewFn, SubView, View};
+use crate::view::{BuildViewFn, SubView, View, ViewId};
 use egui::FullOutput;
 use egui_wgpu::wgpu::Surface;
 use std::sync::Arc;
@@ -17,6 +17,7 @@ pub struct SubSurfaceView<'window> {
 
 impl<'window> SubSurfaceView<'window> {
     pub fn new(
+        id: ViewId,
         surface: WlSurface,
         wgpu_surface: Surface<'window>,
         wgpu_surface_configuration: egui_wgpu::wgpu::SurfaceConfiguration,
@@ -27,6 +28,7 @@ impl<'window> SubSurfaceView<'window> {
         position_calculator: Option<Arc<crate::view::RelativePositionCalculator>>,
     ) -> Self {
         let view = SurfaceView::new(
+            id,
             surface,
             wgpu_surface,
             wgpu_surface_configuration,
