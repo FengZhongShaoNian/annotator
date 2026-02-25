@@ -16,23 +16,23 @@ mod surface_view;
 mod view;
 mod wp_viewporter;
 
-use std::any::{type_name, TypeId};
-use crate::annotator::rectangle::{RectangleAnnotationTool, RectangleState};
 use crate::annotator::ellipse::{EllipseAnnotationTool, EllipseState};
+use crate::annotator::rectangle::{RectangleAnnotationTool, RectangleState};
 use crate::annotator::svg_button::SvgButton;
 use crate::annotator::{Annotation, AnnotatorState, ToolType};
 use crate::application::Application;
+use crate::context::Command;
 use crate::dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize};
+use crate::global::{ReadGlobalMut, ReadOrInsertGlobal};
 use crate::icon::Icons;
 use crate::window::WindowConfiguration;
+use anyhow::Context;
 use egui::load::SizedTexture;
 use egui::{Color32, ColorImage, Frame, Image, ImageSource, Rect, Shadow, pos2, vec2};
 use log::error;
+use std::any::{TypeId, type_name};
 use std::env;
 use std::sync::Arc;
-use anyhow::Context;
-use crate::context::Command;
-use crate::global::{ReadGlobalMut, ReadOrInsertGlobal};
 
 fn main() {
     env_logger::init();
@@ -63,32 +63,35 @@ fn main() {
                 let image_width = image.width();
                 let image_height = image.height();
                 // 将图像数据上传到 GPU 并获取纹理句柄
-                let annotator_state: &AnnotatorState = window_ctx.globals_by_type.get_global_or_insert_with(|| {
-                    let mut annotator_state = AnnotatorState::default();
-                    // 创建 ColorImage
-                    // 注意：RgbaImage 的 bytes 应该是连续的 RGBA 数据
-                    let background_image = Arc::new(ColorImage::from_rgba_premultiplied(
-                        [image_width as usize, image_height as usize],
-                        image.as_raw(),
-                    ));
-                    // Load the texture only once.
-                    let texture_handle = egui_ctx.load_texture(
-                        "background-image",
-                        egui::ImageData::Color(background_image),
-                        Default::default(),
-                    );
-                    annotator_state.background_texture_handle = Some(texture_handle);
+                let annotator_state: &AnnotatorState =
+                    window_ctx.globals_by_type.get_global_or_insert_with(|| {
+                        let mut annotator_state = AnnotatorState::default();
+                        // 创建 ColorImage
+                        // 注意：RgbaImage 的 bytes 应该是连续的 RGBA 数据
+                        let background_image = Arc::new(ColorImage::from_rgba_premultiplied(
+                            [image_width as usize, image_height as usize],
+                            image.as_raw(),
+                        ));
+                        // Load the texture only once.
+                        let texture_handle = egui_ctx.load_texture(
+                            "background-image",
+                            egui::ImageData::Color(background_image),
+                            Default::default(),
+                        );
+                        annotator_state.background_texture_handle = Some(texture_handle);
 
-                    annotator_state.current_annotation_tool = Some(ToolType::Rectangle);
+                        annotator_state.current_annotation_tool = Some(ToolType::Rectangle);
 
-                    annotator_state
-                });
+                        annotator_state
+                    });
 
                 // 将图像数据上传到 GPU 并获取纹理句柄
                 let texture_handle = annotator_state.background_texture_handle.as_ref().unwrap();
                 let texture_handle = texture_handle.clone();
 
-                let annotator_state = window_ctx.globals_by_type.require_ref_mut::<AnnotatorState>();
+                let annotator_state = window_ctx
+                    .globals_by_type
+                    .require_ref_mut::<AnnotatorState>();
 
                 // 构建 UI 的具体内容
                 egui_ctx.run(input, move |ctx| {
@@ -126,9 +129,13 @@ fn main() {
                                 .annotations_stack
                                 .iter()
                                 .for_each(|annotation| {
-                                    if let Some(rectangle_annotation) = annotation.downcast_ref::<RectangleState>() {
+                                    if let Some(rectangle_annotation) =
+                                        annotation.downcast_ref::<RectangleState>()
+                                    {
                                         rectangle_annotation.show(ui);
-                                    }else if let Some(ellipse_annotation) = annotation.downcast_ref::<EllipseState>() {
+                                    } else if let Some(ellipse_annotation) =
+                                        annotation.downcast_ref::<EllipseState>()
+                                    {
                                         ellipse_annotation.show(ui);
                                     }
                                 });
@@ -170,19 +177,24 @@ fn main() {
                     // 构建 UI 的具体内容
                     egui_ctx.run(input, move |ctx| {
                         egui::CentralPanel::default()
-                            .frame(Frame::new().fill(Color32::from_hex("#393b40").unwrap())
-                                .shadow(Shadow {
-                                offset: [2, 3],
-                                blur: 10,
-                                spread: 0,
-                                color: Color32::from_rgba_premultiplied(0, 0, 0, 80),
-                            }))
+                            .frame(
+                                Frame::new()
+                                    .fill(Color32::from_hex("#393b40").unwrap())
+                                    .shadow(Shadow {
+                                        offset: [2, 3],
+                                        blur: 10,
+                                        spread: 0,
+                                        color: Color32::from_rgba_premultiplied(0, 0, 0, 80),
+                                    }),
+                            )
                             .show(ctx, |ui| {
                                 ui.ctx().set_cursor_icon(egui::CursorIcon::Default);
                                 ui.spacing_mut().item_spacing = vec2(1.0, 0.0);
 
                                 let current_view_id = window_ctx.current_view_id.clone().unwrap();
-                                let annotator_state = window_ctx.globals_by_type.require_ref_mut::<AnnotatorState>();
+                                let annotator_state = window_ctx
+                                    .globals_by_type
+                                    .require_ref_mut::<AnnotatorState>();
                                 let active_tool = annotator_state.current_annotation_tool;
 
                                 ui.horizontal(|ui| {
@@ -436,27 +448,40 @@ fn main() {
                                         .clicked()
                                     {
                                         annotator_state.current_annotation_tool = None;
-                                        window_ctx.commands.push_back(Command::HideView(current_view_id));
+                                        window_ctx
+                                            .commands
+                                            .push_back(Command::HideView(current_view_id));
                                     }
 
                                     if active_tool != annotator_state.current_annotation_tool {
-                                        println!("标注工具由{:?}切换为{:?}", active_tool, annotator_state.current_annotation_tool);
+                                        println!(
+                                            "标注工具由{:?}切换为{:?}",
+                                            active_tool, annotator_state.current_annotation_tool
+                                        );
 
                                         if let Some(tool) = active_tool {
                                             match tool {
                                                 ToolType::Rectangle => {
-                                                    let rectangle_state = annotator_state.annotations_stack
+                                                    let rectangle_state = annotator_state
+                                                        .annotations_stack
                                                         .last_mut()
-                                                        .map(|annotation|annotation.downcast_mut::<RectangleState>())
+                                                        .map(|annotation| {
+                                                            annotation
+                                                                .downcast_mut::<RectangleState>()
+                                                        })
                                                         .flatten();
                                                     if let Some(rectangle_state) = rectangle_state {
                                                         rectangle_state.deactivate();
                                                     }
                                                 }
                                                 ToolType::Ellipse => {
-                                                    let ellipse_state = annotator_state.annotations_stack
+                                                    let ellipse_state = annotator_state
+                                                        .annotations_stack
                                                         .last_mut()
-                                                        .map(|annotation|annotation.downcast_mut::<EllipseState>())
+                                                        .map(|annotation| {
+                                                            annotation
+                                                                .downcast_mut::<EllipseState>()
+                                                        })
                                                         .flatten();
                                                     if let Some(ellipse_state) = ellipse_state {
                                                         ellipse_state.deactivate();
@@ -474,7 +499,6 @@ fn main() {
                                                 ToolType::Eraser => {}
                                             }
                                         }
-
                                     }
                                 });
                             });
@@ -507,28 +531,36 @@ fn main() {
                     // 构建 UI 的具体内容
                     egui_ctx.run(input, move |ctx| {
                         egui::CentralPanel::default()
-                            .frame(Frame::new().fill(Color32::from_hex("#393b40").unwrap())
-                                .shadow(Shadow {
-                                    offset: [2, 3],
-                                    blur: 10,
-                                    spread: 0,
-                                    color: Color32::from_rgba_premultiplied(0, 0, 0, 80),
-                                }))
+                            .frame(
+                                Frame::new()
+                                    .fill(Color32::from_hex("#393b40").unwrap())
+                                    .shadow(Shadow {
+                                        offset: [2, 3],
+                                        blur: 10,
+                                        spread: 0,
+                                        color: Color32::from_rgba_premultiplied(0, 0, 0, 80),
+                                    }),
+                            )
                             .show(ctx, |ui| {
                                 ui.ctx().set_cursor_icon(egui::CursorIcon::Default);
                                 ui.spacing_mut().item_spacing = vec2(1.0, 0.0);
 
                                 let current_view_id = window_ctx.current_view_id.clone().unwrap();
-                                let annotator_state = window_ctx.globals_by_type.require_ref_mut::<AnnotatorState>();
+                                let annotator_state = window_ctx
+                                    .globals_by_type
+                                    .require_ref_mut::<AnnotatorState>();
                                 let active_tool = annotator_state.current_annotation_tool;
 
                                 if active_tool.is_none() {
-                                    window_ctx.commands.push_back(Command::HideView(current_view_id));
+                                    window_ctx
+                                        .commands
+                                        .push_back(Command::HideView(current_view_id));
                                 }
                             });
                     })
-                }), Some(position_calculator));
-
+                }),
+                Some(position_calculator),
+            );
         });
     }
 

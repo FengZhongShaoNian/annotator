@@ -1,7 +1,7 @@
-use rustc_hash::FxHashMap;
-use std::any::{type_name, Any, TypeId};
-use anyhow::Context;
 use crate::context::WindowContext;
+use anyhow::Context;
+use rustc_hash::FxHashMap;
+use std::any::{Any, TypeId, type_name};
 
 /// 一个标记trait，表示可以存储于窗口状态中的类型
 pub trait Global: 'static {
@@ -32,8 +32,9 @@ pub trait WriteGlobal {
 }
 
 pub trait ReadOrInsertGlobal {
-    fn get_global_or_insert_with<F,G: Global>(&mut self, func: F) -> &G
-    where F: FnOnce() -> G;
+    fn get_global_or_insert_with<F, G: Global>(&mut self, func: F) -> &G
+    where
+        F: FnOnce() -> G;
 }
 
 impl ReadGlobal for FxHashMap<TypeId, Box<dyn Any>> {
@@ -65,7 +66,10 @@ impl WriteGlobal for FxHashMap<TypeId, Box<dyn Any>> {
 }
 
 impl ReadOrInsertGlobal for FxHashMap<TypeId, Box<dyn Any>> {
-    fn get_global_or_insert_with<F, G: Global>(&mut self, func: F) -> &G where F: FnOnce() -> G{
+    fn get_global_or_insert_with<F, G: Global>(&mut self, func: F) -> &G
+    where
+        F: FnOnce() -> G,
+    {
         if self.has_global::<G>() {
             self.require_ref()
         } else {

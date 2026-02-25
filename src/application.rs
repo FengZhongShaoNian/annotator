@@ -1,11 +1,9 @@
 use crate::gpu::GpuContext;
-use crate::view::{BuildViewFn};
+use crate::view::BuildViewFn;
 use crate::window::{AppWindow, WindowConfiguration, WindowId};
 use crate::wp_fractional_scaling::FractionalScalingManager;
 use crate::wp_viewporter::ViewporterState;
-use egui::{
-    ImeEvent,
-};
+use egui::ImeEvent;
 use log::{info, warn};
 use sctk::compositor::{CompositorHandler, CompositorState};
 use sctk::globals::GlobalData;
@@ -23,12 +21,12 @@ use sctk::shell::xdg::window::{Window, WindowConfigure, WindowHandler};
 use sctk::shm::{Shm, ShmHandler};
 use sctk::subcompositor::SubcompositorState;
 use sctk::{
-    delegate_compositor, delegate_keyboard, delegate_output, delegate_registry,
-    delegate_seat, delegate_shm, delegate_subcompositor, delegate_xdg_shell, delegate_xdg_window,
+    delegate_compositor, delegate_keyboard, delegate_output, delegate_registry, delegate_seat,
+    delegate_shm, delegate_subcompositor, delegate_xdg_shell, delegate_xdg_window,
     registry_handlers,
 };
-use std::cell::{RefCell};
-use wayland_client::globals::{registry_queue_init};
+use std::cell::RefCell;
+use wayland_client::globals::registry_queue_init;
 use wayland_client::protocol::wl_keyboard::WlKeyboard;
 use wayland_client::protocol::wl_pointer::WlPointer;
 use wayland_client::protocol::wl_seat::WlSeat;

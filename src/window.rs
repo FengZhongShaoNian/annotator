@@ -1,4 +1,3 @@
-use std::cmp::PartialEq;
 use crate::application::{Application, GlobalState};
 use crate::context::{Command, WindowContext};
 use crate::dpi::{LogicalPosition, LogicalSize, PhysicalSize};
@@ -15,6 +14,7 @@ use raw_window_handle::{
 use sctk::seat::pointer::PointerEventKind;
 use sctk::shell::WaylandSurface;
 use sctk::shell::xdg::window::{Window as XdgWindow, WindowDecorations};
+use std::cmp::PartialEq;
 use std::ptr::NonNull;
 use std::sync::Arc;
 use wayland_backend::client::ObjectId;
@@ -465,12 +465,12 @@ impl AppWindow {
             }
         }
 
-        while let Some(command) = window_context.commands.pop_front(){
+        while let Some(command) = window_context.commands.pop_front() {
             match command {
                 Command::HideView(view_id) => {
                     if view_id == self.main_view.id() {
                         self.main_view.set_visible(false);
-                    }else {
+                    } else {
                         self.sub_views.iter_mut().for_each(|sub_view| {
                             if sub_view.view_mut().id() == view_id {
                                 sub_view.view_mut().set_visible(false);
