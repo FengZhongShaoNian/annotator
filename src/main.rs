@@ -32,6 +32,7 @@ use std::env;
 use std::sync::Arc;
 use anyhow::Context;
 use crate::context::Command;
+use crate::global::{ReadGlobalMut, ReadOrInsertGlobal};
 
 fn main() {
     env_logger::init();
@@ -62,7 +63,7 @@ fn main() {
                 let image_width = image.width();
                 let image_height = image.height();
                 // 将图像数据上传到 GPU 并获取纹理句柄
-                let annotator_state: &AnnotatorState = window_ctx.get_global_or_insert_with(|| {
+                let annotator_state: &AnnotatorState = window_ctx.globals_by_type.get_global_or_insert_with(|| {
                     let mut annotator_state = AnnotatorState::default();
                     // 创建 ColorImage
                     // 注意：RgbaImage 的 bytes 应该是连续的 RGBA 数据
@@ -87,7 +88,7 @@ fn main() {
                 let texture_handle = annotator_state.background_texture_handle.as_ref().unwrap();
                 let texture_handle = texture_handle.clone();
 
-                let annotator_state = window_ctx.global_mut::<AnnotatorState>();
+                let annotator_state = window_ctx.globals_by_type.require_ref_mut::<AnnotatorState>();
 
                 // 构建 UI 的具体内容
                 egui_ctx.run(input, move |ctx| {
@@ -181,11 +182,7 @@ fn main() {
                                 ui.spacing_mut().item_spacing = vec2(1.0, 0.0);
 
                                 let current_view_id = window_ctx.current_view_id.clone().unwrap();
-                                let annotator_state = window_ctx.globals_by_type
-                                    .get_mut(&TypeId::of::<AnnotatorState>())
-                                    .map(|any_state| any_state.downcast_mut::<AnnotatorState>().unwrap())
-                                    .with_context(|| format!("no state of type {} exists", type_name::<AnnotatorState>()))
-                                    .unwrap();
+                                let annotator_state = window_ctx.globals_by_type.require_ref_mut::<AnnotatorState>();
                                 let active_tool = annotator_state.current_annotation_tool;
 
                                 ui.horizontal(|ui| {
@@ -522,11 +519,7 @@ fn main() {
                                 ui.spacing_mut().item_spacing = vec2(1.0, 0.0);
 
                                 let current_view_id = window_ctx.current_view_id.clone().unwrap();
-                                let annotator_state = window_ctx.globals_by_type
-                                    .get_mut(&TypeId::of::<AnnotatorState>())
-                                    .map(|any_state| any_state.downcast_mut::<AnnotatorState>().unwrap())
-                                    .with_context(|| format!("no state of type {} exists", type_name::<AnnotatorState>()))
-                                    .unwrap();
+                                let annotator_state = window_ctx.globals_by_type.require_ref_mut::<AnnotatorState>();
                                 let active_tool = annotator_state.current_annotation_tool;
 
                                 if active_tool.is_none() {
