@@ -146,18 +146,19 @@ fn main() {
             }),
         );
 
-        let position_calculator = Arc::new(
-            |parent_surface_size: &PhysicalSize<u32>, subview_size: &PhysicalSize<u32>| {
-                let subview_width = &subview_size.width;
-                PhysicalPosition::new(
-                    parent_surface_size.width - subview_width,
-                    parent_surface_size.height + 10,
-                )
-            },
-        );
-
-        app.with_window_mut(window_id, |global_state, window| {
+        app.with_window_mut(window_id.clone(), |global_state, window| {
             let window = window.as_mut().unwrap();
+
+            let position_calculator = Arc::new(
+                |parent_surface_size: &PhysicalSize<u32>, subview_size: &PhysicalSize<u32>| {
+                    let subview_width = &subview_size.width;
+                    PhysicalPosition::new(
+                        parent_surface_size.width - subview_width,
+                        parent_surface_size.height + 10,
+                    )
+                },
+            );
+
             // 创建工具条
             window.create_sub_surface_view(
                 "primary-toolbar".into(),
@@ -484,6 +485,57 @@ fn main() {
                 }),
                 Some(position_calculator),
             );
+        });
+
+        app.with_window_mut(window_id, |global_state, window| {
+            let window = window.as_mut().unwrap();
+
+            let position_calculator = Arc::new(
+                |parent_surface_size: &PhysicalSize<u32>, subview_size: &PhysicalSize<u32>| {
+                    let subview_width = &subview_size.width;
+                    PhysicalPosition::new(
+                        parent_surface_size.width - subview_width,
+                        parent_surface_size.height + 54,
+                    )
+                },
+            );
+
+            // 创建工具条
+            window.create_sub_surface_view(
+                "secondly-toolbar".into(),
+                global_state,
+                LogicalSize::new(600, 32),
+                LogicalPosition::new(0i32, 0i32),
+                Box::new(|input, egui_ctx, window_ctx| {
+                    // 构建 UI 的具体内容
+                    egui_ctx.run(input, move |ctx| {
+                        egui::CentralPanel::default()
+                            .frame(Frame::new().fill(Color32::from_hex("#393b40").unwrap())
+                                .shadow(Shadow {
+                                    offset: [2, 3],
+                                    blur: 10,
+                                    spread: 0,
+                                    color: Color32::from_rgba_premultiplied(0, 0, 0, 80),
+                                }))
+                            .show(ctx, |ui| {
+                                ui.ctx().set_cursor_icon(egui::CursorIcon::Default);
+                                ui.spacing_mut().item_spacing = vec2(1.0, 0.0);
+
+                                let current_view_id = window_ctx.current_view_id.clone().unwrap();
+                                let annotator_state = window_ctx.globals_by_type
+                                    .get_mut(&TypeId::of::<AnnotatorState>())
+                                    .map(|any_state| any_state.downcast_mut::<AnnotatorState>().unwrap())
+                                    .with_context(|| format!("no state of type {} exists", type_name::<AnnotatorState>()))
+                                    .unwrap();
+                                let active_tool = annotator_state.current_annotation_tool;
+
+                                if active_tool.is_none() {
+                                    window_ctx.commands.push_back(Command::HideView(current_view_id));
+                                }
+                            });
+                    })
+                }), Some(position_calculator));
+
         });
     }
 

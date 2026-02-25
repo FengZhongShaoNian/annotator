@@ -48,7 +48,7 @@ pub struct AppWindow {
 }
 
 /// 窗口的Id
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct WindowId(ObjectId);
 
 pub struct SurfaceId(ObjectId);
