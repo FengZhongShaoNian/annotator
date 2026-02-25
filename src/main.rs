@@ -26,7 +26,7 @@ use crate::dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize};
 use crate::icon::Icons;
 use crate::window::WindowConfiguration;
 use egui::load::SizedTexture;
-use egui::{Color32, ColorImage, Frame, Image, ImageSource, Rect, Shadow, pos2, vec2, Area, Id, TextEdit, Widget};
+use egui::{Color32, ColorImage, Frame, Image, ImageSource, Rect, Shadow, pos2, vec2};
 use log::error;
 use std::env;
 use std::sync::Arc;

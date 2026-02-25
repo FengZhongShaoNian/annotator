@@ -1,26 +1,18 @@
-use crate::annotator::rectangle::{RectangleAnnotationTool, RectangleState};
-use crate::annotator::{Annotation, AnnotatorState, ToolType};
-use crate::context::WindowContext;
-use crate::dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize};
-use crate::global::{ReadGlobal, UpdateGlobal};
 use crate::gpu::GpuContext;
-use crate::view::{BuildViewFn, SubView};
+use crate::view::{BuildViewFn};
 use crate::window::{AppWindow, WindowConfiguration, WindowId};
 use crate::wp_fractional_scaling::FractionalScalingManager;
 use crate::wp_viewporter::ViewporterState;
-use egui::load::SizedTexture;
 use egui::{
-    Area, Color32, ColorImage, Id, Image, ImageSource, ImeEvent, Order, Pos2, Rect, RichText,
-    Stroke, StrokeKind, TextEdit, Vec2, pos2, vec2,
+    ImeEvent,
 };
-use image::{GenericImageView, RgbaImage};
 use log::{info, warn};
 use sctk::compositor::{CompositorHandler, CompositorState};
 use sctk::globals::GlobalData;
 use sctk::output::{OutputHandler, OutputState};
 use sctk::reexports::calloop::{EventLoop, LoopHandle};
 use sctk::registry::{ProvidesRegistryState, RegistryState};
-use sctk::seat::pointer::{CursorIcon, PointerData, PointerDataExt, ThemeSpec, ThemedPointer};
+use sctk::seat::pointer::{CursorIcon, PointerData, ThemeSpec, ThemedPointer};
 use sctk::seat::{
     Capability, SeatHandler, SeatState,
     keyboard::{KeyEvent, KeyboardHandler, Keysym, Modifiers, RawModifiers},
@@ -31,14 +23,12 @@ use sctk::shell::xdg::window::{Window, WindowConfigure, WindowHandler};
 use sctk::shm::{Shm, ShmHandler};
 use sctk::subcompositor::SubcompositorState;
 use sctk::{
-    delegate_compositor, delegate_keyboard, delegate_output, delegate_pointer, delegate_registry,
+    delegate_compositor, delegate_keyboard, delegate_output, delegate_registry,
     delegate_seat, delegate_shm, delegate_subcompositor, delegate_xdg_shell, delegate_xdg_window,
     registry_handlers,
 };
-use std::cell::{Cell, RefCell};
-use std::cmp::PartialEq;
-use std::sync::{Arc, Mutex, RwLock};
-use wayland_client::globals::{GlobalList, registry_queue_init};
+use std::cell::{RefCell};
+use wayland_client::globals::{registry_queue_init};
 use wayland_client::protocol::wl_keyboard::WlKeyboard;
 use wayland_client::protocol::wl_pointer::WlPointer;
 use wayland_client::protocol::wl_seat::WlSeat;
