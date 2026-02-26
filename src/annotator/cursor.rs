@@ -33,10 +33,10 @@ impl Crosshair {
         );
 
         // 线段的长度
-        let line_length = 10f32;
+        let line_length = 8f32;
 
         // 线段靠近圆点的那个端点和圆点圆周之间的距离
-        let margin = 7f32;
+        let margin = 5f32;
 
         let stroke = Stroke::new(2., color);
 
