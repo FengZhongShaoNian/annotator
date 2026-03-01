@@ -1,23 +1,12 @@
-use crate::application::GlobalState;
-use crate::context::WindowContext;
+use crate::application::{Application, GlobalState};
 use crate::dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize};
 use crate::gpu::GpuContext;
-use egui::{FullOutput, ImeEvent, OrderedViewportIdMap, PlatformOutput, RawInput, ViewportOutput};
-use std::sync::Arc;
+use crate::window::AppWindow;
+use egui::{FullOutput, ImeEvent, PlatformOutput, RawInput};
 use sctk::shell::xdg::popup::Popup;
+use std::sync::Arc;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_protocols::wp::viewporter::client::wp_viewport::WpViewport;
-
-pub struct EguiOutput {
-    /// Non-rendering related output.
-    pub platform_output: PlatformOutput,
-
-    /// All the active viewports, including the root.
-    ///
-    /// It is up to the integration to spawn a native window for each viewport,
-    /// and to close any window that no longer has a viewport in this map.
-    pub viewport_output: OrderedViewportIdMap<ViewportOutput>,
-}
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct ViewId(pub Arc<str>);
@@ -44,7 +33,12 @@ pub trait View {
     fn resize(&mut self, new_size: LogicalSize<u32>, gpu: &GpuContext);
     fn surface(&self) -> &WlSurface;
 
-    fn handle_keyboard_event(&mut self, event: sctk::seat::keyboard::KeyEvent, pressed: bool, repeat: bool);
+    fn handle_keyboard_event(
+        &mut self,
+        event: sctk::seat::keyboard::KeyEvent,
+        pressed: bool,
+        repeat: bool,
+    );
     fn update_modifiers(&mut self, modifiers: sctk::seat::keyboard::Modifiers);
     fn handle_ime_event(&mut self, event: &ImeEvent);
     fn handle_pointer_event(
@@ -53,11 +47,13 @@ pub trait View {
         global_state: &GlobalState,
     );
     fn visible(&self) -> bool;
-    
+
     fn set_visible(&mut self, visible: bool);
 
+    fn should_remove(&self) -> bool;
+
     /// 使用 GPU 上下文进行重绘。
-    fn draw(&mut self, global_state: &GlobalState, window_context: &mut WindowContext) -> Option<EguiOutput>;
+    fn draw(&mut self, app: &mut Application, window: &mut AppWindow) -> Option<PlatformOutput>;
 }
 
 /// 一个函数，可以根据父表面的尺寸和子表面自身的尺寸重新计算子表面的位置
@@ -78,12 +74,19 @@ pub trait PopupView {
     fn view(&self) -> &dyn View;
 
     fn view_mut(&mut self) -> &mut dyn View;
-    
+
     fn is_first_configure(&self) -> bool;
-    
+
     fn set_is_first_configure(&mut self, is_first_configure: bool);
-    
+
     fn popup(&self) -> &Popup;
 }
 
-pub type BuildViewFn = Box<dyn Fn(RawInput, &mut egui::Context, &mut WindowContext) -> FullOutput>;
+pub type BuildViewFn =
+    Box<dyn Fn(RawInput, &mut egui::Context, &mut Application, &mut AppWindow, &mut dyn View) -> FullOutput>;
+
+pub enum AppView {
+    Root(Box<dyn View>),
+    Child(Box<dyn SubView>),
+    Pop(Box<dyn PopupView>),
+}

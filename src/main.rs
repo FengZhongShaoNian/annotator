@@ -16,9 +16,13 @@ mod surface_view;
 mod view;
 mod wp_viewporter;
 mod xdg_popup_view;
+mod primary_toolbar;
+mod secondly_toolbar;
 
 use crate::annotator::ellipse::{EllipseAnnotationTool, EllipseState};
-use crate::annotator::rectangle::{RectangleAnnotationTool, RectangleAnnotationToolState, RectangleState};
+use crate::annotator::rectangle::{
+    RectangleAnnotationTool, RectangleAnnotationToolState, RectangleState,
+};
 use crate::annotator::svg_button::SvgButton;
 use crate::annotator::{Annotation, AnnotatorState, StrokeType, ToolType};
 use crate::application::Application;
@@ -33,7 +37,11 @@ use egui::{Color32, ColorImage, Frame, Image, ImageSource, Rect, Shadow, pos2, v
 use log::error;
 use std::any::{TypeId, type_name};
 use std::env;
+use std::ops::Not;
 use std::sync::Arc;
+use crate::primary_toolbar::create_primary_toolbar;
+use crate::secondly_toolbar::create_secondly_toolbar;
+use crate::view::ViewId;
 
 fn main() {
     env_logger::init();
@@ -60,12 +68,14 @@ fn main() {
         );
         let window_id = app.open_window(
             window_config,
-            Box::new(move |input, egui_ctx, window_ctx| {
+            Box::new(move |input, egui_ctx, app, window, current_view| {
                 let image_width = image.width();
                 let image_height = image.height();
                 // 将图像数据上传到 GPU 并获取纹理句柄
-                let annotator_state: &AnnotatorState =
-                    window_ctx.globals_by_type.get_global_or_insert_with(|| {
+                let annotator_state: &AnnotatorState = window
+                    .window_context
+                    .globals_by_type
+                    .get_global_or_insert_with(|| {
                         let mut annotator_state = AnnotatorState::default();
                         // 创建 ColorImage
                         // 注意：RgbaImage 的 bytes 应该是连续的 RGBA 数据
@@ -90,10 +100,6 @@ fn main() {
                 let texture_handle = annotator_state.background_texture_handle.as_ref().unwrap();
                 let texture_handle = texture_handle.clone();
 
-                let annotator_state = window_ctx
-                    .globals_by_type
-                    .require_ref_mut::<AnnotatorState>();
-
                 // 构建 UI 的具体内容
                 egui_ctx.run(input, move |ctx| {
                     egui::CentralPanel::default()
@@ -113,6 +119,11 @@ fn main() {
                                     vec2(frame_size.width, frame_size.height),
                                 ),
                             );
+
+                            let annotator_state = window
+                                .window_context
+                                .globals_by_type
+                                .require_ref_mut::<AnnotatorState>();
 
                             match annotator_state.current_annotation_tool {
                                 Some(ToolType::Rectangle) => {
@@ -150,482 +161,83 @@ fn main() {
                             // });
                             //
                             // ui.painter().clip_rect()
+
+                            let primary_toolbar_id = AnnotatorState::primary_toolbar_id();
+                            if !annotator_state.hide_primary_toolbar && !window.views.contains_key(&primary_toolbar_id) {
+                                create_primary_toolbar(primary_toolbar_id, app, window, current_view.size());
+                                let secondly_toolbar = AnnotatorState::secondly_toolbar_id();
+                                if  !window.views.contains_key(&secondly_toolbar){
+                                    create_secondly_toolbar(secondly_toolbar, app, window, current_view.size());
+                                }
+                            }
                         });
                 })
             }),
         );
 
-        app.with_window_mut(window_id.clone(), |global_state, window| {
-            let window = window.as_mut().unwrap();
 
-            let position_calculator = Arc::new(
-                |parent_surface_size: &PhysicalSize<u32>, subview_size: &PhysicalSize<u32>| {
-                    let subview_width = &subview_size.width;
-                    PhysicalPosition::new(
-                        parent_surface_size.width - subview_width,
-                        parent_surface_size.height + 10,
-                    )
-                },
-            );
 
-            // 创建工具条
-            window.create_sub_surface_view(
-                "primary-toolbar".into(),
-                global_state,
-                LogicalSize::new(600, 32),
-                LogicalPosition::new(0i32, 0i32),
-                Box::new(|input, egui_ctx, window_ctx| {
-                    // 构建 UI 的具体内容
-                    egui_ctx.run(input, move |ctx| {
-                        egui::CentralPanel::default()
-                            .frame(Frame::new().fill(Color32::from_hex("#393b40").unwrap()))
-                            .show(ctx, |ui| {
-                                ui.ctx().set_cursor_icon(egui::CursorIcon::Default);
-                                ui.spacing_mut().item_spacing = vec2(1.0, 0.0);
 
-                                let current_view_id = window_ctx.current_view_id.clone().unwrap();
-                                let annotator_state = window_ctx
-                                    .globals_by_type
-                                    .require_ref_mut::<AnnotatorState>();
-                                let active_tool = annotator_state.current_annotation_tool;
-
-                                ui.horizontal(|ui| {
-                                    if ui
-                                        .add(SvgButton::new(
-                                            "rectangle-tool".into(),
-                                            Icons::DrawRectangle.get_image(),
-                                            LogicalSize::new(32., 32.),
-                                            true,
-                                            matches!(active_tool, Some(ToolType::Rectangle)),
-                                        ))
-                                        .clicked()
-                                    {
-                                        if matches!(active_tool, Some(ToolType::Rectangle)) {
-                                            annotator_state.current_annotation_tool = None;
-                                        } else {
-                                            annotator_state.current_annotation_tool =
-                                                Some(ToolType::Rectangle);
-                                        }
-                                    }
-                                    if ui
-                                        .add(SvgButton::new(
-                                            "ellipse-tool".into(),
-                                            Icons::DrawEllipse.get_image(),
-                                            LogicalSize::new(32., 32.),
-                                            true,
-                                            matches!(active_tool, Some(ToolType::Ellipse)),
-                                        ))
-                                        .clicked()
-                                    {
-                                        if matches!(active_tool, Some(ToolType::Ellipse)) {
-                                            annotator_state.current_annotation_tool = None;
-                                        } else {
-                                            annotator_state.current_annotation_tool =
-                                                Some(ToolType::Ellipse);
-                                        }
-                                    }
-
-                                    if ui
-                                        .add(SvgButton::new(
-                                            "straight-line-tool".into(),
-                                            Icons::DrawLine.get_image(),
-                                            LogicalSize::new(32., 32.),
-                                            true,
-                                            matches!(active_tool, Some(ToolType::StraightLine)),
-                                        ))
-                                        .clicked()
-                                    {
-                                        if matches!(active_tool, Some(ToolType::StraightLine)) {
-                                            annotator_state.current_annotation_tool = None;
-                                        } else {
-                                            annotator_state.current_annotation_tool =
-                                                Some(ToolType::StraightLine);
-                                        }
-                                    }
-                                    if ui
-                                        .add(SvgButton::new(
-                                            "arrow-tool".into(),
-                                            Icons::DrawArrow.get_image(),
-                                            LogicalSize::new(32., 32.),
-                                            true,
-                                            matches!(active_tool, Some(ToolType::Arrow)),
-                                        ))
-                                        .clicked()
-                                    {
-                                        if matches!(active_tool, Some(ToolType::Arrow)) {
-                                            annotator_state.current_annotation_tool = None;
-                                        } else {
-                                            annotator_state.current_annotation_tool =
-                                                Some(ToolType::Arrow);
-                                        }
-                                    }
-
-                                    if ui
-                                        .add(SvgButton::new(
-                                            "pencil-tool".into(),
-                                            Icons::DrawFreehand.get_image(),
-                                            LogicalSize::new(32., 32.),
-                                            true,
-                                            matches!(active_tool, Some(ToolType::Pencil)),
-                                        ))
-                                        .clicked()
-                                    {
-                                        if matches!(active_tool, Some(ToolType::Pencil)) {
-                                            annotator_state.current_annotation_tool = None;
-                                        } else {
-                                            annotator_state.current_annotation_tool =
-                                                Some(ToolType::Pencil);
-                                        }
-                                    }
-
-                                    if ui
-                                        .add(SvgButton::new(
-                                            "marker-pen-tool".into(),
-                                            Icons::DrawHighlight.get_image(),
-                                            LogicalSize::new(32., 32.),
-                                            true,
-                                            matches!(active_tool, Some(ToolType::MarkerPen)),
-                                        ))
-                                        .clicked()
-                                    {
-                                        if matches!(active_tool, Some(ToolType::MarkerPen)) {
-                                            annotator_state.current_annotation_tool = None;
-                                        } else {
-                                            annotator_state.current_annotation_tool =
-                                                Some(ToolType::MarkerPen);
-                                        }
-                                    }
-
-                                    if ui
-                                        .add(SvgButton::new(
-                                            "mosaic-tool".into(),
-                                            Icons::PixelArtTrace.get_image(),
-                                            LogicalSize::new(32., 32.),
-                                            true,
-                                            matches!(active_tool, Some(ToolType::Mosaic)),
-                                        ))
-                                        .clicked()
-                                    {
-                                        if matches!(active_tool, Some(ToolType::Mosaic)) {
-                                            annotator_state.current_annotation_tool = None;
-                                        } else {
-                                            annotator_state.current_annotation_tool =
-                                                Some(ToolType::Mosaic);
-                                        }
-                                    }
-
-                                    if ui
-                                        .add(SvgButton::new(
-                                            "blur-tool".into(),
-                                            Icons::BlurFx.get_image(),
-                                            LogicalSize::new(32., 32.),
-                                            true,
-                                            matches!(active_tool, Some(ToolType::Blur)),
-                                        ))
-                                        .clicked()
-                                    {
-                                        if matches!(active_tool, Some(ToolType::Blur)) {
-                                            annotator_state.current_annotation_tool = None;
-                                        } else {
-                                            annotator_state.current_annotation_tool =
-                                                Some(ToolType::Blur);
-                                        }
-                                    }
-
-                                    if ui
-                                        .add(SvgButton::new(
-                                            "text-tool".into(),
-                                            Icons::DrawText.get_image(),
-                                            LogicalSize::new(32., 32.),
-                                            true,
-                                            matches!(active_tool, Some(ToolType::Text)),
-                                        ))
-                                        .clicked()
-                                    {
-                                        if matches!(active_tool, Some(ToolType::Text)) {
-                                            annotator_state.current_annotation_tool = None;
-                                        } else {
-                                            annotator_state.current_annotation_tool =
-                                                Some(ToolType::Text);
-                                        }
-                                    }
-
-                                    if ui
-                                        .add(SvgButton::new(
-                                            "serial-number-tool".into(),
-                                            Icons::DrawNumber.get_image(),
-                                            LogicalSize::new(32., 32.),
-                                            true,
-                                            matches!(active_tool, Some(ToolType::SerialNumber)),
-                                        ))
-                                        .clicked()
-                                    {
-                                        if matches!(active_tool, Some(ToolType::SerialNumber)) {
-                                            annotator_state.current_annotation_tool = None;
-                                        } else {
-                                            annotator_state.current_annotation_tool =
-                                                Some(ToolType::SerialNumber);
-                                        }
-                                    }
-
-                                    if ui
-                                        .add(SvgButton::new(
-                                            "eraser-tool".into(),
-                                            Icons::DrawEraser.get_image(),
-                                            LogicalSize::new(32., 32.),
-                                            false,
-                                            matches!(active_tool, Some(ToolType::Eraser)),
-                                        ))
-                                        .clicked()
-                                    {
-                                        if matches!(active_tool, Some(ToolType::Eraser)) {
-                                            annotator_state.current_annotation_tool = None;
-                                        } else {
-                                            annotator_state.current_annotation_tool =
-                                                Some(ToolType::Eraser);
-                                        }
-                                    }
-
-                                    if ui
-                                        .add(SvgButton::new(
-                                            "undo-tool".into(),
-                                            Icons::EditUndo.get_image(),
-                                            LogicalSize::new(32., 32.),
-                                            false,
-                                            false,
-                                        ))
-                                        .clicked()
-                                    {}
-
-                                    if ui
-                                        .add(SvgButton::new(
-                                            "redo-tool".into(),
-                                            Icons::EditRedo.get_image(),
-                                            LogicalSize::new(32., 32.),
-                                            false,
-                                            false,
-                                        ))
-                                        .clicked()
-                                    {}
-
-                                    if ui
-                                        .add(SvgButton::new(
-                                            "save-tool".into(),
-                                            Icons::DocumentSave.get_image(),
-                                            LogicalSize::new(32., 32.),
-                                            false,
-                                            false,
-                                        ))
-                                        .clicked()
-                                    {}
-
-                                    if ui
-                                        .add(SvgButton::new(
-                                            "copy-tool".into(),
-                                            Icons::EditCopy.get_image(),
-                                            LogicalSize::new(32., 32.),
-                                            false,
-                                            false,
-                                        ))
-                                        .clicked()
-                                    {}
-                                    if ui
-                                        .add(SvgButton::new(
-                                            "ok-tool".into(),
-                                            Icons::DialogOk.get_image(),
-                                            LogicalSize::new(32., 32.),
-                                            false,
-                                            false,
-                                        ))
-                                        .clicked()
-                                    {
-                                        annotator_state.current_annotation_tool = None;
-                                        window_ctx
-                                            .commands
-                                            .push_back(Command::HideView(current_view_id));
-                                    }
-
-                                    if active_tool != annotator_state.current_annotation_tool {
-                                        println!(
-                                            "标注工具由{:?}切换为{:?}",
-                                            active_tool, annotator_state.current_annotation_tool
-                                        );
-
-                                        if let Some(tool) = active_tool {
-                                            match tool {
-                                                ToolType::Rectangle => {
-                                                    let rectangle_state = annotator_state
-                                                        .annotations_stack
-                                                        .last_mut()
-                                                        .map(|annotation| {
-                                                            annotation
-                                                                .downcast_mut::<RectangleState>()
-                                                        })
-                                                        .flatten();
-                                                    if let Some(rectangle_state) = rectangle_state {
-                                                        rectangle_state.deactivate();
-                                                    }
-                                                }
-                                                ToolType::Ellipse => {
-                                                    let ellipse_state = annotator_state
-                                                        .annotations_stack
-                                                        .last_mut()
-                                                        .map(|annotation| {
-                                                            annotation
-                                                                .downcast_mut::<EllipseState>()
-                                                        })
-                                                        .flatten();
-                                                    if let Some(ellipse_state) = ellipse_state {
-                                                        ellipse_state.deactivate();
-                                                    }
-                                                }
-                                                ToolType::StraightLine => {}
-                                                ToolType::Arrow => {}
-                                                ToolType::Pencil => {}
-                                                ToolType::MarkerPen => {}
-                                                ToolType::Mosaic => {}
-                                                ToolType::Blur => {}
-                                                ToolType::Text => {}
-                                                ToolType::SerialNumber => {}
-                                                ToolType::Watermark => {}
-                                                ToolType::Eraser => {}
-                                            }
-                                        }
-                                    }
-                                });
-                            });
-                    })
-                }),
-                Some(position_calculator),
-            );
-        });
-
-        app.with_window_mut(window_id.clone(), |global_state, window| {
-            let window = window.as_mut().unwrap();
-
-            let position_calculator = Arc::new(
-                |parent_surface_size: &PhysicalSize<u32>, subview_size: &PhysicalSize<u32>| {
-                    let subview_width = &subview_size.width;
-                    PhysicalPosition::new(
-                        parent_surface_size.width - subview_width,
-                        parent_surface_size.height + 54,
-                    )
-                },
-            );
-
-            // 创建工具条
-            window.create_sub_surface_view(
-                "secondly-toolbar".into(),
-                global_state,
-                LogicalSize::new(600, 82),
-                LogicalPosition::new(0i32, 0i32),
-                Box::new(|input, egui_ctx, window_ctx| {
-                    // 构建 UI 的具体内容
-                    egui_ctx.run(input, move |ctx| {
-                        egui::CentralPanel::default()
-                            .frame(Frame::new().fill(Color32::from_hex("#393b40").unwrap()))
-                            .show(ctx, |ui| {
-                                ui.ctx().set_cursor_icon(egui::CursorIcon::Default);
-                                ui.spacing_mut().item_spacing = vec2(1.0, 0.0);
-
-                                let current_view_id = window_ctx.current_view_id.clone().unwrap();
-                                let annotator_state = window_ctx
-                                    .globals_by_type
-                                    .require_ref_mut::<AnnotatorState>();
-                                let active_tool = annotator_state.current_annotation_tool;
-
-                                if active_tool.is_none() {
-                                    window_ctx
-                                        .commands
-                                        .push_back(Command::HideView(current_view_id));
-                                    return;
-                                }
-
-                                if matches!(active_tool, Some(ToolType::Rectangle)) {
-                                    let tool_state = &mut annotator_state.rectangle_annotation_tool_state;
-
-                                    let label = match tool_state.style.stroke_type {
-                                        StrokeType::SolidLine => "实线",
-                                        StrokeType::DashedLine => "虚线",
-                                        StrokeType::DottedLine => "点线"
-,                                    };
-                                    let stroke_type = egui::ComboBox::from_label("");
-                                    stroke_type.selected_text(label).show_ui(ui, |ui| {
-                                        if ui.label("实线").clicked() {
-                                            tool_state.style.stroke_type = StrokeType::SolidLine;
-                                        }
-                                        if ui.label("虚线").clicked() {
-                                            tool_state.style.stroke_type = StrokeType::DashedLine;
-                                        }
-                                        if ui.label("点线").clicked() {
-                                            tool_state.style.stroke_type = StrokeType::DottedLine;
-                                        }
-                                    });
-                                }
-
-                            });
-                    })
-                }),
-                Some(position_calculator),
-            );
-        });
-        
-        app.with_window_mut(window_id, |global_state, window| {
-            let window = window.as_mut().unwrap();
-            window.create_xdg_popup_view(
-                "popup".into(), 
-                global_state, 
-                LogicalSize::new(200, 48),
-                LogicalPosition::new(0, 100),
-                Box::new(|input, egui_ctx, window_ctx| {
-                    // 构建 UI 的具体内容
-                    egui_ctx.run(input, move |ctx| {
-                        egui::CentralPanel::default()
-                            .frame(Frame::new().fill(Color32::from_hex("#393b40").unwrap()))
-                            .show(ctx, |ui| {
-                                ui.ctx().set_cursor_icon(egui::CursorIcon::Default);
-                                ui.spacing_mut().item_spacing = vec2(1.0, 0.0);
-
-                                let current_view_id = window_ctx.current_view_id.clone().unwrap();
-                                let annotator_state = window_ctx
-                                    .globals_by_type
-                                    .require_ref_mut::<AnnotatorState>();
-                                let active_tool = annotator_state.current_annotation_tool;
-
-                                if active_tool.is_none() {
-                                    window_ctx
-                                        .commands
-                                        .push_back(Command::HideView(current_view_id));
-                                    return;
-                                }
-
-                                if matches!(active_tool, Some(ToolType::Rectangle)) {
-                                    let tool_state = &mut annotator_state.rectangle_annotation_tool_state;
-
-                                    let label = match tool_state.style.stroke_type {
-                                        StrokeType::SolidLine => "实线",
-                                        StrokeType::DashedLine => "虚线",
-                                        StrokeType::DottedLine => "点线"
-                                        ,                                    };
-                                    let stroke_type = egui::ComboBox::from_label("");
-                                    stroke_type.selected_text(label).show_ui(ui, |ui| {
-                                        if ui.label("实线").clicked() {
-                                            tool_state.style.stroke_type = StrokeType::SolidLine;
-                                        }
-                                        if ui.label("虚线").clicked() {
-                                            tool_state.style.stroke_type = StrokeType::DashedLine;
-                                        }
-                                        if ui.label("点线").clicked() {
-                                            tool_state.style.stroke_type = StrokeType::DottedLine;
-                                        }
-                                    });
-                                }
-
-                            });
-                    })
-                }),
-            );
-        });
+        //
+        // app.with_window_mut(window_id, |global_state, window| {
+        //     let window = window.as_mut().unwrap();
+        //     window.create_xdg_popup_view(
+        //         "popup".into(),
+        //         global_state,
+        //         LogicalSize::new(200, 48),
+        //         LogicalPosition::new(0, 100),
+        //         Box::new(|input, egui_ctx, app, window| {
+        //             // 构建 UI 的具体内容
+        //             egui_ctx.run(input, move |ctx| {
+        //                 egui::CentralPanel::default()
+        //                     .frame(Frame::new().fill(Color32::from_hex("#393b40").unwrap()))
+        //                     .show(ctx, |ui| {
+        //                         ui.ctx().set_cursor_icon(egui::CursorIcon::Default);
+        //                         ui.spacing_mut().item_spacing = vec2(1.0, 0.0);
+        //
+        //                         let current_view_id =
+        //                             window.window_context.current_view_id.clone().unwrap();
+        //                         let annotator_state = window
+        //                             .window_context
+        //                             .globals_by_type
+        //                             .require_ref_mut::<AnnotatorState>();
+        //                         let active_tool = annotator_state.current_annotation_tool;
+        //
+        //                         if active_tool.is_none() {
+        //                             window
+        //                                 .window_context
+        //                                 .commands
+        //                                 .push_back(Command::HideView(current_view_id));
+        //                             return;
+        //                         }
+        //
+        //                         if matches!(active_tool, Some(ToolType::Rectangle)) {
+        //                             let tool_state =
+        //                                 &mut annotator_state.rectangle_annotation_tool_state;
+        //
+        //                             let label = match tool_state.style.stroke_type {
+        //                                 StrokeType::SolidLine => "实线",
+        //                                 StrokeType::DashedLine => "虚线",
+        //                                 StrokeType::DottedLine => "点线",
+        //                             };
+        //                             let stroke_type = egui::ComboBox::from_label("");
+        //                             stroke_type.selected_text(label).show_ui(ui, |ui| {
+        //                                 if ui.label("实线").clicked() {
+        //                                     tool_state.style.stroke_type = StrokeType::SolidLine;
+        //                                 }
+        //                                 if ui.label("虚线").clicked() {
+        //                                     tool_state.style.stroke_type = StrokeType::DashedLine;
+        //                                 }
+        //                                 if ui.label("点线").clicked() {
+        //                                     tool_state.style.stroke_type = StrokeType::DottedLine;
+        //                                 }
+        //                             });
+        //                         }
+        //                     });
+        //             })
+        //         }),
+        //     );
+        // });
     }
 
     app.run();

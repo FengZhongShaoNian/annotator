@@ -10,6 +10,7 @@ use egui::{pos2, vec2, Color32, CornerRadius, CursorIcon, Painter, Pos2, Rect, R
 use std::any::Any;
 use std::cmp::max;
 use std::ops::Add;
+use crate::view::ViewId;
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum StrokeType {
@@ -156,6 +157,9 @@ pub trait Annotation: Widget {
 /// 当前标注状态
 #[derive(Default)]
 pub struct AnnotatorState {
+    /// 是否隐藏主工具条
+    pub hide_primary_toolbar: bool,
+
     /// 背景图片的纹理句柄
     pub background_texture_handle: Option<TextureHandle>,
 
@@ -173,6 +177,15 @@ pub struct AnnotatorState {
 
     /// 当前激活的标注工具
     pub current_annotation_tool: Option<ToolType>,
+}
+
+impl AnnotatorState {
+    pub fn primary_toolbar_id() -> ViewId {
+        "primary-toolbar".into()
+    }
+    pub fn secondly_toolbar_id() -> ViewId {
+        "secondly-toolbar".into()
+    }
 }
 
 impl Global for AnnotatorState {}

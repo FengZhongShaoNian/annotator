@@ -4,7 +4,10 @@ use crate::dpi::{LogicalBounds, LogicalPosition, LogicalSize, PhysicalSize, Posi
 use crate::gpu::GpuContext;
 use crate::sub_surface_view::SubSurfaceView;
 use crate::surface_view::SurfaceView;
-use crate::view::{BuildViewFn, EguiOutput, PopupView, SubView, View, ViewId};
+use crate::view::AppView::{Child, Pop, Root};
+use crate::view::{AppView, BuildViewFn, PopupView, SubView, View, ViewId};
+use crate::xdg_popup_view::XdgPopupView;
+use egui::ahash::{HashMap, HashMapExt};
 use egui::{CursorIcon, ImeEvent, PlatformOutput};
 use egui_wgpu::wgpu;
 use log::warn;
@@ -13,26 +16,29 @@ use raw_window_handle::{
 };
 use sctk::seat::pointer::PointerEventKind;
 use sctk::shell::WaylandSurface;
+use sctk::shell::xdg::XdgSurface;
+use sctk::shell::xdg::popup::{Popup, PopupConfigure};
 use sctk::shell::xdg::window::{Window as XdgWindow, WindowDecorations};
 use std::cmp::PartialEq;
+use std::convert::Into;
+use std::ops::{Deref, DerefMut};
 use std::ptr::NonNull;
 use std::sync::Arc;
-use sctk::shell::xdg::popup::Popup;
-use sctk::shell::xdg::XdgSurface;
+use std::thread;
+use indexmap::IndexMap;
 use wayland_backend::client::ObjectId;
-use wayland_client::protocol::wl_surface;
+use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::{Proxy, QueueHandle};
 use wayland_protocols::wp::fractional_scale::v1::client::wp_fractional_scale_v1::WpFractionalScaleV1;
 use wayland_protocols::xdg::shell::client::xdg_positioner;
-use crate::xdg_popup_view::XdgPopupView;
+
+const ROOT_VIEW_ID_STR: &str = "root-view";
 
 /// AppWindow 管理应用的主窗口，包括主视图和动态管理的子视图。
 pub struct AppWindow {
-    /// 主视图（Surface）
-    pub main_view: SurfaceView<'static>,
-    /// 子视图列表（SubSurface）
-    pub sub_views: Vec<Box<dyn SubView>>,
-    pub popup_views: Vec<Box<dyn PopupView>>,
+    pub views: IndexMap<ViewId, Option<AppView>>,
+    surface_id_to_view_id: HashMap<ObjectId, ViewId>,
+
     /// 用于发送 Wayland 请求的消息队列句柄
     queue_handle: QueueHandle<Application>,
     /// XDG Shell 窗口句柄
@@ -47,9 +53,11 @@ pub struct AppWindow {
     keyboard_focus: bool,
     /// 一个物理尺寸，用于在首次获取到缩放倍数后调整窗口的大小
     pub preferred_size: Option<PhysicalSize<u32>>,
-    window_context: WindowContext,
+    pub window_context: WindowContext,
     /// 当前鼠标指针所在的表面
     surface_under_mouse: Option<ObjectId>,
+    /// 当前窗口是否需要移除
+    pub should_remove: bool,
 }
 
 /// 窗口的Id
@@ -188,8 +196,8 @@ impl AppWindow {
 
         // 初始化主视图 (SurfaceView)
         let main_size = LogicalSize::new(window_config.size.width, window_config.size.height);
-        let main_view = SurfaceView::new(
-            "main-view".into(),
+        let root_view = SurfaceView::new(
+            Self::root_view_id(),
             main_surface.clone(),
             wgpu_surface,
             config,
@@ -200,10 +208,15 @@ impl AppWindow {
 
         let qh = global_state.queue_handle.clone();
 
+        let mut surface_id_to_view_id = HashMap::new();
+        surface_id_to_view_id.insert(root_view.surface().id(), root_view.id());
+
+        let mut views = IndexMap::new();
+        views.insert(root_view.id(), Some(Root(Box::new(root_view))));
+
         let window = Self {
-            main_view,
-            sub_views: Vec::new(),
-            popup_views: Vec::new(),
+            views,
+            surface_id_to_view_id,
             queue_handle: qh,
             xdg_window,
             first_configure: true,
@@ -213,9 +226,14 @@ impl AppWindow {
             preferred_size: window_config.preferred_size,
             window_context: Default::default(),
             surface_under_mouse: None,
+            should_remove: false,
         };
 
         window
+    }
+
+    pub fn root_view_id() -> ViewId {
+        ROOT_VIEW_ID_STR.into()
     }
 
     /// 动态创建一个 SubSurfaceView 并添加到窗口中。
@@ -234,9 +252,10 @@ impl AppWindow {
         build_view: BuildViewFn,
         position_calculator: Option<Arc<crate::view::RelativePositionCalculator>>,
     ) -> SurfaceId {
+        let parent_surface = self.xdg_window.wl_surface().clone();
         let (sub_surface_handle, surface) = global_state
             .sub_compositor_state
-            .create_subsurface(self.main_view.surface().clone(), &global_state.queue_handle);
+            .create_subsurface(parent_surface, &global_state.queue_handle);
 
         let viewport = global_state
             .viewporter_state
@@ -301,7 +320,10 @@ impl AppWindow {
 
         subview.view_mut().surface().commit(); // Initial commit
 
-        self.sub_views.push(Box::new(subview));
+        self.surface_id_to_view_id
+            .insert(subview.view().surface().id(), subview.view().id());
+        self.views
+            .insert(subview.view().id(), Some(Child(Box::new(subview))));
 
         subview_id
     }
@@ -329,9 +351,14 @@ impl AppWindow {
 
         let compositor = &global_state.compositor_state;
 
-
-        let popup = Popup::new(parent_xdg_surface, &positioner, qh, compositor, xdg_shell_state)
-            .expect("Failed to create popup");
+        let popup = Popup::new(
+            parent_xdg_surface,
+            &positioner,
+            qh,
+            compositor,
+            xdg_shell_state,
+        )
+        .expect("Failed to create popup");
         let surface = popup.wl_surface();
 
         let viewport = global_state
@@ -381,14 +408,43 @@ impl AppWindow {
 
         wgpu_surface.configure(&gpu_context.device, &config);
 
-        let mut subview = XdgPopupView::new(id, surface.clone(), popup, positioner, wgpu_surface, config, size, viewport, build_view);
-        let subview_id = SurfaceId(subview.view().surface().id());
+        let mut popup_view = XdgPopupView::new(
+            id,
+            surface.clone(),
+            popup,
+            positioner,
+            wgpu_surface,
+            config,
+            size,
+            viewport,
+            build_view,
+        );
+        let subview_id = SurfaceId(popup_view.view().surface().id());
 
-        subview.view_mut().surface().commit(); // Initial commit
+        popup_view.view_mut().surface().commit(); // Initial commit
 
-        self.popup_views.push(Box::new(subview));
+        self.surface_id_to_view_id
+            .insert(popup_view.view().surface().id(), popup_view.view().id());
+        self.views
+            .insert(popup_view.view().id(), Some(Pop(Box::new(popup_view))));
 
         subview_id
+    }
+
+    fn get_view_ref(app_view: &AppView) -> &dyn View {
+        match app_view {
+            Root(view) => view.deref(),
+            Child(sub_view) => sub_view.view(),
+            Pop(popup_view) => popup_view.view(),
+        }
+    }
+
+    fn get_view_ref_mut(app_view: &mut AppView) -> &mut dyn View {
+        match app_view {
+            Root(view) => view.deref_mut(),
+            Child(sub_view) => sub_view.view_mut(),
+            Pop(popup_view) => popup_view.view_mut(),
+        }
     }
 
     pub fn handle_pointer_event(
@@ -406,37 +462,14 @@ impl AppWindow {
             }
             _ => {}
         }
-        if event_surface == self.main_view.surface() {
-            self.main_view.handle_pointer_event(event, globals);
 
-            // 测试移动窗口
-            // if let PointerEventKind::Press {button, serial, ..} = event.kind {
-            //     if MouseButton::Right == MouseButton::from(button) {
-            //         self.moveable = false;
-            //     }
-            //     if self.moveable && MouseButton::Left == MouseButton::from(button) {
-            //         let seat = globals.seat_state.seats().last();
-            //         if let Some(seat) = seat {
-            //             self.xdg_window.move_(&seat, serial);
-            //         }
-            //     }
-            // }
-        } else {
-            let sub_view = self
-                .sub_views
-                .iter_mut()
-                .find(|sub_view| sub_view.view().surface() == event_surface);
-            if let Some(sub_view) = sub_view {
-                sub_view.view_mut().handle_pointer_event(event, globals);
-            }else {
-                let popup_view = self.popup_views.iter_mut().find(|sub_view| {
-                    sub_view.view().surface() == event_surface
-                });
-                if let Some(popup_view) = popup_view {
-                    popup_view.view_mut().handle_pointer_event(event, globals);
-                }
-            }
-        }
+        let view_id = self.surface_id_to_view_id.get(&event.surface.id());
+        let Some(view_id) = view_id else {
+            return;
+        };
+        let app_view = self.views.get_mut(view_id).unwrap().as_mut().unwrap();
+        let view = Self::get_view_ref_mut(app_view);
+        view.handle_pointer_event(event, globals);
     }
 
     pub fn handle_keyboard_event(
@@ -445,57 +478,28 @@ impl AppWindow {
         pressed: bool,
         repeat: bool,
     ) {
-        self.main_view
-            .handle_keyboard_event(event.clone(), pressed, repeat);
-        self.sub_views.iter_mut().for_each(|sub_view| {
-            sub_view
-                .view_mut()
-                .handle_keyboard_event(event.clone(), pressed, repeat);
-        });
-        self.popup_views.iter_mut().for_each(|popup_view| {
-            popup_view
-                .view_mut()
-                .handle_keyboard_event(event.clone(), pressed, repeat);
+        self.views.values_mut().for_each(|app_view| {
+            let view = Self::get_view_ref_mut(app_view.as_mut().unwrap());
+            view.handle_keyboard_event(event.clone(), pressed, repeat);
         });
     }
 
     pub fn update_modifiers(&mut self, modifiers: sctk::seat::keyboard::Modifiers) {
-        self.main_view.update_modifiers(modifiers.clone());
-        self.sub_views.iter_mut().for_each(|sub_view| {
-            sub_view.view_mut().update_modifiers(modifiers.clone());
-        });
-        self.popup_views.iter_mut().for_each(|popup_view| {
-            popup_view
-                .view_mut()
-                .update_modifiers(modifiers.clone());
+        self.views.values_mut().for_each(|app_view| {
+            let view = Self::get_view_ref_mut(app_view.as_mut().unwrap());
+            view.update_modifiers(modifiers.clone());
         });
     }
 
     pub fn handle_ime_event(&mut self, event: &ImeEvent) {
-        self.main_view.handle_ime_event(event);
-        self.sub_views.iter_mut().for_each(|sub_view| {
-            sub_view.view_mut().handle_ime_event(event);
-        });
-        self.sub_views.iter_mut().for_each(|popup_view| {
-            popup_view.view_mut().handle_ime_event(event);
+        self.views.values_mut().for_each(|app_view| {
+            let view = Self::get_view_ref_mut(app_view.as_mut().unwrap());
+            view.handle_ime_event(event);
         });
     }
 
-    pub fn contains_surface(&self, surface: &wl_surface::WlSurface) -> bool {
-        if surface == self.main_view.surface() {
-            return true;
-        }
-        for sub_view in &self.sub_views {
-            if surface == sub_view.view().surface() {
-                return true;
-            }
-        }
-        for popup_view in &self.popup_views {
-            if surface == popup_view.view().surface() {
-                return true;
-            }
-        }
-        false
+    pub fn contains_surface(&self, surface: &WlSurface) -> bool {
+        self.surface_id_to_view_id.contains_key(&surface.id())
     }
 
     pub fn xdg_window(&self) -> &XdgWindow {
@@ -507,31 +511,68 @@ impl AppWindow {
     }
 
     pub fn set_scale_factor(&mut self, new_scale_factor: f64, gpu: &GpuContext) {
+        let first_time_set_scale_factor = self.scale_factor.is_none();
         self.scale_factor = Some(new_scale_factor);
-        self.main_view.set_scale_factor(new_scale_factor, gpu);
-        for sub_view in &mut self.sub_views {
-            sub_view.view_mut().set_scale_factor(new_scale_factor, gpu);
-            let position_calculate_fn = sub_view.position_calculator();
-            if let Some(position_calculate_fn) = position_calculate_fn {
-                let subview_size = sub_view.view().viewport_size();
-                let new_position =
-                    position_calculate_fn(&self.main_view.viewport_size(), &subview_size);
-                sub_view.set_position(new_position.to_logical(new_scale_factor));
+
+        if first_time_set_scale_factor {
+            // 如果窗口设置了preferred_size，那么根据这个尺寸调整窗口大小
+            if let Some(preferred_size) = self.preferred_size {
+                let new_size = preferred_size.to_logical(new_scale_factor);
+                self.resize_root_view(new_size, gpu);
             }
         }
+
+        self.views.values_mut().for_each(|app_view| {
+            let view = Self::get_view_ref_mut(app_view.as_mut().unwrap());
+            view.set_scale_factor(new_scale_factor, gpu);
+        });
+
+        let root_view_id = Self::root_view_id();
+        let root_view = self.views.get(&root_view_id);
+        let view = Self::get_view_ref(root_view.as_ref().unwrap().as_ref().unwrap());
+        let parent_surface_size = view.viewport_size();
+        self.views
+            .values_mut()
+            .filter(|app_view| matches!(app_view, Some(Child(..))))
+            .for_each(|app_view| {
+                let mut sub_view = match app_view.as_mut().unwrap() {
+                    Child(sub_view) => Some(sub_view),
+                    _ => None,
+                };
+                let sub_view = sub_view.as_mut().unwrap();
+                let subview_size = sub_view.view().viewport_size();
+                if let Some(position_calculator) = sub_view.position_calculator() {
+                    let new_position = position_calculator(&parent_surface_size, &subview_size);
+                    sub_view.set_position(new_position.to_logical(new_scale_factor));
+                }
+            });
     }
 
-    pub fn resize(&mut self, new_size: LogicalSize<u32>, gpu: &GpuContext) {
-        self.main_view.resize(new_size, gpu);
-        for sub_view in &mut self.sub_views {
-            let position_calculate_fn = sub_view.position_calculator();
-            if let Some(position_calculate_fn) = position_calculate_fn {
+    pub fn resize_root_view(&mut self, new_size: LogicalSize<u32>, gpu: &GpuContext) {
+        let root_view_id = Self::root_view_id();
+        let mut root_view =  self.views.get_mut(&root_view_id);
+        let root_view = root_view.as_mut().unwrap();
+        let root_view = root_view.as_mut().unwrap();
+        let view= Self::get_view_ref_mut(root_view);
+
+        view.resize(new_size, gpu);
+
+        let parent_surface_size = view.viewport_size();
+        self.views
+            .values_mut()
+            .filter(|app_view| matches!(app_view, Some(Child(..))))
+            .for_each(|app_view| {
+                let mut sub_view = match app_view.as_mut().unwrap() {
+                    Child(sub_view) => Some(sub_view),
+                    _ => None,
+                };
+                let sub_view = sub_view.as_mut().unwrap();
                 let subview_size = sub_view.view().viewport_size();
-                let new_position =
-                    position_calculate_fn(&self.main_view.viewport_size(), &subview_size);
-                sub_view.set_position(new_position.to_logical(self.scale_factor.unwrap()));
-            }
-        }
+                if let Some(position_calculator) = sub_view.position_calculator() {
+                    let new_position = position_calculator(&parent_surface_size, &subview_size);
+                    sub_view.set_position(new_position.to_logical(self.scale_factor.unwrap()));
+                }
+            });
     }
 
     pub fn set_keyboard_focus(&mut self, focus: bool) {
@@ -544,75 +585,69 @@ impl AppWindow {
 
     /// 执行窗口重绘逻辑。
     /// 遍历所有视图并调用其独立的渲染方法。
-    pub fn draw(&mut self, global_state: &GlobalState) {
+    pub fn draw(&mut self, app: &mut Application) {
         if self.first_configure || self.scale_factor.is_none() {
             return;
         }
 
-        let window_context = &mut self.window_context;
-
-        // 1. 渲染主视图
+        let mut view_ids = vec![];
         {
-            if let Some(EguiOutput {
-                platform_output,
-                viewport_output,
-            }) = self.main_view.draw(global_state, window_context)
-            {
+            for (view_id, _app_view) in &self.views {
+                view_ids.push(view_id.clone());
+            }
+        }
+
+        for view_id in view_ids {
+            let mut app_view = self.views.get_mut(&view_id);
+            let app_view = app_view.as_mut().unwrap();
+
+            // 注意！这里会将self.app_views中view_id对应的value置为None，
+            // 所以如果尝试在BuildViewFn中访问当前self.app_views[view_id]，
+            // 将会获取到None
+            let mut app_view = app_view.take().unwrap();
+
+            let view = Self::get_view_ref_mut(&mut app_view);
+            let output = view.draw(app, self);
+
+            let surface_id = view.surface().id().clone();
+            if view.should_remove() {
+                let surface_id = view.surface().id();
+                self.views.shift_remove(&view_id);
+                self.surface_id_to_view_id.remove(&surface_id);
+            } else {
+                self.views.insert(view_id, Some(app_view));
+            }
+            if let Some(platform_output) = output {
+                let global_state = &app.global_state;
                 Self::update_ime_position_if_necessary(&platform_output, global_state);
-                if self.surface_under_mouse == Some(self.main_view.surface().id()) {
+                if self.surface_under_mouse == Some(surface_id) {
                     Self::update_cursor_icon_if_necessary(&platform_output, global_state);
                 }
             }
-        }
-
-        // 2. 渲染子视图
-        for i in 0..self.sub_views.len() {
-            if let Some(EguiOutput {
-                platform_output,
-                viewport_output,
-            }) = self.sub_views[i]
-                .view_mut()
-                .draw(global_state, window_context)
-            {
-                Self::update_ime_position_if_necessary(&platform_output, global_state);
-                if self.surface_under_mouse == Some(self.sub_views[i].view().surface().id()) {
-                    Self::update_cursor_icon_if_necessary(&platform_output, global_state);
-                }
-            }
-        }
-
-        for i in 0..self.popup_views.len() {
-            let popup_view = &mut self.popup_views[i];
-            if !popup_view.is_first_configure() {
-                if let Some(EguiOutput {
-                                platform_output,
-                                viewport_output,
-                            }) = popup_view
-                    .view_mut()
-                    .draw(global_state, window_context)
-                {
-                    Self::update_ime_position_if_necessary(&platform_output, global_state);
-                    if self.surface_under_mouse == Some(self.sub_views[i].view().surface().id()) {
-                        Self::update_cursor_icon_if_necessary(&platform_output, global_state);
+            while let Some(command) = self.window_context.commands.pop_front() {
+                match command {
+                    Command::HideView(id) => {
+                        // let view = self.views.get_mut(&view_id);
+                        // if let Some(view) = view {
+                        //     if let Some(mut view) = view.as_mut() {
+                        //         let view = Self::get_view_ref_mut(&mut view);
+                        //         view.set_visible(false);
+                        //     }
+                        // }
+                    }
+                    Command::RelocateSubView(id) => {
+                        // let view = self.views.get_mut(&view_id);
+                        // if let Some(view) = view {
+                        //     if let Some(mut view) = view.as_mut() {
+                        //         match view {
+                        //             Child(sub_view) => {
+                        //                 sub_view.position_calculator()
+                        //             }
+                        //         }
+                        //     }
+                        // }
                     }
                 }
-            }
-        }
-
-        while let Some(command) = window_context.commands.pop_front() {
-            match command {
-                Command::HideView(view_id) => {
-                    if view_id == self.main_view.id() {
-                        self.main_view.set_visible(false);
-                    } else {
-                        self.sub_views.iter_mut().for_each(|sub_view| {
-                            if sub_view.view_mut().id() == view_id {
-                                sub_view.view_mut().set_visible(false);
-                            }
-                        })
-                    }
-                }
-                _ => {}
             }
         }
     }
@@ -692,7 +727,48 @@ impl AppWindow {
         }
     }
 
-    pub fn window_id(&self) -> WindowId {
-        WindowId(self.main_view.surface().id())
+    pub fn root_surface(&self) -> &WlSurface {
+        self.xdg_window.wl_surface()
     }
+
+    pub fn window_id(&self) -> WindowId {
+        WindowId(self.root_surface().id())
+    }
+
+    pub fn configure_popup(&mut self, popup: &Popup, config: &PopupConfigure) {
+        for app_view in &mut self.views.values_mut() {
+            match app_view.as_mut().unwrap() {
+                Pop(popup_view) => {
+                    if popup_view.popup() == popup {
+                        popup_view.set_is_first_configure(false);
+                    }
+                }
+                _ => (),
+            }
+        }
+    }
+
+    pub fn remove_popup(&mut self, popup: &Popup) {
+        let mut view_id = None;
+        self.views.iter().for_each(|(id, app_view)| match app_view {
+            Some(Pop(_)) => {
+                view_id = Some(id.clone());
+            }
+            _ => (),
+        });
+        if let Some(view_id) = view_id {
+            self.views.shift_remove(&view_id);
+        }
+    }
+
+    pub fn set_view_visible(&mut self, view_id: &ViewId, visible: bool) {
+        let app_view = self.views.get_mut(view_id);
+        if let Some(app_view) = app_view {
+            if let Some(app_view) = app_view {
+               let view = Self::get_view_ref_mut(app_view);
+                view.set_visible(visible);
+            }
+        }
+    }
+
 }

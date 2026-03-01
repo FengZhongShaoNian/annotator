@@ -12,6 +12,8 @@ pub trait Global: 'static {
 }
 
 pub trait ReadGlobal {
+    fn take<G: Global>(&mut self) -> Option<Box<G>>;
+
     /// 返回实现类型的全局实例。
     ///
     /// 如果该类型的全局没有分配，就会陷入恐慌。
@@ -38,6 +40,16 @@ pub trait ReadOrInsertGlobal {
 }
 
 impl ReadGlobal for FxHashMap<TypeId, Box<dyn Any>> {
+    fn take<G: Global>(&mut self) -> Option<Box<G>> {
+        let value = self.remove(&TypeId::of::<G>());
+        match value {
+            Some(value) => {
+                value.downcast::<G>().ok()
+            }
+            None => None,
+        }
+    }
+
     fn require_ref<G: Global>(&self) -> &G {
         self.get(&TypeId::of::<G>())
             .map(|any_state| any_state.downcast_ref::<G>().unwrap())

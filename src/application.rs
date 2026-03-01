@@ -4,6 +4,7 @@ use crate::window::{AppWindow, WindowConfiguration, WindowId};
 use crate::wp_fractional_scaling::FractionalScalingManager;
 use crate::wp_viewporter::ViewporterState;
 use egui::ImeEvent;
+use egui_wgpu::wgpu::hal::DynSurface;
 use log::{info, warn};
 use sctk::compositor::{CompositorHandler, CompositorState};
 use sctk::globals::GlobalData;
@@ -27,8 +28,6 @@ use sctk::{
     delegate_xdg_window, registry_handlers,
 };
 use std::cell::RefCell;
-use std::sync::Arc;
-use wayland_backend::client::ObjectData;
 use wayland_client::globals::registry_queue_init;
 use wayland_client::protocol::wl_keyboard::WlKeyboard;
 use wayland_client::protocol::wl_pointer::WlPointer;
@@ -186,36 +185,64 @@ impl Application {
         func(global_state, &mut window);
     }
 
+    fn find_window_index<F>(&self, predicate: F) -> Option<usize>
+    where
+        F: Fn(&AppWindow) -> bool,
+    {
+        self.windows.iter().position(|w| predicate(w))
+    }
+
     pub fn scale_factor_changed(
         &mut self,
         surface: &WlSurface,
         scale_factor: f64,
         is_legacy: bool,
     ) {
-        if is_legacy && self.global_state.fractional_scaling_manager.is_some() {
+        let supports_fractional_scaling = self.global_state.fractional_scaling_manager.is_some();
+        if is_legacy && supports_fractional_scaling {
             // 使用分数缩放的情况下忽略整数缩放倍数
             return;
         }
-        info!("scale factor changed to {}", scale_factor);
-        self.windows.iter_mut().for_each(|w| {
+        info!(
+            "scale factor of {}  changed to {}",
+            surface.id(),
+            scale_factor
+        );
+
+        let window_index = self.find_window_index(|window| window.contains_surface(surface));
+        let Some(window_index) = window_index else {
+            return;
+        };
+
+        // 为了能正确绘制，窗口需要等待首次配置完成并且获取到了缩放倍数，再开始首次绘制
+        let needs_start_first_draw;
+
+        {
+            let window = &mut self.windows[window_index];
+
             // 如果窗口的scale_factor不存在，意味着窗口尚未开始绘制
-            let old_scale_factor_is_none = w.scale_factor().is_none();
+            let is_first_draw_pending = window.scale_factor().is_none();
+
             let gpu_context = self.global_state.gpu.borrow();
             let gpu_context = gpu_context.as_ref().unwrap();
-            if w.contains_surface(surface) {
-                w.set_scale_factor(scale_factor, gpu_context);
-            }
-            if old_scale_factor_is_none && w.first_configure == false {
-                // 为了能正确绘制，窗口需要等待首次配置完成并且获取到了缩放倍数，再开始首次绘制
+            window.set_scale_factor(scale_factor, gpu_context);
 
-                // 如果窗口设置了preferred_size，那么根据这个尺寸调整窗口大小
-                if let Some(preferred_size) = w.preferred_size {
-                    let new_size = preferred_size.to_logical(scale_factor);
-                    w.resize(new_size, gpu_context);
-                }
-                w.draw(&self.global_state);
-            }
-        })
+            needs_start_first_draw = is_first_draw_pending && !window.first_configure;
+        }
+
+        if needs_start_first_draw {
+            self.draw_window(window_index);
+        }
+    }
+
+    fn draw_window(&mut self, window_index: usize) {
+        let mut window = self.windows.remove(window_index);
+
+        window.draw(self);
+
+        if !window.should_remove {
+            self.windows.push(window);
+        }
     }
 
     pub fn run(&mut self) {
@@ -272,13 +299,22 @@ impl CompositorHandler for Application {
         surface: &WlSurface,
         _time: u32,
     ) {
-        for window in &mut self.windows {
-            // 只在主 Surface (main_view) 的帧回调到达时触发重绘
+        let window_index = self.find_window_index(|window| window.contains_surface(surface));
+        let Some(window_index) = window_index else {
+            return;
+        };
+
+        let needs_draw;
+        {
+            let window = &self.windows[window_index];
+
+            // 只在主 Surface (root_surface) 的帧回调到达时触发重绘
             // 这样可以保证渲染频率与显示刷新率同步，避免过度提交
-            if window.main_view.surface() == surface {
-                window.draw(&self.global_state);
-                return; // 找到对应的窗口并重绘后退出
-            }
+            needs_draw = window.root_surface() == surface;
+        }
+
+        if needs_draw {
+            self.draw_window(window_index);
         }
     }
 
@@ -357,20 +393,23 @@ impl WindowHandler for Application {
         _serial: u32,
     ) {
         info!("Window configured to: {:?}", configure);
-        for app_window in &mut self.windows {
-            if app_window.xdg_window() != window {
-                continue;
-            }
 
-            if app_window.first_configure {
-                // 为了能正确绘制，窗口需要等待首次配置完成并且获取到了缩放倍数
-                // 开始首次绘制
-                app_window.first_configure = false;
+        let window_index = self.find_window_index(|app_window| app_window.xdg_window() == window);
+        let Some(window_index) = window_index else {
+            return;
+        };
 
-                if app_window.scale_factor().is_some() {
-                    app_window.draw(&self.global_state);
-                }
-            }
+        // 为了能正确绘制，窗口需要等待首次配置完成并且获取到了缩放倍数
+        let needs_draw;
+        {
+            let window = &mut self.windows[window_index];
+            needs_draw = window.first_configure && window.scale_factor().is_some();
+            window.first_configure = false;
+        }
+
+        if needs_draw {
+            // 开始首次绘制
+            self.draw_window(window_index);
         }
     }
 }
@@ -385,28 +424,14 @@ impl PopupHandler for Application {
     ) {
         // config 中包含了合成器确定的最终位置和尺寸
         println!("Popup configured: {:?}", config);
-        self.windows.iter_mut().for_each(|window| {
-            window.popup_views.iter_mut().for_each(|view| {
-                if view.popup() == popup {
-                    view.set_is_first_configure(false);
-                }
-            })
-        });
+        self.windows
+            .iter_mut()
+            .for_each(|w| w.configure_popup(popup, &config));
     }
 
     fn done(&mut self, conn: &Connection, qh: &QueueHandle<Self>, popup: &Popup) {
         // 弹出框被合成器关闭（例如用户点击外部）
-        self.windows.iter_mut().for_each(|window| {
-            let mut idx = None;
-            for (index, popup_view) in window.popup_views.iter().enumerate() {
-                if popup_view.popup() == popup {
-                    idx = Some(index);
-                }
-            }
-            if let Some(idx) = idx {
-                window.popup_views.remove(idx);
-            }
-        });
+        self.windows.iter_mut().for_each(|w| w.remove_popup(popup));
     }
 }
 

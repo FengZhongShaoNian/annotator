@@ -1,10 +1,11 @@
 use crate::application::{Application, GlobalState};
-use crate::context::WindowContext;
 use crate::dpi::{LogicalSize, PhysicalSize};
 use crate::egui_input::EguiInput;
+use crate::font::setup_chinese_fonts;
 use crate::gpu::GpuContext;
-use crate::view::{BuildViewFn, EguiOutput, View, ViewId};
-use egui::{FullOutput, ImeEvent, RawInput};
+use crate::view::{BuildViewFn, View, ViewId};
+use crate::window::AppWindow;
+use egui::{FullOutput, ImeEvent, PlatformOutput, RawInput};
 use egui_wgpu::wgpu::TextureFormat;
 use egui_wgpu::{RendererOptions, wgpu};
 use log::info;
@@ -12,7 +13,6 @@ use sctk::seat::keyboard::{KeyEvent, Modifiers};
 use sctk::seat::pointer::PointerEvent;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_protocols::wp::viewporter::client::wp_viewport::WpViewport;
-use crate::font::setup_chinese_fonts;
 
 pub struct SurfaceView<'window> {
     id: ViewId,
@@ -28,14 +28,15 @@ pub struct SurfaceView<'window> {
     /// 视口（用于分数缩放适配）
     viewport: WpViewport,
     /// Egui 上下文
-    egui_ctx: egui::Context,
+    egui_ctx: Option<egui::Context>,
     /// Egui 输入状态管理
     egui_input: EguiInput,
     /// Egui Skia 渲染器
     egui_renderer: Option<egui_wgpu::Renderer>,
     /// 用于构建UI的函数
-    build_view: BuildViewFn,
+    build_view: Option<BuildViewFn>,
     visible: bool,
+    should_remove: bool,
 }
 
 impl<'window> SurfaceView<'window> {
@@ -65,15 +66,14 @@ impl<'window> SurfaceView<'window> {
             size,
             scale_factor: 1.,
             viewport,
-            egui_ctx,
+            egui_ctx: Some(egui_ctx),
             egui_input,
             egui_renderer: None,
-            build_view,
+            build_view: Some(build_view),
             visible: true,
+            should_remove: false,
         }
     }
-
-    
 
     /// 获取关联的 Wayland Surface。
     pub fn surface(&self) -> &WlSurface {
@@ -85,7 +85,7 @@ impl<'window> View for SurfaceView<'window> {
     fn id(&self) -> ViewId {
         self.id.clone()
     }
-    
+
     fn scale_factor(&self) -> f64 {
         self.scale_factor
     }
@@ -125,7 +125,8 @@ impl<'window> View for SurfaceView<'window> {
     }
 
     fn handle_keyboard_event(&mut self, event: KeyEvent, pressed: bool, repeat: bool) {
-        self.egui_input.handle_keyboard_event(event, pressed, repeat);
+        self.egui_input
+            .handle_keyboard_event(event, pressed, repeat);
     }
 
     fn update_modifiers(&mut self, modifiers: Modifiers) {
@@ -136,30 +137,29 @@ impl<'window> View for SurfaceView<'window> {
         self.egui_input.handle_ime_event(event);
     }
 
-    fn handle_pointer_event(
-        &mut self,
-        event: &PointerEvent,
-        _globals: &GlobalState,
-    ) {
-        self.egui_input
-            .handle_pointer_event(event);
+    fn handle_pointer_event(&mut self, event: &PointerEvent, _globals: &GlobalState) {
+        self.egui_input.handle_pointer_event(event);
     }
     fn visible(&self) -> bool {
         self.visible
     }
-    
+
     fn set_visible(&mut self, visible: bool) {
         self.visible = visible;
     }
 
+    fn should_remove(&self) -> bool {
+        self.should_remove
+    }
+
     /// 使用 GPU 渲染视图内容
-    fn draw(&mut self, global_state: &GlobalState, window_context: &mut WindowContext) -> Option<EguiOutput> {
+    fn draw(&mut self, app: &mut Application, window: &mut AppWindow) -> Option<PlatformOutput> {
         if !self.visible {
             self.surface.attach(None, 0, 0);
             self.surface.commit();
             return None;
         }
-        let egui_output = self.run_egui(window_context);
+        let egui_output = self.run_egui(app, window);
 
         // 获取当前帧纹理
         let Ok(frame) = self.wgpu_surface.get_current_texture() else {
@@ -172,6 +172,7 @@ impl<'window> View for SurfaceView<'window> {
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
+        let global_state = &app.global_state;
         let gpu_context = global_state.gpu.borrow();
         let gpu = gpu_context.as_ref().unwrap();
 
@@ -201,6 +202,8 @@ impl<'window> View for SurfaceView<'window> {
         // 将给定形状镶嵌成三角形网格
         let paint_jobs = self
             .egui_ctx
+            .as_ref()
+            .unwrap()
             .tessellate(egui_output.shapes, egui_output.pixels_per_point);
         for (id, image_delta) in &egui_output.textures_delta.set {
             egui_renderer.update_texture(&device, &gpu.queue, *id, image_delta);
@@ -245,7 +248,8 @@ impl<'window> View for SurfaceView<'window> {
         gpu.queue.submit(std::iter::once(encoder.finish()));
 
         // 请求frame回调以确保持续渲染
-        self.surface.frame(&global_state.queue_handle, self.surface.clone());
+        self.surface
+            .frame(&global_state.queue_handle, self.surface.clone());
 
         // 提交缓冲区到表面
         frame.present();
@@ -255,10 +259,7 @@ impl<'window> View for SurfaceView<'window> {
             egui_renderer.free_texture(id);
         }
 
-        Some(EguiOutput {
-            platform_output: egui_output.platform_output,
-            viewport_output: egui_output.viewport_output,
-        })
+        Some(egui_output.platform_output)
     }
 }
 
@@ -273,12 +274,12 @@ impl<'window> SurfaceView<'window> {
 }
 
 impl<'window> SurfaceView<'window> {
-    fn run_egui(&mut self, window_context: &mut WindowContext) -> FullOutput {
+    fn run_egui(&mut self, app: &mut Application, window: &mut AppWindow) -> FullOutput {
         // 准备 Egui 输入
         let mut raw_input = self.egui_input.raw.take();
 
         // 设置逻辑像素与对应的物理像素的比例
-        self.egui_ctx.set_pixels_per_point(self.scale_factor as f32);
+        self.egui_ctx.as_mut().unwrap().set_pixels_per_point(self.scale_factor as f32);
 
         // screen_rect 是逻辑尺寸
         let screen_rect = egui::Rect::from_min_size(
@@ -287,10 +288,12 @@ impl<'window> SurfaceView<'window> {
         );
         raw_input.screen_rect = Some(screen_rect);
 
-        window_context.current_view_id = Some(self.id.clone());
-
-        let build_ui_fn = &self.build_view;
-        let egui_output = build_ui_fn(raw_input, &mut self.egui_ctx, window_context);
+        window.window_context.current_view_id = Some(self.id.clone());
+        let build_ui_fn = self.build_view.take().unwrap();
+        let mut egui_ctx = self.egui_ctx.take().unwrap();
+        let egui_output = build_ui_fn(raw_input, &mut egui_ctx, app, window, self);
+        self.build_view.replace(build_ui_fn);
+        self.egui_ctx.replace(egui_ctx);
 
         // 重要：为下一帧准备新的 RawInput
         // egui 在渲染后需要重置输入状态，保留持久性信息
