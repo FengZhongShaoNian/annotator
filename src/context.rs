@@ -1,7 +1,8 @@
-use crate::view::ViewId;
+use crate::view::{BuildViewFn, ViewId};
 use rustc_hash::FxHashMap;
 use std::any::{Any, TypeId};
 use std::collections::VecDeque;
+use crate::dpi::{LogicalPosition, LogicalSize};
 
 pub struct WindowContext {
     /// 按类型存储全局变量
@@ -14,9 +15,9 @@ pub struct WindowContext {
     pub commands: VecDeque<Command>,
 }
 
-#[derive(Clone)]
 pub enum Command {
     HideView(ViewId),
+    CreatePopupView(ViewId, LogicalSize<u32>, LogicalPosition<u32>, BuildViewFn),
 }
 
 impl Default for WindowContext {

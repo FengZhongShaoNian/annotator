@@ -13,11 +13,11 @@ use std::time::{Duration, Instant};
 #[derive(Debug, Copy, Clone)]
 pub struct RectangleStyle {
     /// 线条颜色和宽度
-    stroke: Stroke,
+    pub stroke: Stroke,
     /// 线条类型
-    stroke_type: StrokeType,
+    pub stroke_type: StrokeType,
     /// 填充颜色
-    fill_color: Option<Color32>,
+    pub fill_color: Option<Color32>,
 }
 
 impl Default for RectangleStyle {

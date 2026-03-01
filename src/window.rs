@@ -1,10 +1,10 @@
 use crate::application::{Application, GlobalState};
 use crate::context::{Command, WindowContext};
-use crate::dpi::{LogicalPosition, LogicalSize, PhysicalSize};
+use crate::dpi::{LogicalBounds, LogicalPosition, LogicalSize, PhysicalSize, Position};
 use crate::gpu::GpuContext;
 use crate::sub_surface_view::SubSurfaceView;
 use crate::surface_view::SurfaceView;
-use crate::view::{BuildViewFn, EguiOutput, SubView, View, ViewId};
+use crate::view::{BuildViewFn, EguiOutput, PopupView, SubView, View, ViewId};
 use egui::{CursorIcon, ImeEvent, PlatformOutput};
 use egui_wgpu::wgpu;
 use log::warn;
@@ -17,10 +17,14 @@ use sctk::shell::xdg::window::{Window as XdgWindow, WindowDecorations};
 use std::cmp::PartialEq;
 use std::ptr::NonNull;
 use std::sync::Arc;
+use sctk::shell::xdg::popup::Popup;
+use sctk::shell::xdg::XdgSurface;
 use wayland_backend::client::ObjectId;
 use wayland_client::protocol::wl_surface;
 use wayland_client::{Proxy, QueueHandle};
 use wayland_protocols::wp::fractional_scale::v1::client::wp_fractional_scale_v1::WpFractionalScaleV1;
+use wayland_protocols::xdg::shell::client::xdg_positioner;
+use crate::xdg_popup_view::XdgPopupView;
 
 /// AppWindow 管理应用的主窗口，包括主视图和动态管理的子视图。
 pub struct AppWindow {
@@ -28,6 +32,7 @@ pub struct AppWindow {
     pub main_view: SurfaceView<'static>,
     /// 子视图列表（SubSurface）
     pub sub_views: Vec<Box<dyn SubView>>,
+    pub popup_views: Vec<Box<dyn PopupView>>,
     /// 用于发送 Wayland 请求的消息队列句柄
     queue_handle: QueueHandle<Application>,
     /// XDG Shell 窗口句柄
@@ -198,6 +203,7 @@ impl AppWindow {
         let window = Self {
             main_view,
             sub_views: Vec::new(),
+            popup_views: Vec::new(),
             queue_handle: qh,
             xdg_window,
             first_configure: true,
@@ -300,6 +306,91 @@ impl AppWindow {
         subview_id
     }
 
+    pub fn create_xdg_popup_view(
+        &mut self,
+        id: ViewId,
+        global_state: &GlobalState,
+        size: LogicalSize<u32>,
+        position: LogicalPosition<u32>,
+        build_view: BuildViewFn,
+    ) -> SurfaceId {
+        let parent_xdg_surface = self.xdg_window.xdg_surface();
+        let qh = &global_state.queue_handle;
+        let xdg_shell_state = &global_state.xdg_shell_state;
+        let positioner = xdg_shell_state.xdg_wm_base().create_positioner(qh, ());
+        // 指定锚定矩形的哪一条边或角与弹出窗口对齐。可选值有：
+        // none、top、bottom、left、right，以及组合如 top_left、bottom_right 等。
+        positioner.set_anchor(xdg_positioner::Anchor::BottomLeft);
+        // 弹出窗口相对于哪个矩形进行定位。这个矩形通常是父窗口的一块区域或输入事件的坐标点。
+        // 需要指定矩形的尺寸（宽、高）以及它在父窗口表面坐标系中的位置（x, y）。
+        positioner.set_anchor_rect(position.x as i32, position.y as i32, 1, 1);
+        positioner.set_gravity(xdg_positioner::Gravity::BottomRight);
+        positioner.set_size(size.width as i32, size.height as i32); // 弹出框的尺寸
+
+        let compositor = &global_state.compositor_state;
+
+
+        let popup = Popup::new(parent_xdg_surface, &positioner, qh, compositor, xdg_shell_state)
+            .expect("Failed to create popup");
+        let surface = popup.wl_surface();
+
+        let viewport = global_state
+            .viewporter_state
+            .as_ref()
+            .map(|v| v.get_viewport(surface, &global_state.queue_handle))
+            .expect("Failed to retrieve viewport");
+
+        // Create the raw window handle for the surface.
+        let raw_display_handle = RawDisplayHandle::Wayland(WaylandDisplayHandle::new(
+            NonNull::new(global_state.connection.backend().display_ptr() as *mut _).unwrap(),
+        ));
+        let raw_window_handle = RawWindowHandle::Wayland(WaylandWindowHandle::new(
+            NonNull::new(surface.id().as_ptr() as *mut _).unwrap(),
+        ));
+
+        // 初始化 wgpu
+        let gpu_context = global_state.gpu.borrow();
+        let gpu_context = gpu_context.as_ref().unwrap();
+        let instance = &gpu_context.instance;
+        let wgpu_surface = unsafe {
+            instance
+                .create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
+                    raw_display_handle,
+                    raw_window_handle,
+                })
+                .unwrap()
+        };
+
+        let surface_caps = wgpu_surface.get_capabilities(&gpu_context.adapter);
+
+        let surface_format = surface_caps.formats[0];
+        let config = wgpu::SurfaceConfiguration {
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            format: surface_format,
+
+            // width 和 height 指定 SurfaceTexture 的宽度和高度（物理像素，等于逻辑像素乘以屏幕缩放因子）
+            // 现在还无法获取到缩放因子，暂时设置为和逻辑尺寸相同大小
+            width: size.width,
+            height: size.height,
+
+            present_mode: surface_caps.present_modes[0],
+            desired_maximum_frame_latency: 2,
+            alpha_mode: surface_caps.alpha_modes[0],
+            view_formats: vec![],
+        };
+
+        wgpu_surface.configure(&gpu_context.device, &config);
+
+        let mut subview = XdgPopupView::new(id, surface.clone(), popup, positioner, wgpu_surface, config, size, viewport, build_view);
+        let subview_id = SurfaceId(subview.view().surface().id());
+
+        subview.view_mut().surface().commit(); // Initial commit
+
+        self.popup_views.push(Box::new(subview));
+
+        subview_id
+    }
+
     pub fn handle_pointer_event(
         &mut self,
         event: &sctk::seat::pointer::PointerEvent,
@@ -337,6 +428,13 @@ impl AppWindow {
                 .find(|sub_view| sub_view.view().surface() == event_surface);
             if let Some(sub_view) = sub_view {
                 sub_view.view_mut().handle_pointer_event(event, globals);
+            }else {
+                let popup_view = self.popup_views.iter_mut().find(|sub_view| {
+                    sub_view.view().surface() == event_surface
+                });
+                if let Some(popup_view) = popup_view {
+                    popup_view.view_mut().handle_pointer_event(event, globals);
+                }
             }
         }
     }
@@ -354,6 +452,11 @@ impl AppWindow {
                 .view_mut()
                 .handle_keyboard_event(event.clone(), pressed, repeat);
         });
+        self.popup_views.iter_mut().for_each(|popup_view| {
+            popup_view
+                .view_mut()
+                .handle_keyboard_event(event.clone(), pressed, repeat);
+        });
     }
 
     pub fn update_modifiers(&mut self, modifiers: sctk::seat::keyboard::Modifiers) {
@@ -361,12 +464,20 @@ impl AppWindow {
         self.sub_views.iter_mut().for_each(|sub_view| {
             sub_view.view_mut().update_modifiers(modifiers.clone());
         });
+        self.popup_views.iter_mut().for_each(|popup_view| {
+            popup_view
+                .view_mut()
+                .update_modifiers(modifiers.clone());
+        });
     }
 
     pub fn handle_ime_event(&mut self, event: &ImeEvent) {
         self.main_view.handle_ime_event(event);
         self.sub_views.iter_mut().for_each(|sub_view| {
             sub_view.view_mut().handle_ime_event(event);
+        });
+        self.sub_views.iter_mut().for_each(|popup_view| {
+            popup_view.view_mut().handle_ime_event(event);
         });
     }
 
@@ -376,6 +487,11 @@ impl AppWindow {
         }
         for sub_view in &self.sub_views {
             if surface == sub_view.view().surface() {
+                return true;
+            }
+        }
+        for popup_view in &self.popup_views {
+            if surface == popup_view.view().surface() {
                 return true;
             }
         }
@@ -465,6 +581,24 @@ impl AppWindow {
             }
         }
 
+        for i in 0..self.popup_views.len() {
+            let popup_view = &mut self.popup_views[i];
+            if !popup_view.is_first_configure() {
+                if let Some(EguiOutput {
+                                platform_output,
+                                viewport_output,
+                            }) = popup_view
+                    .view_mut()
+                    .draw(global_state, window_context)
+                {
+                    Self::update_ime_position_if_necessary(&platform_output, global_state);
+                    if self.surface_under_mouse == Some(self.sub_views[i].view().surface().id()) {
+                        Self::update_cursor_icon_if_necessary(&platform_output, global_state);
+                    }
+                }
+            }
+        }
+
         while let Some(command) = window_context.commands.pop_front() {
             match command {
                 Command::HideView(view_id) => {
@@ -478,6 +612,7 @@ impl AppWindow {
                         })
                     }
                 }
+                _ => {}
             }
         }
     }

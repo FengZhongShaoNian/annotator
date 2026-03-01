@@ -15,14 +15,15 @@ mod sub_surface_view;
 mod surface_view;
 mod view;
 mod wp_viewporter;
+mod xdg_popup_view;
 
 use crate::annotator::ellipse::{EllipseAnnotationTool, EllipseState};
-use crate::annotator::rectangle::{RectangleAnnotationTool, RectangleState};
+use crate::annotator::rectangle::{RectangleAnnotationTool, RectangleAnnotationToolState, RectangleState};
 use crate::annotator::svg_button::SvgButton;
-use crate::annotator::{Annotation, AnnotatorState, ToolType};
+use crate::annotator::{Annotation, AnnotatorState, StrokeType, ToolType};
 use crate::application::Application;
 use crate::context::Command;
-use crate::dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize};
+use crate::dpi::{LogicalBounds, LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize};
 use crate::global::{ReadGlobalMut, ReadOrInsertGlobal};
 use crate::icon::Icons;
 use crate::window::WindowConfiguration;
@@ -499,7 +500,7 @@ fn main() {
             );
         });
 
-        app.with_window_mut(window_id, |global_state, window| {
+        app.with_window_mut(window_id.clone(), |global_state, window| {
             let window = window.as_mut().unwrap();
 
             let position_calculator = Arc::new(
@@ -516,7 +517,7 @@ fn main() {
             window.create_sub_surface_view(
                 "secondly-toolbar".into(),
                 global_state,
-                LogicalSize::new(600, 62),
+                LogicalSize::new(600, 82),
                 LogicalPosition::new(0i32, 0i32),
                 Box::new(|input, egui_ctx, window_ctx| {
                     // 构建 UI 的具体内容
@@ -539,10 +540,90 @@ fn main() {
                                         .push_back(Command::HideView(current_view_id));
                                     return;
                                 }
+
+                                if matches!(active_tool, Some(ToolType::Rectangle)) {
+                                    let tool_state = &mut annotator_state.rectangle_annotation_tool_state;
+
+                                    let label = match tool_state.style.stroke_type {
+                                        StrokeType::SolidLine => "实线",
+                                        StrokeType::DashedLine => "虚线",
+                                        StrokeType::DottedLine => "点线"
+,                                    };
+                                    let stroke_type = egui::ComboBox::from_label("");
+                                    stroke_type.selected_text(label).show_ui(ui, |ui| {
+                                        if ui.label("实线").clicked() {
+                                            tool_state.style.stroke_type = StrokeType::SolidLine;
+                                        }
+                                        if ui.label("虚线").clicked() {
+                                            tool_state.style.stroke_type = StrokeType::DashedLine;
+                                        }
+                                        if ui.label("点线").clicked() {
+                                            tool_state.style.stroke_type = StrokeType::DottedLine;
+                                        }
+                                    });
+                                }
+
                             });
                     })
                 }),
                 Some(position_calculator),
+            );
+        });
+        
+        app.with_window_mut(window_id, |global_state, window| {
+            let window = window.as_mut().unwrap();
+            window.create_xdg_popup_view(
+                "popup".into(), 
+                global_state, 
+                LogicalSize::new(200, 48),
+                LogicalPosition::new(0, 100),
+                Box::new(|input, egui_ctx, window_ctx| {
+                    // 构建 UI 的具体内容
+                    egui_ctx.run(input, move |ctx| {
+                        egui::CentralPanel::default()
+                            .frame(Frame::new().fill(Color32::from_hex("#393b40").unwrap()))
+                            .show(ctx, |ui| {
+                                ui.ctx().set_cursor_icon(egui::CursorIcon::Default);
+                                ui.spacing_mut().item_spacing = vec2(1.0, 0.0);
+
+                                let current_view_id = window_ctx.current_view_id.clone().unwrap();
+                                let annotator_state = window_ctx
+                                    .globals_by_type
+                                    .require_ref_mut::<AnnotatorState>();
+                                let active_tool = annotator_state.current_annotation_tool;
+
+                                if active_tool.is_none() {
+                                    window_ctx
+                                        .commands
+                                        .push_back(Command::HideView(current_view_id));
+                                    return;
+                                }
+
+                                if matches!(active_tool, Some(ToolType::Rectangle)) {
+                                    let tool_state = &mut annotator_state.rectangle_annotation_tool_state;
+
+                                    let label = match tool_state.style.stroke_type {
+                                        StrokeType::SolidLine => "实线",
+                                        StrokeType::DashedLine => "虚线",
+                                        StrokeType::DottedLine => "点线"
+                                        ,                                    };
+                                    let stroke_type = egui::ComboBox::from_label("");
+                                    stroke_type.selected_text(label).show_ui(ui, |ui| {
+                                        if ui.label("实线").clicked() {
+                                            tool_state.style.stroke_type = StrokeType::SolidLine;
+                                        }
+                                        if ui.label("虚线").clicked() {
+                                            tool_state.style.stroke_type = StrokeType::DashedLine;
+                                        }
+                                        if ui.label("点线").clicked() {
+                                            tool_state.style.stroke_type = StrokeType::DottedLine;
+                                        }
+                                    });
+                                }
+
+                            });
+                    })
+                }),
             );
         });
     }

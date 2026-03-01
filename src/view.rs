@@ -4,6 +4,7 @@ use crate::dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize};
 use crate::gpu::GpuContext;
 use egui::{FullOutput, ImeEvent, OrderedViewportIdMap, PlatformOutput, RawInput, ViewportOutput};
 use std::sync::Arc;
+use sctk::shell::xdg::popup::Popup;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_protocols::wp::viewporter::client::wp_viewport::WpViewport;
 
@@ -71,6 +72,18 @@ pub trait SubView {
     fn set_position(&mut self, pos: LogicalPosition<i32>);
 
     fn position_calculator(&mut self) -> Option<Arc<RelativePositionCalculator>>;
+}
+
+pub trait PopupView {
+    fn view(&self) -> &dyn View;
+
+    fn view_mut(&mut self) -> &mut dyn View;
+    
+    fn is_first_configure(&self) -> bool;
+    
+    fn set_is_first_configure(&mut self, is_first_configure: bool);
+    
+    fn popup(&self) -> &Popup;
 }
 
 pub type BuildViewFn = Box<dyn Fn(RawInput, &mut egui::Context, &mut WindowContext) -> FullOutput>;

@@ -17,15 +17,18 @@ use sctk::seat::{
     pointer::{PointerEvent, PointerEventKind, PointerHandler},
 };
 use sctk::shell::xdg::XdgShell;
+use sctk::shell::xdg::popup::{Popup, PopupConfigure, PopupHandler};
 use sctk::shell::xdg::window::{Window, WindowConfigure, WindowHandler};
 use sctk::shm::{Shm, ShmHandler};
 use sctk::subcompositor::SubcompositorState;
 use sctk::{
     delegate_compositor, delegate_keyboard, delegate_output, delegate_registry, delegate_seat,
-    delegate_shm, delegate_subcompositor, delegate_xdg_shell, delegate_xdg_window,
-    registry_handlers,
+    delegate_shm, delegate_subcompositor, delegate_xdg_popup, delegate_xdg_shell,
+    delegate_xdg_window, registry_handlers,
 };
 use std::cell::RefCell;
+use std::sync::Arc;
+use wayland_backend::client::ObjectData;
 use wayland_client::globals::registry_queue_init;
 use wayland_client::protocol::wl_keyboard::WlKeyboard;
 use wayland_client::protocol::wl_pointer::WlPointer;
@@ -43,6 +46,7 @@ use wayland_protocols::wp::text_input::zv3::client::zwp_text_input_v3::{
 use wayland_protocols::wp::text_input::zv3::client::{
     zwp_text_input_manager_v3, zwp_text_input_v3,
 };
+use wayland_protocols::xdg::shell::client::xdg_positioner::XdgPositioner;
 
 /// GlobalState 存储了 Wayland 的全局状态和协议处理器。
 pub struct GlobalState {
@@ -228,6 +232,7 @@ delegate_subcompositor!(Application);
 delegate_output!(Application);
 
 delegate_xdg_shell!(Application);
+delegate_xdg_popup!(Application);
 delegate_xdg_window!(Application);
 
 delegate_seat!(Application);
@@ -367,6 +372,54 @@ impl WindowHandler for Application {
                 }
             }
         }
+    }
+}
+
+impl PopupHandler for Application {
+    fn configure(
+        &mut self,
+        conn: &Connection,
+        qh: &QueueHandle<Self>,
+        popup: &Popup,
+        config: PopupConfigure,
+    ) {
+        // config 中包含了合成器确定的最终位置和尺寸
+        println!("Popup configured: {:?}", config);
+        self.windows.iter_mut().for_each(|window| {
+            window.popup_views.iter_mut().for_each(|view| {
+                if view.popup() == popup {
+                    view.set_is_first_configure(false);
+                }
+            })
+        });
+    }
+
+    fn done(&mut self, conn: &Connection, qh: &QueueHandle<Self>, popup: &Popup) {
+        // 弹出框被合成器关闭（例如用户点击外部）
+        self.windows.iter_mut().for_each(|window| {
+            let mut idx = None;
+            for (index, popup_view) in window.popup_views.iter().enumerate() {
+                if popup_view.popup() == popup {
+                    idx = Some(index);
+                }
+            }
+            if let Some(idx) = idx {
+                window.popup_views.remove(idx);
+            }
+        });
+    }
+}
+
+impl Dispatch<XdgPositioner, ()> for Application {
+    fn event(
+        state: &mut Self,
+        proxy: &XdgPositioner,
+        event: <XdgPositioner as Proxy>::Event,
+        data: &(),
+        conn: &Connection,
+        queue_handle: &QueueHandle<Self>,
+    ) {
+        todo!()
     }
 }
 
