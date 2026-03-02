@@ -51,6 +51,8 @@ pub trait View {
     fn set_visible(&mut self, visible: bool);
 
     fn should_remove(&self) -> bool;
+    
+    fn close(&mut self);
 
     /// 使用 GPU 上下文进行重绘。
     fn draw(&mut self, app: &mut Application, window: &mut AppWindow) -> Option<PlatformOutput>;
@@ -75,9 +77,9 @@ pub trait PopupView {
 
     fn view_mut(&mut self) -> &mut dyn View;
 
-    fn is_first_configure(&self) -> bool;
+    fn first_configured(&self) -> bool;
 
-    fn set_is_first_configure(&mut self, is_first_configure: bool);
+    fn set_first_configured(&mut self);
 
     fn popup(&self) -> &Popup;
 }

@@ -1,17 +1,16 @@
-use std::any::TypeId;
 use crate::annotator::ellipse::EllipseState;
 use crate::annotator::rectangle::RectangleState;
 use crate::annotator::svg_button::SvgButton;
 use crate::annotator::{AnnotatorState, ToolType};
 use crate::application::Application;
 use crate::dpi::{LogicalSize, PhysicalPosition, PhysicalSize};
-use crate::global::{ReadGlobal, ReadGlobalMut, WriteGlobal};
+use crate::global::ReadGlobal;
 use crate::icon::Icons;
 use crate::view::ViewId;
 use crate::window::AppWindow;
 use egui::{vec2, Color32, Frame};
+use std::any::TypeId;
 use std::sync::Arc;
-use crate::view::AppView::Child;
 
 pub fn create_primary_toolbar<'a, 'w>(
     view_id: ViewId,

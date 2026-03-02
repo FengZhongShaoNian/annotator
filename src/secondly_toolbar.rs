@@ -1,16 +1,12 @@
-use crate::annotator::ellipse::EllipseState;
-use crate::annotator::rectangle::RectangleState;
-use crate::annotator::svg_button::SvgButton;
+use std::any::TypeId;
 use crate::annotator::{AnnotatorState, StrokeType, ToolType};
 use crate::application::Application;
-use crate::context::Command;
-use crate::dpi::{LogicalBounds, LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize};
-use crate::global::ReadGlobalMut;
-use crate::icon::Icons;
+use crate::dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize};
 use crate::view::ViewId;
 use crate::window::AppWindow;
-use egui::{Color32, Frame, vec2};
+use egui::{vec2, Color32, Frame};
 use std::sync::Arc;
+use crate::global::{ReadGlobal, ReadGlobalMut};
 
 pub fn create_secondly_toolbar(
     view_id: ViewId,
@@ -54,21 +50,22 @@ pub fn create_secondly_toolbar(
                         ui.ctx().set_cursor_icon(egui::CursorIcon::Default);
                         ui.spacing_mut().item_spacing = vec2(1.0, 0.0);
 
-                        let current_view_id =
-                            window.window_context.current_view_id.clone().unwrap();
-                        let annotator_state = window
+                        let mut annotator_state = window
                             .window_context
                             .globals_by_type
-                            .require_ref_mut::<AnnotatorState>();
+                            .take::<AnnotatorState>()
+                            .unwrap();
                         let active_tool = annotator_state.current_annotation_tool;
 
                         if active_tool.is_none() {
                             current_view.set_visible(false);
+                            window.window_context.globals_by_type.insert(TypeId::of::<AnnotatorState>(), annotator_state);
                             return;
                         }
 
                         if matches!(active_tool, Some(ToolType::Rectangle)) {
                             let tool_state = &mut annotator_state.rectangle_annotation_tool_state;
+
 
                             let label = match tool_state.style.stroke_type {
                                 StrokeType::SolidLine => "实线",
@@ -76,18 +73,63 @@ pub fn create_secondly_toolbar(
                                 StrokeType::DottedLine => "点线",
                             };
                             let stroke_type = egui::ComboBox::from_label("");
-                            stroke_type.selected_text(label).show_ui(ui, |ui| {
-                                if ui.label("实线").clicked() {
-                                    tool_state.style.stroke_type = StrokeType::SolidLine;
+                            let pointer_pos = ui.ctx().input(|input| {
+                                if input.pointer.button_clicked(egui::PointerButton::Primary) {
+                                    return input.pointer.interact_pos();
                                 }
-                                if ui.label("虚线").clicked() {
-                                    tool_state.style.stroke_type = StrokeType::DashedLine;
-                                }
-                                if ui.label("点线").clicked() {
-                                    tool_state.style.stroke_type = StrokeType::DottedLine;
-                                }
+                                None
                             });
+                            stroke_type.selected_text(label).show_ui(ui, move |ui| {
+                            });
+                            let select_stroke_type_popup_id :ViewId = "select-stoke-type-popup".into();
+
+                            if let Some(pointer_pos) = pointer_pos && !window.views.contains_key(&select_stroke_type_popup_id){
+                                // let mut popup_position = LogicalPosition::new(pointer_pos.x as u32, pointer_pos.y as u32);
+                                let mut popup_position = LogicalPosition::new(0 as u32, 0 as u32);
+                                popup_position.x = 1364-600;
+                                popup_position.y = 718-100;
+                                window.create_xdg_popup_view(
+                                    select_stroke_type_popup_id,
+                                    &app.global_state,
+                                    LogicalSize::new(200, 68),
+                                    popup_position,
+                                    false,
+                                    Box::new(|input, egui_ctx, app, window, current_view| {
+                                        // 构建 UI 的具体内容
+                                        egui_ctx.run(input, move |ctx| {
+                                            egui::CentralPanel::default()
+                                                .frame(Frame::new().fill(Color32::from_hex("#393b40").unwrap()))
+                                                .show(ctx, |ui| {
+                                                    ui.ctx().set_cursor_icon(egui::CursorIcon::Default);
+                                                    ui.spacing_mut().item_spacing = vec2(1.0, 0.0);
+
+                                                    let annotator_state = window
+                                                        .window_context
+                                                        .globals_by_type
+                                                        .require_ref_mut::<AnnotatorState>();
+                                                    let active_tool = annotator_state.current_annotation_tool;
+                                                    let tool_state = &mut annotator_state.rectangle_annotation_tool_state;
+                                                    if ui.button("——————").clicked() {
+                                                        tool_state.style.stroke_type = StrokeType::SolidLine;
+                                                        current_view.close();
+                                                    }
+                                                    if ui.button("______").clicked() {
+                                                        tool_state.style.stroke_type = StrokeType::DashedLine;
+                                                        current_view.close();
+                                                    }
+                                                    if ui.button("......").clicked() {
+                                                        tool_state.style.stroke_type = StrokeType::DottedLine;
+                                                        current_view.close();
+                                                    }
+                                                });
+                                        })
+                                    }),
+                                );
+                            }
+
                         }
+
+                        window.window_context.globals_by_type.insert(TypeId::of::<AnnotatorState>(), annotator_state);
                     });
             })
         }),

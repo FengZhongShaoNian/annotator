@@ -152,6 +152,10 @@ impl<'window> View for SurfaceView<'window> {
         self.should_remove
     }
 
+    fn close(&mut self) {
+        self.should_remove = true;
+    }
+
     /// 使用 GPU 渲染视图内容
     fn draw(&mut self, app: &mut Application, window: &mut AppWindow) -> Option<PlatformOutput> {
         if !self.visible {

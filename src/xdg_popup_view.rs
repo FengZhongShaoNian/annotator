@@ -11,8 +11,8 @@ pub struct XdgPopupView<'window> {
     view: SurfaceView<'window>,
     popup: Popup,
     positioner: XdgPositioner,
-    /// 是否为首次配置（用于避免在窗口未准备好时绘图）
-    pub first_configure: bool,
+    /// 是否已完成首次配置（用于避免在窗口未准备好时绘图）
+    pub first_configured: bool,
 }
 
 impl<'window> XdgPopupView<'window> {
@@ -40,7 +40,7 @@ impl<'window> XdgPopupView<'window> {
             view,
             positioner,
             popup,
-            first_configure: true,
+            first_configured: false,
         }
     }
 }
@@ -54,12 +54,12 @@ impl PopupView for XdgPopupView<'_> {
         &mut self.view
     }
 
-    fn is_first_configure(&self) -> bool {
-        self.first_configure
+    fn first_configured(&self) -> bool {
+        self.first_configured
     }
 
-    fn set_is_first_configure(&mut self, is_first_configure: bool) {
-        self.first_configure = is_first_configure;
+    fn set_first_configured(&mut self) {
+        self.first_configured = true;
     }
 
 

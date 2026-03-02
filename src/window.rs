@@ -10,11 +10,11 @@ use crate::xdg_popup_view::XdgPopupView;
 use egui::ahash::{HashMap, HashMapExt};
 use egui::{CursorIcon, ImeEvent, PlatformOutput};
 use egui_wgpu::wgpu;
-use log::warn;
+use log::{info, warn};
 use raw_window_handle::{
     RawDisplayHandle, RawWindowHandle, WaylandDisplayHandle, WaylandWindowHandle,
 };
-use sctk::seat::pointer::PointerEventKind;
+use sctk::seat::pointer::{PointerData, PointerEventKind};
 use sctk::shell::WaylandSurface;
 use sctk::shell::xdg::XdgSurface;
 use sctk::shell::xdg::popup::{Popup, PopupConfigure};
@@ -26,6 +26,7 @@ use std::ptr::NonNull;
 use std::sync::Arc;
 use std::thread;
 use indexmap::IndexMap;
+use sctk::compositor::Surface;
 use wayland_backend::client::ObjectId;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::{Proxy, QueueHandle};
@@ -334,6 +335,7 @@ impl AppWindow {
         global_state: &GlobalState,
         size: LogicalSize<u32>,
         position: LogicalPosition<u32>,
+        grap: bool,
         build_view: BuildViewFn,
     ) -> SurfaceId {
         let parent_xdg_surface = self.xdg_window.xdg_surface();
@@ -351,15 +353,26 @@ impl AppWindow {
 
         let compositor = &global_state.compositor_state;
 
-        let popup = Popup::new(
-            parent_xdg_surface,
-            &positioner,
-            qh,
-            compositor,
-            xdg_shell_state,
-        )
-        .expect("Failed to create popup");
+        let surface = Surface::new(compositor, qh).unwrap();
+        let popup = Popup::from_surface(Some(parent_xdg_surface), &positioner, qh, surface, xdg_shell_state)
+            .expect("Failed to create popup");
+
+        if grap {
+            if let Some(themed_pointer) = global_state.themed_pointer.as_ref() {
+                let pointer_data = themed_pointer.pointer().data::<PointerData>();
+                if let Some(pointer_data) = pointer_data {
+                    if let Some(latest_button_serial) = pointer_data.latest_button_serial() {
+                        popup.xdg_popup().grab(pointer_data.seat(), latest_button_serial);
+                        println!("grap-------------");
+                    }
+
+                }
+            }
+        }
+
+
         let surface = popup.wl_surface();
+        surface.commit();
 
         let viewport = global_state
             .viewporter_state
@@ -606,6 +619,17 @@ impl AppWindow {
             // 将会获取到None
             let mut app_view = app_view.take().unwrap();
 
+            match app_view {
+                Pop(ref popup_view) => {
+                    // 如果PopupView尚未完成首次配置，那么不进行绘制
+                    if !popup_view.first_configured() {
+                        self.views.insert(view_id, Some(app_view));
+                        continue;
+                    }
+                }
+                _ => ()
+            }
+
             let view = Self::get_view_ref_mut(&mut app_view);
             let output = view.draw(app, self);
 
@@ -740,7 +764,9 @@ impl AppWindow {
             match app_view.as_mut().unwrap() {
                 Pop(popup_view) => {
                     if popup_view.popup() == popup {
-                        popup_view.set_is_first_configure(false);
+                        if !popup_view.first_configured() {
+                            popup_view.set_first_configured();
+                        }
                     }
                 }
                 _ => (),
@@ -757,6 +783,7 @@ impl AppWindow {
             _ => (),
         });
         if let Some(view_id) = view_id {
+            info!("Removing popup {:?}", view_id);
             self.views.shift_remove(&view_id);
         }
     }
