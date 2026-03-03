@@ -1,17 +1,24 @@
 use crate::application::{Application, GlobalState};
 use crate::context::{Command, WindowContext};
-use crate::dpi::{LogicalBounds, LogicalPosition, LogicalSize, PhysicalSize, Position};
+use crate::dpi::{LogicalPosition, LogicalSize, PhysicalSize, Position};
 use crate::gpu::GpuContext;
+use crate::serial::{SerialKind, SerialTracker};
 use crate::view::AppView::{Child, Pop, Root};
+use crate::view::sub_surface_view::SubSurfaceView;
+use crate::view::surface_view::SurfaceView;
+use crate::view::xdg_popup_view::{TriggerType, XdgPopupView};
 use crate::view::{AppView, BuildViewFn, PopupView, SubView, View, ViewId};
 use egui::ahash::{HashMap, HashMapExt};
 use egui::{CursorIcon, ImeEvent, PlatformOutput};
 use egui_wgpu::wgpu;
+use egui_wgpu::wgpu::{CompositeAlphaMode, SurfaceCapabilities};
+use indexmap::IndexMap;
 use log::{info, warn};
 use raw_window_handle::{
     RawDisplayHandle, RawWindowHandle, WaylandDisplayHandle, WaylandWindowHandle,
 };
-use sctk::seat::pointer::{PointerData, PointerEventKind};
+use sctk::compositor::Surface;
+use sctk::seat::pointer::PointerEventKind;
 use sctk::shell::WaylandSurface;
 use sctk::shell::xdg::XdgSurface;
 use sctk::shell::xdg::popup::{Popup, PopupConfigure};
@@ -21,19 +28,11 @@ use std::convert::Into;
 use std::ops::{Deref, DerefMut};
 use std::ptr::NonNull;
 use std::sync::Arc;
-use std::thread;
-use indexmap::IndexMap;
-use sctk::compositor::Surface;
 use wayland_backend::client::ObjectId;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::{Proxy, QueueHandle};
 use wayland_protocols::wp::fractional_scale::v1::client::wp_fractional_scale_v1::WpFractionalScaleV1;
-use wayland_protocols::xdg::shell::client::xdg_positioner;
 use wayland_protocols::xdg::shell::client::xdg_positioner::XdgPositioner;
-use crate::serial::{SerialKind, SerialTracker};
-use crate::view::sub_surface_view::SubSurfaceView;
-use crate::view::surface_view::SurfaceView;
-use crate::view::xdg_popup_view::{TriggerType, XdgPopupView};
 
 const ROOT_VIEW_ID_STR: &str = "root-view";
 
@@ -169,6 +168,7 @@ impl AppWindow {
         let surface_caps = wgpu_surface.get_capabilities(&gpu_context.adapter);
 
         let surface_format = surface_caps.formats[0];
+        let selected_alpha_mode = Self::select_alpha_mode(&surface_caps);
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,
@@ -180,7 +180,7 @@ impl AppWindow {
 
             present_mode: surface_caps.present_modes[0],
             desired_maximum_frame_latency: 2,
-            alpha_mode: surface_caps.alpha_modes[0],
+            alpha_mode: selected_alpha_mode,
             view_formats: vec![],
         };
 
@@ -293,6 +293,7 @@ impl AppWindow {
         let surface_caps = wgpu_surface.get_capabilities(&gpu_context.adapter);
 
         let surface_format = surface_caps.formats[0];
+        let selected_alpha_mode = Self::select_alpha_mode(&surface_caps);
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,
@@ -304,7 +305,7 @@ impl AppWindow {
 
             present_mode: surface_caps.present_modes[0],
             desired_maximum_frame_latency: 2,
-            alpha_mode: surface_caps.alpha_modes[0],
+            alpha_mode: selected_alpha_mode,
             view_formats: vec![],
         };
 
@@ -334,6 +335,21 @@ impl AppWindow {
         subview_id
     }
 
+    fn select_alpha_mode(surface_caps: &SurfaceCapabilities) -> CompositeAlphaMode {
+        let desired_alpha_mode = wgpu::CompositeAlphaMode::PreMultiplied;
+        let selected_alpha_mode = if surface_caps.alpha_modes.contains(&desired_alpha_mode) {
+            desired_alpha_mode
+        } else {
+            // 如果不支持，则回退到第一个可用的模式，通常是 Opaque
+            surface_caps
+                .alpha_modes
+                .first()
+                .copied()
+                .unwrap_or(wgpu::CompositeAlphaMode::Auto)
+        };
+        selected_alpha_mode
+    }
+
     pub fn create_positioner(&self, global_state: &GlobalState) -> XdgPositioner {
         let qh = &global_state.queue_handle;
         let xdg_shell_state = &global_state.xdg_shell_state;
@@ -354,11 +370,17 @@ impl AppWindow {
         let compositor = &global_state.compositor_state;
 
         let surface = Surface::new(compositor, qh).unwrap();
-        let popup = Popup::from_surface(Some(parent_xdg_surface), &positioner, qh, surface, xdg_shell_state)
-            .expect("Failed to create popup");
+        let popup = Popup::from_surface(
+            Some(parent_xdg_surface),
+            &positioner,
+            qh,
+            surface,
+            xdg_shell_state,
+        )
+        .expect("Failed to create popup");
 
         let mut serial = None;
-        let mut seat = global_state.seat.clone();;
+        let mut seat = global_state.seat.clone();
         match trigger_type {
             TriggerType::MousePress => {
                 serial = Some(self.serial_tracker.get(SerialKind::MousePress));
@@ -404,11 +426,13 @@ impl AppWindow {
 
         // 暂时先随便设置一个尺寸，真正的尺寸需要等xdg_popup的configure事件通知
         let default_logical_size = LogicalSize::new(120, 48);
-        let default_physical_size = default_logical_size.to_physical(self.scale_factor.unwrap_or(1.));
+        let default_physical_size =
+            default_logical_size.to_physical(self.scale_factor.unwrap_or(1.));
 
         let surface_caps = wgpu_surface.get_capabilities(&gpu_context.adapter);
 
         let surface_format = surface_caps.formats[0];
+        let selected_alpha_mode = Self::select_alpha_mode(&surface_caps);
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,
@@ -419,7 +443,7 @@ impl AppWindow {
 
             present_mode: surface_caps.present_modes[0],
             desired_maximum_frame_latency: 2,
-            alpha_mode: surface_caps.alpha_modes[0],
+            alpha_mode: selected_alpha_mode,
             view_formats: vec![],
         };
 
@@ -481,7 +505,7 @@ impl AppWindow {
             PointerEventKind::Press { serial, .. } => {
                 self.serial_tracker.update(SerialKind::MousePress, serial);
             }
-            _ => ()
+            _ => (),
         }
 
         let view_id = self.surface_id_to_view_id.get(&event.surface.id());
@@ -573,10 +597,10 @@ impl AppWindow {
 
     pub fn resize_root_view(&mut self, new_size: LogicalSize<u32>, gpu: &GpuContext) {
         let root_view_id = Self::root_view_id();
-        let mut root_view =  self.views.get_mut(&root_view_id);
+        let mut root_view = self.views.get_mut(&root_view_id);
         let root_view = root_view.as_mut().unwrap();
         let root_view = root_view.as_mut().unwrap();
-        let view= Self::get_view_ref_mut(root_view);
+        let view = Self::get_view_ref_mut(root_view);
 
         view.resize(new_size, gpu);
 
@@ -637,7 +661,7 @@ impl AppWindow {
                         continue;
                     }
                 }
-                _ => ()
+                _ => (),
             }
 
             let view = Self::get_view_ref_mut(&mut app_view);
@@ -775,8 +799,14 @@ impl AppWindow {
             match app_view.as_mut().unwrap() {
                 Pop(popup_view) => {
                     if popup_view.popup() == popup {
-                        popup_view.record_position(LogicalPosition::new(config.position.0, config.position.1));
-                        popup_view.view_mut().resize(LogicalSize::new(config.width as u32, config.height as u32), gpu);
+                        popup_view.record_position(LogicalPosition::new(
+                            config.position.0,
+                            config.position.1,
+                        ));
+                        popup_view.view_mut().resize(
+                            LogicalSize::new(config.width as u32, config.height as u32),
+                            gpu,
+                        );
                         if !popup_view.first_configure_done() {
                             popup_view.set_first_configure_done();
                         }
@@ -807,10 +837,9 @@ impl AppWindow {
         let app_view = self.views.get_mut(view_id);
         if let Some(app_view) = app_view {
             if let Some(app_view) = app_view {
-               let view = Self::get_view_ref_mut(app_view);
+                let view = Self::get_view_ref_mut(app_view);
                 view.set_visible(visible);
             }
         }
     }
-
 }
