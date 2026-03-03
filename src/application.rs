@@ -4,7 +4,6 @@ use crate::window::{AppWindow, WindowConfiguration, WindowId};
 use crate::wp_fractional_scaling::FractionalScalingManager;
 use crate::wp_viewporter::ViewporterState;
 use egui::ImeEvent;
-use egui_wgpu::wgpu::hal::DynSurface;
 use log::{info, warn};
 use sctk::compositor::{CompositorHandler, CompositorState};
 use sctk::globals::GlobalData;
@@ -73,8 +72,6 @@ pub struct GlobalState {
     /// 座位状态（管理输入设备）。
     pub seat_state: SeatState,
     pub seat: Option<WlSeat>,
-    /// 最近一次的序列号（用于同步）。
-    pub last_serial: u32,
     /// 键盘实例。
     keyboard: Option<WlKeyboard>,
 
@@ -139,7 +136,6 @@ impl Application {
                 gpu: RefCell::new(None),
                 seat_state,
                 seat: None,
-                last_serial: 0,
                 keyboard: None,
                 themed_pointer: None,
                 shm_state,
@@ -745,8 +741,7 @@ impl Dispatch<zwp_text_input_v3::ZwpTextInputV3, ()> for Application {
                     }
                 }
             }
-            zwp_text_input_v3::Event::Done { serial } => {
-                this.global_state.last_serial = serial;
+            zwp_text_input_v3::Event::Done { .. } => {
             }
             _ => {}
         }
