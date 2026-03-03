@@ -1,5 +1,5 @@
 use crate::application::{Application, GlobalState};
-use crate::dpi::{LogicalSize, PhysicalSize};
+use crate::dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize};
 use crate::egui_input::EguiInput;
 use crate::font::setup_chinese_fonts;
 use crate::gpu::GpuContext;
@@ -21,6 +21,8 @@ pub struct SurfaceView<'window> {
     /// WGPU 渲染表面
     pub wgpu_surface: wgpu::Surface<'window>,
     pub wgpu_surface_configuration: wgpu::SurfaceConfiguration,
+    /// 位置
+    position: Option<LogicalPosition<i32>>,
     /// 逻辑尺寸
     size: LogicalSize<u32>,
     /// 当前缩放倍数
@@ -63,6 +65,7 @@ impl<'window> SurfaceView<'window> {
             surface,
             wgpu_surface,
             wgpu_surface_configuration,
+            position: None,
             size,
             scale_factor: 1.,
             viewport,
@@ -95,6 +98,10 @@ impl<'window> View for SurfaceView<'window> {
 
         let physical_size = self.size.to_physical(scale_factor);
         self.resize_surface(physical_size, &gpu);
+    }
+
+    fn position(&self) -> Option<LogicalPosition<i32>> {
+        self.position
     }
 
     fn size(&self) -> LogicalSize<u32> {
@@ -275,9 +282,11 @@ impl<'window> SurfaceView<'window> {
 
         self.wgpu_surface.configure(&gpu.device, &surface_config);
     }
-}
 
-impl<'window> SurfaceView<'window> {
+    pub(super) fn set_position(&mut self, position: LogicalPosition<i32>) {
+        self.position = Some(position);
+    }
+
     fn run_egui(&mut self, app: &mut Application, window: &mut AppWindow) -> FullOutput {
         // 准备 Egui 输入
         let mut raw_input = self.egui_input.raw.take();

@@ -2,11 +2,8 @@ use crate::application::{Application, GlobalState};
 use crate::context::{Command, WindowContext};
 use crate::dpi::{LogicalBounds, LogicalPosition, LogicalSize, PhysicalSize, Position};
 use crate::gpu::GpuContext;
-use crate::sub_surface_view::SubSurfaceView;
-use crate::surface_view::SurfaceView;
 use crate::view::AppView::{Child, Pop, Root};
 use crate::view::{AppView, BuildViewFn, PopupView, SubView, View, ViewId};
-use crate::xdg_popup_view::XdgPopupView;
 use egui::ahash::{HashMap, HashMapExt};
 use egui::{CursorIcon, ImeEvent, PlatformOutput};
 use egui_wgpu::wgpu;
@@ -32,6 +29,11 @@ use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::{Proxy, QueueHandle};
 use wayland_protocols::wp::fractional_scale::v1::client::wp_fractional_scale_v1::WpFractionalScaleV1;
 use wayland_protocols::xdg::shell::client::xdg_positioner;
+use wayland_protocols::xdg::shell::client::xdg_positioner::XdgPositioner;
+use crate::serial::{SerialKind, SerialTracker};
+use crate::view::sub_surface_view::SubSurfaceView;
+use crate::view::surface_view::SurfaceView;
+use crate::view::xdg_popup_view::{TriggerType, XdgPopupView};
 
 const ROOT_VIEW_ID_STR: &str = "root-view";
 
@@ -59,6 +61,8 @@ pub struct AppWindow {
     surface_under_mouse: Option<ObjectId>,
     /// 当前窗口是否需要移除
     pub should_remove: bool,
+
+    pub serial_tracker: SerialTracker,
 }
 
 /// 窗口的Id
@@ -228,6 +232,7 @@ impl AppWindow {
             window_context: Default::default(),
             surface_under_mouse: None,
             should_remove: false,
+            serial_tracker: SerialTracker::new(),
         };
 
         window
@@ -329,47 +334,43 @@ impl AppWindow {
         subview_id
     }
 
+    pub fn create_positioner(&self, global_state: &GlobalState) -> XdgPositioner {
+        let qh = &global_state.queue_handle;
+        let xdg_shell_state = &global_state.xdg_shell_state;
+        xdg_shell_state.xdg_wm_base().create_positioner(qh, ())
+    }
+
     pub fn create_xdg_popup_view(
         &mut self,
         id: ViewId,
         global_state: &GlobalState,
-        size: LogicalSize<u32>,
-        position: LogicalPosition<u32>,
-        grap: bool,
+        trigger_type: TriggerType,
+        positioner: XdgPositioner,
         build_view: BuildViewFn,
     ) -> SurfaceId {
         let parent_xdg_surface = self.xdg_window.xdg_surface();
         let qh = &global_state.queue_handle;
         let xdg_shell_state = &global_state.xdg_shell_state;
-        let positioner = xdg_shell_state.xdg_wm_base().create_positioner(qh, ());
-        // 指定锚定矩形的哪一条边或角与弹出窗口对齐。可选值有：
-        // none、top、bottom、left、right，以及组合如 top_left、bottom_right 等。
-        positioner.set_anchor(xdg_positioner::Anchor::BottomLeft);
-        // 弹出窗口相对于哪个矩形进行定位。这个矩形通常是父窗口的一块区域或输入事件的坐标点。
-        // 需要指定矩形的尺寸（宽、高）以及它在父窗口表面坐标系中的位置（x, y）。
-        positioner.set_anchor_rect(position.x as i32, position.y as i32, 1, 1);
-        positioner.set_gravity(xdg_positioner::Gravity::BottomRight);
-        positioner.set_size(size.width as i32, size.height as i32); // 弹出框的尺寸
-
         let compositor = &global_state.compositor_state;
 
         let surface = Surface::new(compositor, qh).unwrap();
         let popup = Popup::from_surface(Some(parent_xdg_surface), &positioner, qh, surface, xdg_shell_state)
             .expect("Failed to create popup");
 
-        if grap {
-            if let Some(themed_pointer) = global_state.themed_pointer.as_ref() {
-                let pointer_data = themed_pointer.pointer().data::<PointerData>();
-                if let Some(pointer_data) = pointer_data {
-                    if let Some(latest_button_serial) = pointer_data.latest_button_serial() {
-                        popup.xdg_popup().grab(pointer_data.seat(), latest_button_serial);
-                        println!("grap-------------");
-                    }
-
-                }
+        let mut serial = None;
+        let mut seat = global_state.seat.clone();;
+        match trigger_type {
+            TriggerType::MousePress => {
+                serial = Some(self.serial_tracker.get(SerialKind::MousePress));
+            }
+            TriggerType::KeyPress => {
+                serial = Some(self.serial_tracker.get(SerialKind::KeyPress));
+            }
+            TriggerType::Touch => {
+                todo!()
             }
         }
-
+        popup.xdg_popup().grab(&seat.unwrap(), serial.unwrap());
 
         let surface = popup.wl_surface();
         surface.commit();
@@ -401,6 +402,10 @@ impl AppWindow {
                 .unwrap()
         };
 
+        // 暂时先随便设置一个尺寸，真正的尺寸需要等xdg_popup的configure事件通知
+        let default_logical_size = LogicalSize::new(120, 48);
+        let default_physical_size = default_logical_size.to_physical(self.scale_factor.unwrap_or(1.));
+
         let surface_caps = wgpu_surface.get_capabilities(&gpu_context.adapter);
 
         let surface_format = surface_caps.formats[0];
@@ -409,9 +414,8 @@ impl AppWindow {
             format: surface_format,
 
             // width 和 height 指定 SurfaceTexture 的宽度和高度（物理像素，等于逻辑像素乘以屏幕缩放因子）
-            // 现在还无法获取到缩放因子，暂时设置为和逻辑尺寸相同大小
-            width: size.width,
-            height: size.height,
+            width: default_physical_size.width,
+            height: default_physical_size.height,
 
             present_mode: surface_caps.present_modes[0],
             desired_maximum_frame_latency: 2,
@@ -428,7 +432,7 @@ impl AppWindow {
             positioner,
             wgpu_surface,
             config,
-            size,
+            default_logical_size,
             viewport,
             build_view,
         );
@@ -467,13 +471,17 @@ impl AppWindow {
     ) {
         let event_surface = &event.surface;
         match event.kind {
-            PointerEventKind::Enter { .. } => {
+            PointerEventKind::Enter { serial } => {
                 self.surface_under_mouse = Some(event_surface.id());
+                self.serial_tracker.update(SerialKind::MouseEnter, serial);
             }
             PointerEventKind::Leave { .. } => {
                 self.surface_under_mouse = None;
             }
-            _ => {}
+            PointerEventKind::Press { serial, .. } => {
+                self.serial_tracker.update(SerialKind::MousePress, serial);
+            }
+            _ => ()
         }
 
         let view_id = self.surface_id_to_view_id.get(&event.surface.id());
@@ -488,9 +496,11 @@ impl AppWindow {
     pub fn handle_keyboard_event(
         &mut self,
         event: sctk::seat::keyboard::KeyEvent,
+        serial: u32,
         pressed: bool,
         repeat: bool,
     ) {
+        self.serial_tracker.update(SerialKind::KeyPress, serial);
         self.views.values_mut().for_each(|app_view| {
             let view = Self::get_view_ref_mut(app_view.as_mut().unwrap());
             view.handle_keyboard_event(event.clone(), pressed, repeat);
@@ -622,7 +632,7 @@ impl AppWindow {
             match app_view {
                 Pop(ref popup_view) => {
                     // 如果PopupView尚未完成首次配置，那么不进行绘制
-                    if !popup_view.first_configured() {
+                    if !popup_view.first_configure_done() {
                         self.views.insert(view_id, Some(app_view));
                         continue;
                     }
@@ -638,6 +648,7 @@ impl AppWindow {
                 let surface_id = view.surface().id();
                 self.views.shift_remove(&view_id);
                 self.surface_id_to_view_id.remove(&surface_id);
+                info!("Removing view {:?}", view_id);
             } else {
                 self.views.insert(view_id, Some(app_view));
             }
@@ -759,13 +770,15 @@ impl AppWindow {
         WindowId(self.root_surface().id())
     }
 
-    pub fn configure_popup(&mut self, popup: &Popup, config: &PopupConfigure) {
+    pub fn configure_popup(&mut self, popup: &Popup, config: &PopupConfigure, gpu: &GpuContext) {
         for app_view in &mut self.views.values_mut() {
             match app_view.as_mut().unwrap() {
                 Pop(popup_view) => {
                     if popup_view.popup() == popup {
-                        if !popup_view.first_configured() {
-                            popup_view.set_first_configured();
+                        popup_view.record_position(LogicalPosition::new(config.position.0, config.position.1));
+                        popup_view.view_mut().resize(LogicalSize::new(config.width as u32, config.height as u32), gpu);
+                        if !popup_view.first_configure_done() {
+                            popup_view.set_first_configure_done();
                         }
                     }
                 }
@@ -777,13 +790,15 @@ impl AppWindow {
     pub fn remove_popup(&mut self, popup: &Popup) {
         let mut view_id = None;
         self.views.iter().for_each(|(id, app_view)| match app_view {
-            Some(Pop(_)) => {
-                view_id = Some(id.clone());
+            Some(Pop(popup_view)) => {
+                if popup_view.popup() == popup {
+                    view_id = Some(id.clone());
+                }
             }
             _ => (),
         });
         if let Some(view_id) = view_id {
-            info!("Removing popup {:?}", view_id);
+            info!("Removing popup: {:?}", view_id);
             self.views.shift_remove(&view_id);
         }
     }

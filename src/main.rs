@@ -11,30 +11,30 @@ mod dpi;
 mod font;
 mod global;
 mod icon;
-mod sub_surface_view;
-mod surface_view;
+
 mod view;
 mod wp_viewporter;
-mod xdg_popup_view;
 mod primary_toolbar;
 mod secondly_toolbar;
+mod serial;
 
 use crate::annotator::ellipse::{EllipseAnnotationTool, EllipseState};
 use crate::annotator::rectangle::{
     RectangleAnnotationTool, RectangleState,
 };
-use crate::annotator::{Annotation, AnnotatorState, ToolType};
+use crate::annotator::{Annotation, AnnotatorState, StrokeType, ToolType};
 use crate::application::Application;
-use crate::dpi::{LogicalSize, PhysicalSize};
+use crate::dpi::{LogicalPosition, LogicalSize, PhysicalSize};
 use crate::global::{ReadGlobalMut, ReadOrInsertGlobal};
 use crate::window::WindowConfiguration;
 use egui::load::SizedTexture;
-use egui::{ColorImage, Frame, Image, ImageSource, Rect, pos2, vec2};
+use egui::{ColorImage, Frame, Image, ImageSource, Rect, pos2, vec2, Color32};
 use log::error;
 use std::env;
 use std::sync::Arc;
 use crate::primary_toolbar::create_primary_toolbar;
 use crate::secondly_toolbar::create_secondly_toolbar;
+use crate::view::ViewId;
 
 fn main() {
     env_logger::init();

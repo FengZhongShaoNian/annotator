@@ -72,6 +72,7 @@ pub struct GlobalState {
     pub gpu: RefCell<Option<GpuContext>>,
     /// 座位状态（管理输入设备）。
     pub seat_state: SeatState,
+    pub seat: Option<WlSeat>,
     /// 最近一次的序列号（用于同步）。
     pub last_serial: u32,
     /// 键盘实例。
@@ -137,6 +138,7 @@ impl Application {
                 queue_handle: qh,
                 gpu: RefCell::new(None),
                 seat_state,
+                seat: None,
                 last_serial: 0,
                 keyboard: None,
                 themed_pointer: None,
@@ -423,15 +425,24 @@ impl PopupHandler for Application {
         config: PopupConfigure,
     ) {
         // config 中包含了合成器确定的最终位置和尺寸
-        println!("Popup configured: {:?}", config);
-        self.windows
-            .iter_mut()
-            .for_each(|w| w.configure_popup(popup, &config));
+        info!("Popup configured to: {:?}", config);
+        let window_index = self.windows.iter().position(|w|w.contains_surface(popup.wl_surface()));
+        if let Some(window_index) = window_index {
+            let window = &mut self.windows[window_index];
+            let gpu = self.global_state.gpu.borrow();
+            let gpu = gpu.as_ref().unwrap();
+            window.configure_popup(popup, &config, gpu);
+        }
     }
 
     fn done(&mut self, conn: &Connection, qh: &QueueHandle<Self>, popup: &Popup) {
+        info!("Popup done: {:?}", popup);
         // 弹出框被合成器关闭（例如用户点击外部）
-        self.windows.iter_mut().for_each(|w| w.remove_popup(popup));
+        let window_index = self.windows.iter().position(|w|w.contains_surface(popup.wl_surface()));
+        if let Some(window_index) = window_index {
+            let window = &mut self.windows[window_index];
+            window.remove_popup(popup);
+        }
     }
 }
 
@@ -505,6 +516,9 @@ impl SeatHandler for Application {
                 .expect("Failed to create pointer");
             self.global_state.themed_pointer.replace(themed_pointer);
         }
+        if self.global_state.seat.is_none() {
+            self.global_state.seat = Some(seat);
+        }
     }
 
     fn remove_capability(
@@ -577,12 +591,12 @@ impl KeyboardHandler for Application {
         _conn: &Connection,
         _qh: &QueueHandle<Self>,
         _: &WlKeyboard,
-        _: u32,
+        serial: u32,
         event: KeyEvent,
     ) {
         for window in &mut self.windows {
             if window.keyboard_focus() {
-                window.handle_keyboard_event(event.clone(), true, false);
+                window.handle_keyboard_event(event.clone(), serial, true, false);
             }
         }
     }
@@ -592,12 +606,12 @@ impl KeyboardHandler for Application {
         _: &Connection,
         _: &QueueHandle<Self>,
         _: &WlKeyboard,
-        _: u32,
+        serial: u32,
         event: KeyEvent,
     ) {
         for window in &mut self.windows {
             if window.keyboard_focus() {
-                window.handle_keyboard_event(event.clone(), true, true);
+                window.handle_keyboard_event(event.clone(), serial, true, true);
             }
         }
     }
@@ -607,12 +621,12 @@ impl KeyboardHandler for Application {
         _: &Connection,
         _: &QueueHandle<Self>,
         _: &WlKeyboard,
-        _: u32,
+        serial: u32,
         event: KeyEvent,
     ) {
         for window in &mut self.windows {
             if window.keyboard_focus() {
-                window.handle_keyboard_event(event.clone(), false, false);
+                window.handle_keyboard_event(event.clone(), serial, false, false);
             }
         }
     }

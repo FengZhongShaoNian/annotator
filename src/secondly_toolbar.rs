@@ -6,7 +6,9 @@ use crate::view::ViewId;
 use crate::window::AppWindow;
 use egui::{vec2, Color32, Frame};
 use std::sync::Arc;
+use wayland_protocols::xdg::shell::client::xdg_positioner;
 use crate::global::{ReadGlobal, ReadGlobalMut};
+use crate::view::xdg_popup_view::TriggerType;
 
 pub fn create_secondly_toolbar(
     view_id: ViewId,
@@ -84,16 +86,25 @@ pub fn create_secondly_toolbar(
                             let select_stroke_type_popup_id :ViewId = "select-stoke-type-popup".into();
 
                             if let Some(pointer_pos) = pointer_pos && !window.views.contains_key(&select_stroke_type_popup_id){
-                                // let mut popup_position = LogicalPosition::new(pointer_pos.x as u32, pointer_pos.y as u32);
-                                let mut popup_position = LogicalPosition::new(0 as u32, 0 as u32);
-                                popup_position.x = 1364-600;
-                                popup_position.y = 718-100;
+                                let positioner = window.create_positioner(&app.global_state);
+
+                                // 弹出框的尺寸
+                                positioner.set_size(100, 80);
+
+                                // 父表面内的锚点矩形
+                                positioner.set_anchor_rect(0, 0, 80, 40);
+                                // 指定锚定矩形的哪一条边或角与弹出窗口对齐
+                                positioner.set_anchor(xdg_positioner::Anchor::Bottom);
+                                // 弹窗相对于锚点的伸展方向
+                                positioner.set_gravity(xdg_positioner::Gravity::Bottom);
+                                // 空间不足时的自动调整策略
+                                positioner.set_constraint_adjustment(xdg_positioner::ConstraintAdjustment::all());
+
                                 window.create_xdg_popup_view(
                                     select_stroke_type_popup_id,
                                     &app.global_state,
-                                    LogicalSize::new(200, 68),
-                                    popup_position,
-                                    false,
+                                    TriggerType::MousePress,
+                                    positioner,
                                     Box::new(|input, egui_ctx, app, window, current_view| {
                                         // 构建 UI 的具体内容
                                         egui_ctx.run(input, move |ctx| {

@@ -1,6 +1,5 @@
 use crate::context::WindowContext;
 use crate::dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize};
-use crate::surface_view::SurfaceView;
 use crate::view::{BuildViewFn, SubView, View, ViewId};
 use egui::FullOutput;
 use egui_wgpu::wgpu::Surface;
@@ -8,6 +7,7 @@ use std::sync::Arc;
 use wayland_client::protocol::wl_subsurface::WlSubsurface;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_protocols::wp::viewporter::client::wp_viewport::WpViewport;
+use crate::view::surface_view::SurfaceView;
 
 pub struct SubSurfaceView<'window> {
     view: SurfaceView<'window>,
@@ -55,6 +55,7 @@ impl<'window> SubView for SubSurfaceView<'window> {
 
     fn set_position(&mut self, pos: LogicalPosition<i32>) {
         self.subsurface.set_position(pos.x, pos.y);
+        self.view.set_position(pos);
     }
 
     fn position_calculator(&mut self) -> Option<Arc<crate::view::RelativePositionCalculator>> {

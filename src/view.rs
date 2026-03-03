@@ -8,6 +8,10 @@ use std::sync::Arc;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_protocols::wp::viewporter::client::wp_viewport::WpViewport;
 
+pub mod sub_surface_view;
+pub mod surface_view;
+pub mod xdg_popup_view;
+
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct ViewId(pub Arc<str>);
 
@@ -27,6 +31,9 @@ pub trait View {
     fn id(&self) -> ViewId;
     fn scale_factor(&self) -> f64;
     fn set_scale_factor(&mut self, scale_factor: f64, gpu: &GpuContext);
+    /// Surface在窗口中的位置
+    /// 并非所有类型的View都可以获知其自身的位置，只有SubView和PopupView可能会有自身位置的信息
+    fn position(&self) -> Option<LogicalPosition<i32>>;
     fn size(&self) -> LogicalSize<u32>;
     fn viewport_size(&self) -> PhysicalSize<u32>;
     fn viewport(&self) -> &WpViewport;
@@ -77,9 +84,11 @@ pub trait PopupView {
 
     fn view_mut(&mut self) -> &mut dyn View;
 
-    fn first_configured(&self) -> bool;
+    fn first_configure_done(&self) -> bool;
 
-    fn set_first_configured(&mut self);
+    fn set_first_configure_done(&mut self);
+    /// 这个方法仅记录位置，不会更改Surface在窗口中的实际位置
+    fn record_position(&mut self, pos: LogicalPosition<i32>);
 
     fn popup(&self) -> &Popup;
 }
