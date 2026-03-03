@@ -421,7 +421,7 @@ impl PopupHandler for Application {
         config: PopupConfigure,
     ) {
         // config 中包含了合成器确定的最终位置和尺寸
-        info!("Popup configured to: {:?}", config);
+        info!("Popup {:?} configured to: {:?}", popup.xdg_surface().id(), config);
         let window_index = self.windows.iter().position(|w|w.contains_surface(popup.wl_surface()));
         if let Some(window_index) = window_index {
             let window = &mut self.windows[window_index];
@@ -432,7 +432,7 @@ impl PopupHandler for Application {
     }
 
     fn done(&mut self, conn: &Connection, qh: &QueueHandle<Self>, popup: &Popup) {
-        info!("Popup done: {:?}", popup);
+        info!("Popup done: {:?}", popup.xdg_surface().id());
         // 弹出框被合成器关闭（例如用户点击外部）
         let window_index = self.windows.iter().position(|w|w.contains_surface(popup.wl_surface()));
         if let Some(window_index) = window_index {
