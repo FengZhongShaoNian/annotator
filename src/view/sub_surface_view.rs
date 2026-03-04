@@ -1,13 +1,13 @@
-use crate::context::WindowContext;
-use crate::dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize};
+use crate::dpi::{LogicalPosition, LogicalSize};
+use crate::view::surface_view::SurfaceView;
 use crate::view::{BuildViewFn, SubView, View, ViewId};
-use egui::FullOutput;
 use egui_wgpu::wgpu::Surface;
 use std::sync::Arc;
+use wayland_backend::client::ObjectId;
 use wayland_client::protocol::wl_subsurface::WlSubsurface;
 use wayland_client::protocol::wl_surface::WlSurface;
+use wayland_client::Proxy;
 use wayland_protocols::wp::viewporter::client::wp_viewport::WpViewport;
-use crate::view::surface_view::SurfaceView;
 
 pub struct SubSurfaceView<'window> {
     view: SurfaceView<'window>,
@@ -29,6 +29,9 @@ impl<'window> SubSurfaceView<'window> {
         build_view: BuildViewFn,
         position_calculator: Option<Arc<crate::view::RelativePositionCalculator>>,
     ) -> Self {
+        if let Some(position) = position {
+            subsurface.set_position(position.x, position.y);
+        }
         let view = SurfaceView::new(
             id,
             surface,
@@ -40,11 +43,21 @@ impl<'window> SubSurfaceView<'window> {
             viewport,
             build_view,
         );
+        view.surface().commit(); // Initial commit
+
         Self {
             view,
             subsurface,
             position_calculator,
         }
+    }
+
+    pub fn surface_id(&self) -> ObjectId {
+        self.view.surface().id()
+    }
+
+    pub fn view_id(&self) -> ViewId {
+        self.view.id()
     }
 }
 
@@ -59,7 +72,7 @@ impl<'window> SubView for SubSurfaceView<'window> {
 
     fn set_position(&mut self, pos: LogicalPosition<i32>) {
         self.subsurface.set_position(pos.x, pos.y);
-        self.view.set_position(pos);
+        self.view.record_position(pos);
     }
 
     fn position_calculator(&mut self) -> Option<Arc<crate::view::RelativePositionCalculator>> {

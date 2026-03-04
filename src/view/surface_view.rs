@@ -285,7 +285,7 @@ impl<'window> SurfaceView<'window> {
         self.wgpu_surface.configure(&gpu.device, &surface_config);
     }
 
-    pub(super) fn set_position(&mut self, position: LogicalPosition<i32>) {
+    pub(super) fn record_position(&mut self, position: LogicalPosition<i32>) {
         self.position = Some(position);
     }
 

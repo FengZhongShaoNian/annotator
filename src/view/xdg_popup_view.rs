@@ -66,7 +66,7 @@ impl PopupView for XdgPopupView<'_> {
     }
 
     fn record_position(&mut self, pos: LogicalPosition<i32>){
-        self.view.set_position(pos);
+        self.view.record_position(pos);
     }
 
     fn popup(&self) -> &Popup {

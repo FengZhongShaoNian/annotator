@@ -11,7 +11,7 @@ use crate::view::{AppView, BuildViewFn, PopupView, SubView, View, ViewId};
 use egui::ahash::{HashMap, HashMapExt};
 use egui::{CursorIcon, ImeEvent, PlatformOutput};
 use egui_wgpu::wgpu;
-use egui_wgpu::wgpu::{CompositeAlphaMode, SurfaceCapabilities};
+use egui_wgpu::wgpu::{CompositeAlphaMode, SurfaceCapabilities, Surface as WgpuSurface};
 use indexmap::IndexMap;
 use log::{info, warn};
 use raw_window_handle::{
@@ -25,7 +25,6 @@ use sctk::shell::xdg::popup::{Popup, PopupConfigure};
 use sctk::shell::xdg::window::{Window as XdgWindow, WindowDecorations};
 use std::cmp::PartialEq;
 use std::convert::Into;
-use std::ops::{Deref, DerefMut};
 use std::ptr::NonNull;
 use std::sync::Arc;
 use wayland_backend::client::ObjectId;
@@ -33,6 +32,7 @@ use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::{Proxy, QueueHandle};
 use wayland_protocols::wp::fractional_scale::v1::client::wp_fractional_scale_v1::WpFractionalScaleV1;
 use wayland_protocols::xdg::shell::client::xdg_positioner::XdgPositioner;
+use wgpu::SurfaceConfiguration;
 
 const ROOT_VIEW_ID_STR: &str = "root-view";
 
@@ -120,71 +120,11 @@ impl AppWindow {
         xdg_window.set_app_id(window_config.app_id);
         xdg_window.commit();
 
-        // Create the raw window handle for the surface.
-        let raw_display_handle = RawDisplayHandle::Wayland(WaylandDisplayHandle::new(
-            NonNull::new(global_state.connection.backend().display_ptr() as *mut _).unwrap(),
-        ));
-        let raw_window_handle = RawWindowHandle::Wayland(WaylandWindowHandle::new(
-            NonNull::new(xdg_window.wl_surface().id().as_ptr() as *mut _).unwrap(),
-        ));
+        // 此时尚未拿到缩放系数，后面拿到之后会重新调整大小
+        let physical_size = window_config.size.to_physical(1.);
 
         // 初始化 wgpu
-        let wgpu_initialized = global_state.gpu.borrow().as_ref().is_some();
-        let wgpu_surface = if !wgpu_initialized {
-            let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
-                backends: wgpu::Backends::all(),
-                ..Default::default()
-            });
-
-            let surface = unsafe {
-                instance
-                    .create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
-                        raw_display_handle,
-                        raw_window_handle,
-                    })
-                    .unwrap()
-            };
-            let gpu_context = GpuContext::new(instance, &surface).unwrap();
-            global_state.gpu.replace(Some(gpu_context));
-
-            surface
-        } else {
-            let gpu_context = global_state.gpu.borrow();
-            let gpu_context = gpu_context.as_ref().unwrap();
-            let instance = &gpu_context.instance;
-            let surface = unsafe {
-                instance
-                    .create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
-                        raw_display_handle,
-                        raw_window_handle,
-                    })
-                    .unwrap()
-            };
-            surface
-        };
-
-        let gpu_context = global_state.gpu.borrow();
-        let gpu_context = gpu_context.as_ref().unwrap();
-        let surface_caps = wgpu_surface.get_capabilities(&gpu_context.adapter);
-
-        let surface_format = surface_caps.formats[0];
-        let selected_alpha_mode = Self::select_alpha_mode(&surface_caps);
-        let config = wgpu::SurfaceConfiguration {
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: surface_format,
-
-            // width 和 height 指定 SurfaceTexture 的宽度和高度（物理像素，等于逻辑像素乘以屏幕缩放因子）
-            // 现在还无法获取到缩放因子，暂时设置为和逻辑尺寸相同大小
-            width: window_config.size.width,
-            height: window_config.size.height,
-
-            present_mode: surface_caps.present_modes[0],
-            desired_maximum_frame_latency: 2,
-            alpha_mode: selected_alpha_mode,
-            view_formats: vec![],
-        };
-
-        wgpu_surface.configure(&gpu_context.device, &config);
+        let (wgpu_surface, surface_config) = Self::create_wgpu_surface(global_state, &main_surface, physical_size);
 
         // 初始化分数缩放和视口
         let fractional_scale = global_state
@@ -205,7 +145,7 @@ impl AppWindow {
             Self::root_view_id(),
             main_surface.clone(),
             wgpu_surface,
-            config,
+            surface_config,
             main_size,
             1., // 此时还拿不到scale_factor
             None,
@@ -259,9 +199,9 @@ impl AppWindow {
         position: LogicalPosition<i32>,
         build_view: BuildViewFn,
         position_calculator: Option<Arc<crate::view::RelativePositionCalculator>>,
-    ) -> SurfaceId {
+    ) {
         let parent_surface = self.xdg_window.wl_surface().clone();
-        let (sub_surface_handle, surface) = global_state
+        let (subsurface, surface) = global_state
             .sub_compositor_state
             .create_subsurface(parent_surface, &global_state.queue_handle);
 
@@ -271,56 +211,17 @@ impl AppWindow {
             .map(|v| v.get_viewport(&surface, &global_state.queue_handle))
             .expect("Failed to retrieve viewport");
 
-        // Create the raw window handle for the surface.
-        let raw_display_handle = RawDisplayHandle::Wayland(WaylandDisplayHandle::new(
-            NonNull::new(global_state.connection.backend().display_ptr() as *mut _).unwrap(),
-        ));
-        let raw_window_handle = RawWindowHandle::Wayland(WaylandWindowHandle::new(
-            NonNull::new(surface.id().as_ptr() as *mut _).unwrap(),
-        ));
-
-        // 初始化 wgpu
-        let gpu_context = global_state.gpu.borrow();
-        let gpu_context = gpu_context.as_ref().unwrap();
-        let instance = &gpu_context.instance;
-        let wgpu_surface = unsafe {
-            instance
-                .create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
-                    raw_display_handle,
-                    raw_window_handle,
-                })
-                .unwrap()
-        };
-
-        let surface_caps = wgpu_surface.get_capabilities(&gpu_context.adapter);
-
-        let surface_format = surface_caps.formats[0];
-        let selected_alpha_mode = Self::select_alpha_mode(&surface_caps);
-
         let scale_factor = self.scale_factor().unwrap();
         let physical_size = size.to_physical(scale_factor);
-        let config = wgpu::SurfaceConfiguration {
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: surface_format,
 
-            // width 和 height 指定 SurfaceTexture 的宽度和高度（物理像素，等于逻辑像素乘以屏幕缩放因子）
-            width: physical_size.width,
-            height: physical_size.height,
+        let (wgpu_surface, surface_config) = Self::create_wgpu_surface(global_state, &surface, physical_size);
 
-            present_mode: surface_caps.present_modes[0],
-            desired_maximum_frame_latency: 2,
-            alpha_mode: selected_alpha_mode,
-            view_formats: vec![],
-        };
-
-        wgpu_surface.configure(&gpu_context.device, &config);
-
-        let mut subview = SubSurfaceView::new(
+        let subview = SubSurfaceView::new(
             id,
             surface.clone(),
             wgpu_surface,
-            config,
-            sub_surface_handle,
+            surface_config,
+            subsurface,
             size,
             scale_factor,
             Some(position),
@@ -328,17 +229,11 @@ impl AppWindow {
             build_view,
             position_calculator,
         );
-        let subview_id = SurfaceId(subview.view().surface().id());
-        subview.set_position(position);
-
-        subview.view_mut().surface().commit(); // Initial commit
 
         self.surface_id_to_view_id
-            .insert(subview.view().surface().id(), subview.view().id());
+            .insert(subview.surface_id(), subview.view().id());
         self.views
-            .insert(subview.view().id(), Some(Child(Box::new(subview))));
-
-        subview_id
+            .insert(subview.view_id(), Some(Child(Box::new(subview))));
     }
 
     fn select_alpha_mode(surface_caps: &SurfaceCapabilities) -> CompositeAlphaMode {
@@ -412,52 +307,12 @@ impl AppWindow {
             .map(|v| v.get_viewport(surface, &global_state.queue_handle))
             .expect("Failed to retrieve viewport");
 
-        // Create the raw window handle for the surface.
-        let raw_display_handle = RawDisplayHandle::Wayland(WaylandDisplayHandle::new(
-            NonNull::new(global_state.connection.backend().display_ptr() as *mut _).unwrap(),
-        ));
-        let raw_window_handle = RawWindowHandle::Wayland(WaylandWindowHandle::new(
-            NonNull::new(surface.id().as_ptr() as *mut _).unwrap(),
-        ));
-
-        // 初始化 wgpu
-        let gpu_context = global_state.gpu.borrow();
-        let gpu_context = gpu_context.as_ref().unwrap();
-        let instance = &gpu_context.instance;
-        let wgpu_surface = unsafe {
-            instance
-                .create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
-                    raw_display_handle,
-                    raw_window_handle,
-                })
-                .unwrap()
-        };
-
         // 暂时先随便设置一个尺寸，真正的尺寸需要等xdg_popup的configure事件通知
         let default_logical_size = LogicalSize::new(120, 48);
         let default_physical_size =
             default_logical_size.to_physical(self.scale_factor.unwrap_or(1.));
 
-        let surface_caps = wgpu_surface.get_capabilities(&gpu_context.adapter);
-
-        let surface_format = surface_caps.formats[0];
-        let selected_alpha_mode = Self::select_alpha_mode(&surface_caps);
-        let config = wgpu::SurfaceConfiguration {
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: surface_format,
-
-            // width 和 height 指定 SurfaceTexture 的宽度和高度（物理像素，等于逻辑像素乘以屏幕缩放因子）
-            width: default_physical_size.width,
-            height: default_physical_size.height,
-
-            present_mode: surface_caps.present_modes[0],
-            desired_maximum_frame_latency: 2,
-            alpha_mode: selected_alpha_mode,
-            view_formats: vec![],
-        };
-
-        wgpu_surface.configure(&gpu_context.device, &config);
-
+        let (wgpu_surface, surface_config) = Self::create_wgpu_surface(&global_state, surface, default_physical_size);
         let scale_factor = self.scale_factor.unwrap();
         let mut popup_view = XdgPopupView::new(
             id,
@@ -465,7 +320,7 @@ impl AppWindow {
             popup,
             positioner,
             wgpu_surface,
-            config,
+            surface_config,
             default_logical_size,
             scale_factor,
             viewport,
@@ -481,6 +336,78 @@ impl AppWindow {
             .insert(popup_view.view().id(), Some(Pop(Box::new(popup_view))));
 
         subview_id
+    }
+
+    fn create_wgpu_surface(
+        global_state: &GlobalState,
+        surface: &WlSurface,
+        surface_size: PhysicalSize<u32>,
+    ) -> (WgpuSurface<'static>, SurfaceConfiguration) {
+        // Create the raw window handle for the surface.
+        let raw_display_handle = RawDisplayHandle::Wayland(WaylandDisplayHandle::new(
+            NonNull::new(global_state.connection.backend().display_ptr() as *mut _).unwrap(),
+        ));
+        let raw_window_handle = RawWindowHandle::Wayland(WaylandWindowHandle::new(
+            NonNull::new(surface.id().as_ptr() as *mut _).unwrap(),
+        ));
+
+        // 初始化 wgpu
+        let wgpu_initialized = global_state.gpu.borrow().as_ref().is_some();
+        let wgpu_surface = if !wgpu_initialized {
+            let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+                backends: wgpu::Backends::all(),
+                ..Default::default()
+            });
+
+            let surface = unsafe {
+                instance
+                    .create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
+                        raw_display_handle,
+                        raw_window_handle,
+                    })
+                    .unwrap()
+            };
+            let gpu_context = GpuContext::new(instance, &surface).unwrap();
+            global_state.gpu.replace(Some(gpu_context));
+
+            surface
+        } else {
+            let gpu_context = global_state.gpu.borrow();
+            let gpu_context = gpu_context.as_ref().unwrap();
+            let instance = &gpu_context.instance;
+            let surface = unsafe {
+                instance
+                    .create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
+                        raw_display_handle,
+                        raw_window_handle,
+                    })
+                    .unwrap()
+            };
+            surface
+        };
+
+        let gpu_context = global_state.gpu.borrow();
+        let gpu_context = gpu_context.as_ref().unwrap();
+
+        let surface_caps = wgpu_surface.get_capabilities(&gpu_context.adapter);
+        let surface_format = surface_caps.formats[0];
+        let selected_alpha_mode = Self::select_alpha_mode(&surface_caps);
+        let config = SurfaceConfiguration {
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            format: surface_format,
+
+            // width 和 height 指定 SurfaceTexture 的宽度和高度（物理像素，等于逻辑像素乘以屏幕缩放因子）
+            width: surface_size.width,
+            height: surface_size.height,
+
+            present_mode: surface_caps.present_modes[0],
+            desired_maximum_frame_latency: 2,
+            alpha_mode: selected_alpha_mode,
+            view_formats: vec![],
+        };
+
+        wgpu_surface.configure(&gpu_context.device, &config);
+        (wgpu_surface, config)
     }
 
     pub fn handle_pointer_event(
@@ -696,7 +623,8 @@ impl AppWindow {
                     }
                     Command::ResizeView(id, new_size) => {
                         let mut gpu_context = app.global_state.gpu.borrow_mut();
-                        let gpu_context = gpu_context.as_mut().expect("GPU context not initialized!");
+                        let gpu_context =
+                            gpu_context.as_mut().expect("GPU context not initialized!");
                         let view = self.views.get_mut(&id);
                         if let Some(view) = view {
                             if let Some(view) = view.as_mut() {
