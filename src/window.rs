@@ -207,6 +207,8 @@ impl AppWindow {
             wgpu_surface,
             config,
             main_size,
+            1., // 此时还拿不到scale_factor
+            None,
             main_viewport,
             build_root_view,
         );
@@ -294,14 +296,16 @@ impl AppWindow {
 
         let surface_format = surface_caps.formats[0];
         let selected_alpha_mode = Self::select_alpha_mode(&surface_caps);
+
+        let scale_factor = self.scale_factor().unwrap();
+        let physical_size = size.to_physical(scale_factor);
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,
 
             // width 和 height 指定 SurfaceTexture 的宽度和高度（物理像素，等于逻辑像素乘以屏幕缩放因子）
-            // 现在还无法获取到缩放因子，暂时设置为和逻辑尺寸相同大小
-            width: size.width,
-            height: size.height,
+            width: physical_size.width,
+            height: physical_size.height,
 
             present_mode: surface_caps.present_modes[0],
             desired_maximum_frame_latency: 2,
@@ -318,6 +322,8 @@ impl AppWindow {
             config,
             sub_surface_handle,
             size,
+            scale_factor,
+            Some(position),
             viewport,
             build_view,
             position_calculator,
@@ -356,6 +362,9 @@ impl AppWindow {
         xdg_shell_state.xdg_wm_base().create_positioner(qh, ())
     }
 
+    /// 创建xdg-popup
+    /// 需要注意：positioner的anchor_rect必须是root-view上的有效区域，
+    /// 也就是弹窗必须和xdg-toplevel挨着，不让弹窗不显示
     pub fn create_xdg_popup_view(
         &mut self,
         id: ViewId,
@@ -449,6 +458,7 @@ impl AppWindow {
 
         wgpu_surface.configure(&gpu_context.device, &config);
 
+        let scale_factor = self.scale_factor.unwrap();
         let mut popup_view = XdgPopupView::new(
             id,
             surface.clone(),
@@ -457,6 +467,7 @@ impl AppWindow {
             wgpu_surface,
             config,
             default_logical_size,
+            scale_factor,
             viewport,
             build_view,
         );
@@ -470,22 +481,6 @@ impl AppWindow {
             .insert(popup_view.view().id(), Some(Pop(Box::new(popup_view))));
 
         subview_id
-    }
-
-    fn get_view_ref(app_view: &AppView) -> &dyn View {
-        match app_view {
-            Root(view) => view.deref(),
-            Child(sub_view) => sub_view.view(),
-            Pop(popup_view) => popup_view.view(),
-        }
-    }
-
-    fn get_view_ref_mut(app_view: &mut AppView) -> &mut dyn View {
-        match app_view {
-            Root(view) => view.deref_mut(),
-            Child(sub_view) => sub_view.view_mut(),
-            Pop(popup_view) => popup_view.view_mut(),
-        }
     }
 
     pub fn handle_pointer_event(
@@ -513,7 +508,7 @@ impl AppWindow {
             return;
         };
         let app_view = self.views.get_mut(view_id).unwrap().as_mut().unwrap();
-        let view = Self::get_view_ref_mut(app_view);
+        let view = app_view.get_view_ref_mut();
         view.handle_pointer_event(event, globals);
     }
 
@@ -526,21 +521,24 @@ impl AppWindow {
     ) {
         self.serial_tracker.update(SerialKind::KeyPress, serial);
         self.views.values_mut().for_each(|app_view| {
-            let view = Self::get_view_ref_mut(app_view.as_mut().unwrap());
+            let app_view = app_view.as_mut().unwrap();
+            let view = app_view.get_view_ref_mut();
             view.handle_keyboard_event(event.clone(), pressed, repeat);
         });
     }
 
     pub fn update_modifiers(&mut self, modifiers: sctk::seat::keyboard::Modifiers) {
         self.views.values_mut().for_each(|app_view| {
-            let view = Self::get_view_ref_mut(app_view.as_mut().unwrap());
+            let app_view = app_view.as_mut().unwrap();
+            let view = app_view.get_view_ref_mut();
             view.update_modifiers(modifiers.clone());
         });
     }
 
     pub fn handle_ime_event(&mut self, event: &ImeEvent) {
         self.views.values_mut().for_each(|app_view| {
-            let view = Self::get_view_ref_mut(app_view.as_mut().unwrap());
+            let app_view = app_view.as_mut().unwrap();
+            let view = app_view.get_view_ref_mut();
             view.handle_ime_event(event);
         });
     }
@@ -570,13 +568,15 @@ impl AppWindow {
         }
 
         self.views.values_mut().for_each(|app_view| {
-            let view = Self::get_view_ref_mut(app_view.as_mut().unwrap());
+            let app_view = app_view.as_mut().unwrap();
+            let view = app_view.get_view_ref_mut();
             view.set_scale_factor(new_scale_factor, gpu);
         });
 
         let root_view_id = Self::root_view_id();
         let root_view = self.views.get(&root_view_id);
-        let view = Self::get_view_ref(root_view.as_ref().unwrap().as_ref().unwrap());
+        let root_view = root_view.unwrap();
+        let view = root_view.as_ref().unwrap().get_view_ref();
         let parent_surface_size = view.viewport_size();
         self.views
             .values_mut()
@@ -600,7 +600,7 @@ impl AppWindow {
         let mut root_view = self.views.get_mut(&root_view_id);
         let root_view = root_view.as_mut().unwrap();
         let root_view = root_view.as_mut().unwrap();
-        let view = Self::get_view_ref_mut(root_view);
+        let view = root_view.get_view_ref_mut();
 
         view.resize(new_size, gpu);
 
@@ -664,7 +664,7 @@ impl AppWindow {
                 _ => (),
             }
 
-            let view = Self::get_view_ref_mut(&mut app_view);
+            let view = app_view.get_view_ref_mut();
             let output = view.draw(app, self);
 
             let surface_id = view.surface().id().clone();
@@ -686,25 +686,33 @@ impl AppWindow {
             while let Some(command) = self.window_context.commands.pop_front() {
                 match command {
                     Command::HideView(id) => {
-                        // let view = self.views.get_mut(&view_id);
-                        // if let Some(view) = view {
-                        //     if let Some(mut view) = view.as_mut() {
-                        //         let view = Self::get_view_ref_mut(&mut view);
-                        //         view.set_visible(false);
-                        //     }
-                        // }
+                        let view = self.views.get_mut(&id);
+                        if let Some(view) = view {
+                            if let Some(view) = view.as_mut() {
+                                let view = view.get_view_ref_mut();
+                                view.set_visible(false);
+                            }
+                        }
                     }
-                    Command::RelocateSubView(id) => {
-                        // let view = self.views.get_mut(&view_id);
-                        // if let Some(view) = view {
-                        //     if let Some(mut view) = view.as_mut() {
-                        //         match view {
-                        //             Child(sub_view) => {
-                        //                 sub_view.position_calculator()
-                        //             }
-                        //         }
-                        //     }
-                        // }
+                    Command::ResizeView(id, new_size) => {
+                        let mut gpu_context = app.global_state.gpu.borrow_mut();
+                        let gpu_context = gpu_context.as_mut().expect("GPU context not initialized!");
+                        let view = self.views.get_mut(&id);
+                        if let Some(view) = view {
+                            if let Some(view) = view.as_mut() {
+                                match view {
+                                    Root(view) => {
+                                        view.resize(new_size, gpu_context);
+                                    }
+                                    Child(sub_view) => {
+                                        sub_view.view_mut().resize(new_size, gpu_context);
+                                    }
+                                    Pop(popup_view) => {
+                                        popup_view.view_mut().resize(new_size, gpu_context);
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -837,7 +845,7 @@ impl AppWindow {
         let app_view = self.views.get_mut(view_id);
         if let Some(app_view) = app_view {
             if let Some(app_view) = app_view {
-                let view = Self::get_view_ref_mut(app_view);
+                let view = app_view.get_view_ref_mut();
                 view.set_visible(visible);
             }
         }

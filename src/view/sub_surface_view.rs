@@ -23,6 +23,8 @@ impl<'window> SubSurfaceView<'window> {
         wgpu_surface_configuration: egui_wgpu::wgpu::SurfaceConfiguration,
         subsurface: WlSubsurface,
         size: LogicalSize<u32>,
+        scale_factor: f64,
+        position: Option<LogicalPosition<i32>>,
         viewport: WpViewport,
         build_view: BuildViewFn,
         position_calculator: Option<Arc<crate::view::RelativePositionCalculator>>,
@@ -33,6 +35,8 @@ impl<'window> SubSurfaceView<'window> {
             wgpu_surface,
             wgpu_surface_configuration,
             size,
+            scale_factor,
+            position,
             viewport,
             build_view,
         );

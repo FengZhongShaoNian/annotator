@@ -17,7 +17,7 @@ pub struct WindowContext {
 
 pub enum Command {
     HideView(ViewId),
-    RelocateSubView(ViewId),
+    ResizeView(ViewId, LogicalSize<u32>),
 }
 
 impl Default for WindowContext {

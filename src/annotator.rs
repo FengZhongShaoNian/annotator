@@ -180,6 +180,9 @@ pub struct AnnotatorState {
 }
 
 impl AnnotatorState {
+    pub fn annotator_panel_id() -> ViewId {
+        "annotator-panel".into()
+    }
     pub fn primary_toolbar_id() -> ViewId {
         "primary-toolbar".into()
     }

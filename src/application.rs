@@ -36,6 +36,7 @@ use wayland_client::protocol::{wl_output, wl_surface};
 use wayland_client::{
     Connection, Dispatch, EventQueue, Proxy, QueueHandle, delegate_dispatch, delegate_noop,
 };
+use wayland_client::protocol::wl_region::WlRegion;
 use wayland_protocols::wp::cursor_shape::v1::client::wp_cursor_shape_device_v1::WpCursorShapeDeviceV1;
 use wayland_protocols::wp::cursor_shape::v1::client::wp_cursor_shape_manager_v1::WpCursorShapeManagerV1;
 use wayland_protocols::wp::text_input::zv3::client::zwp_text_input_v3::{
@@ -255,6 +256,7 @@ delegate_registry!(Application);
 delegate_compositor!(Application);
 delegate_subcompositor!(Application);
 delegate_output!(Application);
+delegate_noop!(Application: ignore  WlRegion);
 
 delegate_xdg_shell!(Application);
 delegate_xdg_popup!(Application);

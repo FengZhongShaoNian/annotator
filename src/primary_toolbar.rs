@@ -3,48 +3,29 @@ use crate::annotator::rectangle::RectangleState;
 use crate::annotator::svg_button::SvgButton;
 use crate::annotator::{AnnotatorState, ToolType};
 use crate::application::Application;
-use crate::dpi::{LogicalSize, PhysicalPosition, PhysicalSize};
+use crate::dpi::{LogicalPosition, LogicalSize};
 use crate::global::ReadGlobal;
 use crate::icon::Icons;
 use crate::view::ViewId;
 use crate::window::AppWindow;
 use egui::{vec2, Color32, Frame};
 use std::any::TypeId;
-use std::sync::Arc;
 
-pub fn create_primary_toolbar<'a, 'w>(
+pub fn create_primary_toolbar(
     view_id: ViewId,
     app: &mut Application,
     window: &mut AppWindow,
-    root_view_size: LogicalSize<u32>,
+    toolbar_size: LogicalSize<u32>,
+    toolbar_positon: LogicalPosition<i32>,
 ) {
-    let position_calculator = Arc::new(
-        |parent_surface_size: &PhysicalSize<u32>, subview_size: &PhysicalSize<u32>| {
-            let subview_width = &subview_size.width;
-            PhysicalPosition::new(
-                parent_surface_size.width - subview_width,
-                parent_surface_size.height + 10,
-            )
-        },
-    );
-
     let global_state = &app.global_state;
-
-    let toolbar_size = LogicalSize::new(600, 32);
-
-    let scale_factor = window.scale_factor().unwrap();
-    let physical_position = position_calculator(
-        &root_view_size.to_physical(scale_factor),
-        &toolbar_size.to_physical(scale_factor),
-    );
-    let logical_position = physical_position.to_logical(scale_factor);
 
     // 创建工具条
     window.create_sub_surface_view(
         view_id,
         global_state,
         toolbar_size,
-        logical_position,
+        toolbar_positon,
         Box::new(|input, egui_ctx, app, window, current_view| {
             // 构建 UI 的具体内容
             egui_ctx.run(input, move |ctx| {
@@ -373,6 +354,6 @@ pub fn create_primary_toolbar<'a, 'w>(
                     });
             })
         }),
-        Some(position_calculator),
+        None,
     );
 }

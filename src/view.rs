@@ -1,3 +1,4 @@
+use std::ops::{Deref, DerefMut};
 use crate::application::{Application, GlobalState};
 use crate::dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize};
 use crate::gpu::GpuContext;
@@ -7,6 +8,7 @@ use sctk::shell::xdg::popup::Popup;
 use std::sync::Arc;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_protocols::wp::viewporter::client::wp_viewport::WpViewport;
+use crate::view::AppView::{Child, Pop, Root};
 
 pub mod sub_surface_view;
 pub mod surface_view;
@@ -100,4 +102,22 @@ pub enum AppView {
     Root(Box<dyn View>),
     Child(Box<dyn SubView>),
     Pop(Box<dyn PopupView>),
+}
+
+impl AppView {
+    pub fn get_view_ref(self: &AppView) -> &dyn View {
+        match self {
+            Root(view) => view.deref(),
+            Child(sub_view) => sub_view.view(),
+            Pop(popup_view) => popup_view.view(),
+        }
+    }
+
+    pub fn get_view_ref_mut(self: &mut AppView) -> &mut dyn View {
+        match self {
+            Root(view) => view.deref_mut(),
+            Child(sub_view) => sub_view.view_mut(),
+            Pop(popup_view) => popup_view.view_mut(),
+        }
+    }
 }

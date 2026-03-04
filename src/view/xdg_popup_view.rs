@@ -24,6 +24,7 @@ impl<'window> XdgPopupView<'window> {
         wgpu_surface: Surface<'window>,
         wgpu_surface_configuration: egui_wgpu::wgpu::SurfaceConfiguration,
         size: LogicalSize<u32>,
+        scale_factor: f64,
         viewport: WpViewport,
         build_view: BuildViewFn,
     ) -> Self {
@@ -33,6 +34,8 @@ impl<'window> XdgPopupView<'window> {
             wgpu_surface,
             wgpu_surface_configuration,
             size,
+            scale_factor,
+            None,
             viewport,
             build_view,
         );
