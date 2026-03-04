@@ -9,7 +9,7 @@ use crate::global::Global;
 use egui::{pos2, vec2, Color32, CornerRadius, CursorIcon, Painter, Pos2, Rect, Response, Shape, Stroke, StrokeKind, TextureHandle, Ui, Widget};
 use std::any::Any;
 use std::cmp::max;
-use std::ops::Add;
+use std::ops::{Add, Sub};
 use crate::view::ViewId;
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
@@ -566,7 +566,15 @@ pub trait PainterExt {
     /// 为一个矩形绘制各个角以及边上的小矩形
     fn small_rects(&self, rect: &Rect);
 
-    /// 绘制矩形
+    /// 绘制矩形，支持填充和不同风格的边框
+    ///
+    /// # 参数
+    /// - `painter`: egui 绘制器
+    /// - `rect`: 矩形区域（填充区域）
+    /// - `fill_color`: 填充颜色
+    /// - `stroke`: 边框样式（颜色、宽度）
+    /// - `stroke_kind`: 边框对齐方式（Inside / Outside / Middle）
+    /// - `stroke_type`: 线条类型（实线 / 虚线 / 点线）
     fn rectangle(&self, rect: &Rect,
                         fill_color: impl Into<Color32>,
                         stroke: impl Into<Stroke>,
@@ -607,62 +615,86 @@ impl PainterExt for Painter {
                         stroke: impl Into<Stroke>,
                         stroke_kind: StrokeKind,
                         stroke_type: StrokeType) {
-
+        let painter = self;
+        let fill_color = fill_color.into();
         let stroke = stroke.into();
-        let path = match stroke_kind {
-            StrokeKind::Middle => {
-                let half_stroke_width = stroke.width / 2.0;
-                let stroke_rect = rect.expand(half_stroke_width);
-                vec![
-                    stroke_rect.left_top(),
-                    stroke_rect.right_top(),
-                    stroke_rect.right_bottom(),
-                    stroke_rect.left_bottom(),
-                    stroke_rect.left_top(),
-                ]
-            }
-            StrokeKind::Inside => {
-                let stroke_width = stroke.width;
-                let stroke_rect = rect.expand(-stroke_width);
-                vec![
-                    stroke_rect.left_top(),
-                    stroke_rect.right_top(),
-                    stroke_rect.right_bottom(),
-                    stroke_rect.left_bottom(),
-                    stroke_rect.left_top(),
-                ]
-            }
-            StrokeKind::Outside => {
-                let stroke_width = stroke.width;
-                let stroke_rect = rect.expand(stroke_width);
-                vec![
-                    stroke_rect.left_top(),
-                    stroke_rect.right_top(),
-                    stroke_rect.right_bottom(),
-                    stroke_rect.left_bottom(),
-                    stroke_rect.left_top(),
-                ]
-            }
+
+        // 1. 绘制填充矩形
+        painter.rect_filled(*rect, 0.0, fill_color);
+
+        // 2. 根据对齐方式计算边框路径所在的矩形
+        let half_width = stroke.width / 2.0;
+        let path_rect = match stroke_kind {
+            StrokeKind::Inside => rect.shrink(half_width),
+            StrokeKind::Outside => rect.expand(half_width),
+            StrokeKind::Middle => *rect,
         };
 
-        let shapes = match stroke_type {
+        // 3. 绘制边框
+        match stroke_type {
             StrokeType::SolidLine => {
-                vec![
-                    Shape::line(vec![path[0], path[1]], stroke),
-                    Shape::line(vec![path[1], path[2]], stroke),
-                    Shape::line(vec![path[2], path[3]], stroke),
-                    Shape::line(vec![path[3], path[0]], stroke),
-                ]
+                // 实线直接用 rect_stroke
+                painter.rect_stroke(path_rect, 0.0, stroke, stroke_kind);
             }
             StrokeType::DashedLine => {
-                Shape::dashed_line(&path, stroke, max(5, (stroke.width*2.).ceil() as i32) as f32, max(5, (stroke.width*2.).ceil() as i32) as f32)
+                // 虚线：使用 dashed_line，自定义 dash 和 gap 长度
+                let dash_len = if stroke.width * 3. < 6. { 6. } else { stroke.width * 3. };
+                let gap_len = dash_len;
+                draw_dashed_rect(painter, path_rect, stroke, dash_len, gap_len);
             }
             StrokeType::DottedLine => {
-                Shape::dotted_line(&path, stroke.color, max(5, (stroke.width*2.).ceil() as i32) as f32, stroke.width/2.)
+                // 点线：使用 dotted_line，根据线宽计算点间距和半径
+                let spacing = stroke.width * 2.0;   // 点间距
+                let radius = stroke.width / 2.0;     // 点半径
+                draw_dotted_rect(painter, path_rect, stroke.color, spacing, radius);
             }
-        };
+        }
+    }
+}
 
-        self.add(Shape::rect_filled(rect.clone(), 0., fill_color));
-        self.add(shapes);
+/// 绘制矩形的虚线边框
+fn draw_dashed_rect(painter: &Painter, rect: Rect, stroke: Stroke, dash_len: f32, gap_len: f32) {
+    let [left, right, top, bottom] = [
+        rect.left(),
+        rect.right(),
+        rect.top(),
+        rect.bottom(),
+    ];
+
+    let edges = [
+        (Pos2::new(left, top), Pos2::new(right, top)),     // 上边
+        (Pos2::new(right, top), Pos2::new(right, bottom)), // 右边
+        (Pos2::new(right, bottom), Pos2::new(left, bottom)), // 下边
+        (Pos2::new(left, bottom), Pos2::new(left, top)),   // 左边
+    ];
+
+    for (start, end) in edges {
+        let shape = Shape::dashed_line(&[start, end], stroke, dash_len, gap_len);
+        painter.add(shape);
+    }
+}
+
+/// 绘制矩形的点线边框
+fn draw_dotted_rect(painter: &Painter, rect: Rect, color: Color32, spacing: f32, radius: f32) {
+    let [left, right, top, bottom] = [
+        rect.left(),
+        rect.right(),
+        rect.top(),
+        rect.bottom(),
+    ];
+
+    let edges = [
+        (Pos2::new(left, top), Pos2::new(right, top)),     // 上边
+        (Pos2::new(right, top), Pos2::new(right, bottom)), // 右边
+        (Pos2::new(right, bottom), Pos2::new(left, bottom)), // 下边
+        (Pos2::new(left, bottom), Pos2::new(left, top)),   // 左边
+    ];
+
+    for (start, end) in edges {
+        // dotted_line 返回 Vec<Shape>，需要逐个添加
+        let shapes = Shape::dotted_line(&[start, end], color, spacing, radius);
+        for shape in shapes {
+            painter.add(shape);
+        }
     }
 }
