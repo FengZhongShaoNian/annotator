@@ -1,12 +1,10 @@
 use crate::annotator::cursor::Crosshair;
-use crate::annotator::{Annotation, AnnotatorState, DragAction, HitTarget, HitTest, PainterExt, SmallRect, StrokeType, ToolType};
-use egui::epaint::{EllipseShape, RectShape};
-use egui::{
-    Color32, CornerRadius, CursorIcon, Pos2, Rangef, Rect, Response, Sense, Shape, Stroke,
-    StrokeKind, Ui, Widget, pos2, vec2,
-};
-use log::debug;
-use std::ops::Add;
+use crate::annotator::{Annotation, AnnotatorState, DragAction, HitTarget, HitTest, PainterExt};
+use egui::epaint::EllipseShape;
+use egui::{vec2, Color32, CursorIcon, Id, Pos2, Rect, Response, Sense, Stroke, Ui, Widget};
+use std::cell::RefCell;
+use std::rc::Weak;
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Copy, Clone)]
 pub struct EllipseStyle {
@@ -50,13 +48,7 @@ impl EllipseState {
     }
 }
 
-impl Annotation for EllipseState {
-    fn show(&self, ui: &mut Ui) -> Response {
-        ui.add(self.clone())
-    }
-}
-
-impl Widget for EllipseState {
+impl Widget for &mut EllipseState {
     fn ui(self, ui: &mut Ui) -> Response {
         let response = ui.allocate_rect(self.rect, Sense::hover());
         let painter = ui.painter();
@@ -83,7 +75,7 @@ impl Widget for EllipseState {
     }
 }
 
-pub struct EllipseAnnotationToolState {
+pub struct EllipseToolState {
     /// 矩形的样式配置
     pub style: EllipseStyle,
     /// 当前的标注
@@ -92,7 +84,7 @@ pub struct EllipseAnnotationToolState {
     drag_action: DragAction,
 }
 
-impl Default for EllipseAnnotationToolState {
+impl Default for EllipseToolState {
     fn default() -> Self {
         Self {
             style: Default::default(),
@@ -102,28 +94,166 @@ impl Default for EllipseAnnotationToolState {
     }
 }
 
-pub struct EllipseAnnotationTool<'a> {
-    annotator_state: &'a mut AnnotatorState,
+pub struct EllipseTool {
+    annotator_state: Weak<RefCell<AnnotatorState>>,
+    tool_state: EllipseToolState,
 }
 
-impl<'a> EllipseAnnotationTool<'a> {
-    pub fn new(annotator_state: &'a mut AnnotatorState) -> Self {
-        Self { annotator_state }
+
+const MAX_STROKE_WIDTH: f32 = 62.;
+
+fn hit_test(annotation: &Option<&EllipseState>, pointer_pos: &Pos2) -> Option<HitTarget> {
+    match annotation {
+        Some(ellipse_state) => Some(
+            ellipse_state
+                .rect
+                .hit_test(&pointer_pos, ellipse_state.style.stroke.width),
+        ),
+        _ => None,
+    }
+}
+
+impl EllipseTool {
+    pub fn new(annotator_state: Weak<RefCell<AnnotatorState>>) -> Self {
+        Self {
+            annotator_state,
+            tool_state: Default::default(),
+        }
     }
 
-    fn hit_test(annotation: &Option<&EllipseState>, pos: Pos2) -> Option<HitTarget> {
-        match annotation {
-            Some(rectangle_state) => Some(
-                rectangle_state
-                    .rect
-                    .hit_test(&pos, rectangle_state.style.stroke.width),
-            ),
-            _ => None,
+    fn increase_stroke(&mut self) {
+        let tool_state = &mut self.tool_state;
+        if tool_state.style.stroke.width + 1. < MAX_STROKE_WIDTH {
+            tool_state.style.stroke.width += 1.;
+        }
+    }
+
+    fn decrease_stroke(&mut self) {
+        let tool_state = &mut self.tool_state;
+        if tool_state.style.stroke.width - 1. > 0. {
+            tool_state.style.stroke.width -= 1.;
+        }
+    }
+
+    fn peek_ellipse_annotation<F, R>(&self, func: F) -> Option<R>
+    where
+        F: Fn(Option<&EllipseState>) -> Option<R>,
+    {
+        let annotator_state = self.annotator_state.upgrade().unwrap();
+        let annotator_state = annotator_state.borrow();
+        // 从标注栈的栈顶中获取最近的一个椭圆标注
+        let ellipse_annotation_on_stack_top = annotator_state
+            .annotations_stack
+            .last()
+            .map(|annotation| match annotation {
+                Annotation::Ellipse(ellipse_state) => Some(ellipse_state),
+                _ => None,
+            })
+            .flatten();
+        func(ellipse_annotation_on_stack_top)
+    }
+
+    fn peek_ellipse_annotation_mut<F, R>(&self, func: F) -> Option<R>
+    where
+        F: Fn(Option<&mut EllipseState>) -> Option<R>,
+    {
+        let annotator_state = self.annotator_state.upgrade().unwrap();
+        let mut annotator_state = annotator_state.borrow_mut();
+        // 从标注栈的栈顶中获取最近的一个椭圆标注
+        let ellipse_annotation_on_stack_top = annotator_state
+            .annotations_stack
+            .last_mut()
+            .map(|annotation| match annotation {
+                Annotation::Ellipse(ellipse_state) => Some(ellipse_state),
+                _ => None,
+            })
+            .flatten();
+        func(ellipse_annotation_on_stack_top)
+    }
+
+    fn pop_rectangle_annotation(&self) -> Option<EllipseState> {
+        let annotator_state = self.annotator_state.upgrade().unwrap();
+        // 从标注栈的栈顶中获取最近的一个椭圆标注
+        annotator_state
+            .borrow_mut()
+            .annotations_stack
+            .pop()
+            .map(|annotation| match annotation {
+                Annotation::Ellipse(ellipse_state) => Some(ellipse_state),
+                _ => None,
+            })
+            .flatten()
+    }
+
+    fn handle_wheel_event(&mut self, ui: &mut Ui) {
+        // 滚动鼠标滚轮调整线条大小
+        let scroll_delta = ui.ctx().input(|i| i.smooth_scroll_delta);
+        if scroll_delta != egui::Vec2::ZERO {
+            ui.ctx().memory_mut(|memory| {
+                let id = Id::from("EllipseAnnotationTool.wheel.instant");
+                let now = Instant::now();
+                if let Some(previous_scroll) = memory.data.get_temp::<Instant>(id) {
+                    let duration = now.checked_duration_since(previous_scroll);
+                    if let Some(duration) = duration {
+                        if duration > Duration::from_millis(300) {
+                            if scroll_delta.y > 0. {
+                                self.decrease_stroke();
+                            } else if scroll_delta.y < 0. {
+                                self.increase_stroke();
+                            }
+                            memory.data.insert_temp(id, now);
+                        }
+                    }
+                } else {
+                    if scroll_delta.y > 0. {
+                        self.decrease_stroke();
+                    } else if scroll_delta.y < 0. {
+                        self.increase_stroke();
+                    }
+                    memory.data.insert_temp(id, Instant::now());
+                }
+            });
+        }
+    }
+
+    fn update_cursor_icon(&self, ui: &mut Ui) {
+        let Some(pointer_pos) = ui.ctx().pointer_hover_pos() else {
+            return;
+        };
+        // 从标注栈的栈顶中获取最近的一个椭圆标注
+        let hit_target = self.peek_ellipse_annotation(|ellipse_annotation_on_stack_top| {
+            // 判断当前鼠标是否位于此椭圆标注上
+            hit_test(&ellipse_annotation_on_stack_top, &pointer_pos)
+        });
+
+        if let Some(hit_target) = hit_target {
+            let cursor_icon = hit_target.get_cursor();
+            if let Some(cursor_icon) = cursor_icon {
+                ui.ctx().set_cursor_icon(cursor_icon);
+            } else {
+                ui.ctx().set_cursor_icon(CursorIcon::None);
+                // 绘制自定义光标
+                Crosshair::new(
+                    pointer_pos,
+                    Color32::RED,
+                    self.tool_state.style.stroke.width,
+                )
+                    .paint_with(ui.painter());
+            }
+        } else {
+            ui.ctx().set_cursor_icon(CursorIcon::None);
+            // 绘制自定义光标
+            Crosshair::new(
+                pointer_pos,
+                Color32::RED,
+                self.tool_state.style.stroke.width,
+            )
+                .paint_with(ui.painter());
         }
     }
 }
 
-impl Widget for EllipseAnnotationTool<'_> {
+impl Widget for &mut EllipseTool {
     fn ui(self, ui: &mut Ui) -> Response {
         let sense_area = Rect::from_min_size(Pos2::ZERO, ui.available_size());
         let response = ui.allocate_rect(sense_area, Sense::click_and_drag());
@@ -132,128 +262,111 @@ impl Widget for EllipseAnnotationTool<'_> {
             return response;
         };
 
-        let annotator_state = self.annotator_state;
-        // 从标注栈的栈顶中获取最近的一个椭圆标注
-        let last_annotation = annotator_state
-            .annotations_stack
-            .last()
-            .map(|annotation| annotation.downcast_ref::<EllipseState>())
-            .flatten();
+        // 滚动鼠标滚轮调整线条大小
+        self.handle_wheel_event(ui);
 
-        {
-            // 检测鼠标碰撞并绘制光标
-
-            // 判断当前鼠标是否位于此椭圆标注上
-            let hit_target = Self::hit_test(&last_annotation, pointer_pos);
-
-            if let Some(hit_target) = hit_target {
-                let cursor_icon = hit_target.get_cursor();
-                if let Some(cursor_icon) = cursor_icon {
-                    ui.ctx().set_cursor_icon(cursor_icon);
-                } else {
-                    ui.ctx().set_cursor_icon(CursorIcon::None);
-                    // 绘制自定义光标
-                    Crosshair::new(pointer_pos, Color32::RED, 1.0).paint_with(ui.painter());
-                }
-            } else {
-                ui.ctx().set_cursor_icon(CursorIcon::None);
-                // 绘制自定义光标
-                Crosshair::new(pointer_pos, Color32::RED, 1.0).paint_with(ui.painter());
-            }
-        }
-
-        let tool_state = &mut annotator_state.ellipse_annotation_tool_state;
+        // 检测鼠标碰撞并绘制光标
+        self.update_cursor_icon(ui);
 
         if response.drag_started() {
             // 拖动开始
-            let drag_started_pos = ui.ctx().input(|i| i.pointer.press_origin()).unwrap();
-            let hit_target = Self::hit_test(&last_annotation, drag_started_pos);
+            // 从标注栈的栈顶中获取最近的一个椭圆标注
+
+            let drag_started_pos =
+                ui.ctx().input(|i| i.pointer.press_origin()).unwrap();
+
+            let hit_target = self.peek_ellipse_annotation(|ellipse_annotation_on_stack_top| {
+                // 判断当前鼠标是否位于此椭圆标注上
+                hit_test(&ellipse_annotation_on_stack_top, &drag_started_pos)
+            });
+
             match hit_target {
                 Some(hit_target)
-                    if hit_target != HitTarget::Inside && hit_target != HitTarget::Outside =>
-                {
-                    // 调整现有的标注
-                    let mut annotation = annotator_state
-                        .annotations_stack
-                        .pop()
-                        .map(|annotation| annotation.downcast::<EllipseState>().ok())
-                        .flatten()
-                        .map(|state| state.clone())
-                        .unwrap();
-                    annotation.active = true;
-                    tool_state.current_annotation = Some(*annotation);
-                    tool_state.drag_action = hit_target.get_drag_action();
-                }
-                _ => {
-                    if last_annotation.is_some() {
-                        // 把栈顶的椭圆标注设为非激活状态
-                        annotator_state
-                            .annotations_stack
-                            .last_mut()
-                            .map(|annotation| {
-                                let mut rectangle_state = annotation.downcast_mut::<EllipseState>();
-                                if let Some(rectangle_state) = rectangle_state.as_mut() {
-                                    rectangle_state.active = false;
-                                }
-                            });
+                if hit_target != HitTarget::Inside && hit_target != HitTarget::Outside =>
+                    {
+                        // 调整现有的标注
+                        let mut annotation = self.pop_rectangle_annotation().unwrap();
+                        annotation.active = true;
+                        self.tool_state.current_annotation = Some(annotation);
+                        self.tool_state.drag_action = hit_target.get_drag_action();
                     }
-                }
+                Some(hit_target)
+                if hit_target == HitTarget::Inside || hit_target == HitTarget::Outside =>
+                    {
+                        self.peek_ellipse_annotation_mut(|mut ellipse_annotation_on_stack_top| {
+                            // 把栈顶的椭圆标注设为非激活状态
+                            ellipse_annotation_on_stack_top.as_mut().unwrap().active = false;
+                            None::<()>
+                        });
+                    }
+                _ => {}
             }
+        } else if response.clicked() {
+            self.peek_ellipse_annotation_mut(|mut ellipse_annotation_on_stack_top| {
+                // 把栈顶的椭圆标注设为非激活状态
+                ellipse_annotation_on_stack_top.as_mut().unwrap().active = false;
+                None::<()>
+            });
         }
 
         if response.dragged() {
             // 拖动中
-            if let Some(rectangle_state) = tool_state.current_annotation.as_mut() {
-                match tool_state.drag_action {
+            if let Some(ellipse_state) = &mut self.tool_state.current_annotation {
+                match self.tool_state.drag_action {
                     DragAction::AdjustTopEdge => {
-                        rectangle_state.rect.min.y = pointer_pos.y;
+                        ellipse_state.rect.min.y = pointer_pos.y;
                     }
                     DragAction::AdjustBottomEdge => {
-                        rectangle_state.rect.max.y = pointer_pos.y;
+                        ellipse_state.rect.max.y = pointer_pos.y;
                     }
                     DragAction::AdjustLeftEdge => {
-                        rectangle_state.rect.min.x = pointer_pos.x;
+                        ellipse_state.rect.min.x = pointer_pos.x;
                     }
                     DragAction::AdjustRightEdge => {
-                        rectangle_state.rect.max.x = pointer_pos.x;
+                        ellipse_state.rect.max.x = pointer_pos.x;
                     }
                     DragAction::AdjustTopLeftCorner => {
-                        rectangle_state.rect.min = pointer_pos;
+                        ellipse_state.rect.min = pointer_pos;
                     }
                     DragAction::AdjustTopRightCorner => {
-                        rectangle_state.rect.min.y = pointer_pos.y;
-                        rectangle_state.rect.max.x = pointer_pos.x;
+                        ellipse_state.rect.min.y = pointer_pos.y;
+                        ellipse_state.rect.max.x = pointer_pos.x;
                     }
                     DragAction::AdjustBottomRightCorner => {
-                        rectangle_state.rect.max = pointer_pos;
+                        ellipse_state.rect.max = pointer_pos;
                     }
                     DragAction::AdjustBottomLeftCorner => {
-                        rectangle_state.rect.min.x = pointer_pos.x;
-                        rectangle_state.rect.max.y = pointer_pos.y;
+                        ellipse_state.rect.min.x = pointer_pos.x;
+                        ellipse_state.rect.max.y = pointer_pos.y;
                     }
 
                     DragAction::None => {
                         let drag_started_pos =
                             ui.ctx().input(|i| i.pointer.press_origin()).unwrap();
-                        rectangle_state.rect = Rect::from_two_pos(drag_started_pos, pointer_pos);
+                        ellipse_state.rect = Rect::from_two_pos(drag_started_pos, pointer_pos);
                     }
                 }
-                ui.add(rectangle_state.clone());
+                ui.add(ellipse_state);
             } else {
                 let drag_started_pos = ui.ctx().input(|i| i.pointer.press_origin()).unwrap();
                 let rect = Rect::from_two_pos(drag_started_pos, pointer_pos);
-                let rectangle_state = EllipseState::new(rect, tool_state.style, true);
-                tool_state.current_annotation = Some(rectangle_state.clone());
-                tool_state.drag_action = DragAction::None;
-                ui.add(rectangle_state);
+                let mut ellipse_state = EllipseState::new(rect, self.tool_state.style, true);
+                self.tool_state.current_annotation = Some(ellipse_state.clone());
+                self.tool_state.drag_action = DragAction::None;
+                ui.add(&mut ellipse_state);
             }
         }
 
         if response.drag_stopped() {
             // 拖动结束
-            tool_state.drag_action = DragAction::None;
-            let annotation = tool_state.current_annotation.take().unwrap();
-            annotator_state.annotations_stack.push(Box::new(annotation));
+            self.tool_state.drag_action = DragAction::None;
+            let current_annotation = self.tool_state.current_annotation.take().unwrap();
+            self.annotator_state
+                .upgrade()
+                .unwrap()
+                .borrow_mut()
+                .annotations_stack
+                .push(Annotation::Ellipse(current_annotation));
         }
         response
     }

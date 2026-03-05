@@ -1,15 +1,16 @@
-use crate::annotator::ellipse::{EllipseAnnotationTool, EllipseState};
-use crate::annotator::rectangle::{RectangleAnnotationTool, RectangleState};
-use crate::annotator::{Annotation, AnnotatorState, ToolType};
+use crate::annotator::rectangle::RectangleTool;
+use crate::annotator::{AnnotationTool, AnnotatorState, SharedAnnotatorState};
 use crate::application::Application;
-use crate::dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize};
+use crate::dpi::{LogicalPosition, PhysicalSize};
 use crate::global::{ReadGlobalMut, ReadOrInsertGlobal};
-use crate::secondly_toolbar::create_secondly_toolbar;
 use crate::view::ViewId;
 use crate::window::AppWindow;
 use egui::load::SizedTexture;
-use egui::{ColorImage, Frame, Image, ImageSource, Rect, pos2, vec2};
+use egui::{pos2, vec2, ColorImage, Frame, Image, ImageSource, Rect};
 use image::RgbaImage;
+use std::cell::RefCell;
+use std::ops::DerefMut;
+use std::rc::Rc;
 use std::sync::Arc;
 
 pub fn create_annotator_panel(
@@ -35,7 +36,7 @@ pub fn create_annotator_panel(
             let image_width = image.width();
             let image_height = image.height();
             // 将图像数据上传到 GPU 并获取纹理句柄
-            let annotator_state: &AnnotatorState = window
+            let annotator_state: &SharedAnnotatorState = window
                 .window_context
                 .globals_by_type
                 .get_global_or_insert_with(|| {
@@ -54,14 +55,18 @@ pub fn create_annotator_panel(
                     );
                     annotator_state.background_texture_handle = Some(texture_handle);
 
-                    annotator_state.current_annotation_tool = Some(ToolType::Rectangle);
+                    let annotator_state_rc = Rc::new(RefCell::new(annotator_state));
+                    let rectangle_tool = RectangleTool::new(Rc::downgrade(&annotator_state_rc));
+                    annotator_state_rc.borrow_mut().current_annotation_tool = Some(AnnotationTool::Rectangle(rectangle_tool));
 
-                    annotator_state
+                    annotator_state_rc
                 });
 
             // 将图像数据上传到 GPU 并获取纹理句柄
+            let annotator_state = annotator_state.borrow_mut();
             let texture_handle = annotator_state.background_texture_handle.as_ref().unwrap();
             let texture_handle = texture_handle.clone();
+            drop(annotator_state);
 
             // 构建 UI 的具体内容
             egui_ctx.run(input, move |ctx| {
@@ -86,33 +91,23 @@ pub fn create_annotator_panel(
                         let annotator_state = window
                             .window_context
                             .globals_by_type
-                            .require_ref_mut::<AnnotatorState>();
+                            .require_ref_mut::<SharedAnnotatorState>()
+                            .clone();
 
-                        match annotator_state.current_annotation_tool {
-                            Some(ToolType::Rectangle) => {
-                                ui.add(RectangleAnnotationTool::new(annotator_state));
-                            }
-
-                            Some(ToolType::Ellipse) => {
-                                ui.add(EllipseAnnotationTool::new(annotator_state));
-                            }
-
-                            _ => {}
+                        if annotator_state.borrow().current_annotation_tool.is_some() {
+                            let mut annotator_state_mut_ref = annotator_state.borrow_mut();
+                            let mut current_annotation_tool = annotator_state_mut_ref.current_annotation_tool.take().unwrap();
+                            drop(annotator_state_mut_ref);
+                            ui.add(&mut current_annotation_tool);
+                            let mut annotator_state_mut_ref = annotator_state.borrow_mut();
+                             annotator_state_mut_ref.current_annotation_tool.replace(current_annotation_tool);
                         }
 
-                        annotator_state
+                        annotator_state.borrow_mut()
                             .annotations_stack
-                            .iter()
+                            .iter_mut()
                             .for_each(|annotation| {
-                                if let Some(rectangle_annotation) =
-                                    annotation.downcast_ref::<RectangleState>()
-                                {
-                                    rectangle_annotation.show(ui);
-                                } else if let Some(ellipse_annotation) =
-                                    annotation.downcast_ref::<EllipseState>()
-                                {
-                                    ellipse_annotation.show(ui);
-                                }
+                                ui.add(annotation);
                             });
 
                         // Area::new(Id::from("text_edit")).movable(true).current_pos(annotator_state.pos).show(ctx, |ui| {

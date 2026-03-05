@@ -20,11 +20,11 @@ mod serial;
 mod layout;
 mod annotator_panel;
 
-use crate::annotator::ellipse::{EllipseAnnotationTool, EllipseState};
+use crate::annotator::ellipse::{EllipseTool, EllipseState};
 use crate::annotator::rectangle::{
-    RectangleAnnotationTool, RectangleState,
+    RectangleTool, RectangleState,
 };
-use crate::annotator::{Annotation, AnnotatorState, StrokeType, ToolType};
+use crate::annotator::{Annotation, AnnotatorState, StrokeType, AnnotationTool};
 use crate::application::Application;
 use crate::dpi::{LogicalPosition, LogicalSize, PhysicalSize};
 use crate::global::{ReadGlobalMut, ReadOrInsertGlobal};

@@ -1,16 +1,44 @@
+mod arrow;
+mod blur;
 mod cursor;
-pub mod rectangle;
-pub(crate) mod svg_button;
+mod drop_down_box;
 pub(crate) mod ellipse;
+mod eraser;
+mod marker_pen;
+mod mosaic;
+mod pencil;
+pub mod rectangle;
+mod serial_number;
+mod straight_line;
+pub(crate) mod svg_button;
+mod text;
+mod watermark;
 
-use crate::annotator::ellipse::EllipseAnnotationToolState;
-use crate::annotator::rectangle::RectangleAnnotationToolState;
+use crate::annotator::arrow::ArrowState;
+use crate::annotator::blur::BlurState;
+use crate::annotator::ellipse::{EllipseState, EllipseTool, EllipseToolState};
+use crate::annotator::eraser::EraserState;
+use crate::annotator::marker_pen::MarkerPentate;
+use crate::annotator::mosaic::MosaicState;
+use crate::annotator::pencil::PencilState;
+use crate::annotator::rectangle::{RectangleState, RectangleTool, RectangleToolState};
+use crate::annotator::serial_number::SerialNumberState;
+use crate::annotator::straight_line::StraightLineState;
+use crate::annotator::text::TextState;
+use crate::annotator::watermark::WaterMarkState;
 use crate::global::Global;
-use egui::{pos2, vec2, Color32, CornerRadius, CursorIcon, Painter, Pos2, Rect, Response, Shape, Stroke, StrokeKind, TextureHandle, Ui, Widget};
+use crate::view::ViewId;
+use egui::{
+    Color32, CornerRadius, CursorIcon, Painter, Pos2, Rect, Response, Shape, Stroke, StrokeKind,
+    TextureHandle, Ui, Widget, pos2, vec2,
+};
+use image::RgbaImage;
 use std::any::Any;
+use std::cell::RefCell;
 use std::cmp::max;
 use std::ops::{Add, Sub};
-use crate::view::ViewId;
+use std::rc::Rc;
+use std::sync::Arc;
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum StrokeType {
@@ -21,7 +49,7 @@ pub enum StrokeType {
     DashedLine,
 
     /// 点线
-    DottedLine
+    DottedLine,
 }
 
 /// 描述一个矩形的四条边
@@ -76,7 +104,7 @@ impl HitTarget {
             _ => None,
         }
     }
-    
+
     pub fn get_drag_action(&self) -> DragAction {
         match self {
             HitTarget::TopLeftCorner => DragAction::AdjustTopLeftCorner,
@@ -105,19 +133,74 @@ pub enum DragAction {
     AdjustTopRightCorner,
     AdjustBottomLeftCorner,
     AdjustBottomRightCorner,
-    
-    None
+
+    None,
 }
 
-
-/// 标注工具的类型
-#[derive(Debug, PartialEq, Eq, Copy, Clone, Hash)]
-pub enum ToolType {
+pub enum Annotation {
     /// 矩形
-    Rectangle,
+    Rectangle(RectangleState),
 
     /// 椭圆
-    Ellipse,
+    Ellipse(EllipseState),
+
+    /// 直线
+    StraightLine(StraightLineState),
+
+    /// 箭头
+    Arrow(ArrowState),
+
+    /// 铅笔
+    Pencil(PencilState),
+
+    /// 记号笔
+    MarkerPen(MarkerPentate),
+
+    /// 马赛克
+    Mosaic(MosaicState),
+
+    /// 模糊
+    Blur(BlurState),
+
+    /// 文本
+    Text(TextState),
+
+    /// 序号
+    SerialNumber(SerialNumberState),
+
+    /// 水印
+    Watermark(WaterMarkState),
+
+    /// 橡皮擦
+    Eraser(EraserState),
+}
+
+impl Widget for &mut Annotation {
+    fn ui(self, ui: &mut Ui) -> Response {
+        match self {
+            Annotation::Rectangle(rectangle_state) => ui.add(rectangle_state),
+            Annotation::Ellipse(ellipse_state) => ui.add(ellipse_state),
+            Annotation::StraightLine(straight_line_state) => ui.add(straight_line_state),
+            Annotation::Arrow(arrow_state) => ui.add(arrow_state),
+            Annotation::Pencil(pencil_state) => ui.add(pencil_state),
+            Annotation::MarkerPen(marker_pen_state) => ui.add(marker_pen_state),
+            Annotation::Mosaic(mosaic_state) => ui.add(mosaic_state),
+            Annotation::Blur(blur_state) => ui.add(blur_state),
+            Annotation::Text(text_state) => ui.add(text_state),
+            Annotation::SerialNumber(serial_number_state) => ui.add(serial_number_state),
+            Annotation::Watermark(watermark_state) => ui.add(watermark_state),
+            Annotation::Eraser(eraser_state) => ui.add(eraser_state),
+        }
+    }
+}
+
+/// 标注工具的类型
+pub enum AnnotationTool {
+    /// 矩形
+    Rectangle(RectangleTool),
+
+    /// 椭圆
+    Ellipse(EllipseTool),
 
     /// 直线
     StraightLine,
@@ -150,8 +233,43 @@ pub enum ToolType {
     Eraser,
 }
 
-pub trait Annotation: Widget {
-    fn show(&self, ui: &mut Ui) -> Response;
+impl Widget for &mut AnnotationTool {
+    fn ui(self, ui: &mut Ui) -> Response {
+        match self {
+            AnnotationTool::Rectangle(rectangle_tool) => rectangle_tool.ui(ui),
+            AnnotationTool::Ellipse(ellipse_tool) => ellipse_tool.ui(ui),
+            AnnotationTool::StraightLine => {
+                todo!("Straight Line")
+            }
+            AnnotationTool::Arrow => {
+                todo!("Arrow")
+            }
+            AnnotationTool::Pencil => {
+                todo!("Pencil")
+            }
+            AnnotationTool::MarkerPen => {
+                todo!("Marker Pen")
+            }
+            AnnotationTool::Mosaic => {
+                todo!("Mosaic")
+            }
+            AnnotationTool::Blur => {
+                todo!("Blur")
+            }
+            AnnotationTool::Text => {
+                todo!("Text")
+            }
+            AnnotationTool::SerialNumber => {
+                todo!("Serial Number")
+            }
+            AnnotationTool::Watermark => {
+                todo!("Watermark")
+            }
+            AnnotationTool::Eraser => {
+                todo!("Eraser")
+            }
+        }
+    }
 }
 
 /// 当前标注状态
@@ -160,24 +278,28 @@ pub struct AnnotatorState {
     /// 是否隐藏主工具条
     pub hide_primary_toolbar: bool,
 
+    /// 背景图片
+    pub background_image: Arc<RgbaImage>,
+
     /// 背景图片的纹理句柄
     pub background_texture_handle: Option<TextureHandle>,
 
+    /// 标注工具
+    pub annotation_tools: Vec<AnnotationTool>,
+
     /// 界面上显示的标注内容
-    pub annotations_stack: Vec<Box<dyn Any>>,
+    pub annotations_stack: Vec<Annotation>,
 
     /// "重做"栈：因"撤销"操作而从annotations_stack中弹出的内容会被放入这里，以支持重做
-    pub redo_stack: Vec<Box<dyn Any>>,
-
-    /// 矩形标注工具的状态
-    pub rectangle_annotation_tool_state: RectangleAnnotationToolState,
-    
-    /// 椭圆标注工具的状态
-    pub ellipse_annotation_tool_state: EllipseAnnotationToolState,
+    pub redo_stack: Vec<Annotation>,
 
     /// 当前激活的标注工具
-    pub current_annotation_tool: Option<ToolType>,
+    pub current_annotation_tool: Option<AnnotationTool>,
 }
+
+pub type SharedAnnotatorState = Rc<RefCell<AnnotatorState>>;
+
+impl Global for SharedAnnotatorState {}
 
 impl AnnotatorState {
     pub fn annotator_panel_id() -> ViewId {
@@ -190,9 +312,6 @@ impl AnnotatorState {
         "secondly-toolbar".into()
     }
 }
-
-impl Global for AnnotatorState {}
-
 
 trait SmallRect {
     /// 将一个点扩展成一个小矩形
@@ -209,7 +328,6 @@ impl SmallRect for Pos2 {
         Rect::from_two_pos(top_left_pos, right_bottom_pos)
     }
 }
-
 
 pub trait HitTest {
     /// 对矩形做碰撞检测
@@ -298,7 +416,7 @@ impl HitTest for Rect {
             if self.contains(*pointer_pos) {
                 return HitTarget::Inside;
             }
-        }else {
+        } else {
             return *edges.first().unwrap();
         }
 
@@ -321,34 +439,19 @@ mod tests {
         let rect = test_rect();
 
         // 测试上边 - 中点
-        assert_eq!(
-            rect.hit_test(&pos2(50.0, 0.0), 1.0),
-            HitTarget::TopEdge
-        );
+        assert_eq!(rect.hit_test(&pos2(50.0, 0.0), 1.0), HitTarget::TopEdge);
 
         // 测试上边 - 偏移3像素内 (tolerance=6, half=3)
-        assert_eq!(
-            rect.hit_test(&pos2(50.0, 2.9), 1.0),
-            HitTarget::TopEdge
-        );
+        assert_eq!(rect.hit_test(&pos2(50.0, 2.9), 1.0), HitTarget::TopEdge);
 
         // 测试下边
-        assert_eq!(
-            rect.hit_test(&pos2(50.0, 50.0), 1.0),
-            HitTarget::BottomEdge
-        );
+        assert_eq!(rect.hit_test(&pos2(50.0, 50.0), 1.0), HitTarget::BottomEdge);
 
         // 测试左边
-        assert_eq!(
-            rect.hit_test(&pos2(0.0, 25.0), 1.0),
-            HitTarget::LeftEdge
-        );
+        assert_eq!(rect.hit_test(&pos2(0.0, 25.0), 1.0), HitTarget::LeftEdge);
 
         // 测试右边
-        assert_eq!(
-            rect.hit_test(&pos2(100.0, 25.0), 1.0),
-            HitTarget::RightEdge
-        );
+        assert_eq!(rect.hit_test(&pos2(100.0, 25.0), 1.0), HitTarget::RightEdge);
     }
 
     // 测试角点检测
@@ -405,32 +508,17 @@ mod tests {
         let rect = test_rect();
 
         // 内部中心点
-        assert_eq!(
-            rect.hit_test(&pos2(50.0, 25.0), 1.0),
-            HitTarget::Inside
-        );
+        assert_eq!(rect.hit_test(&pos2(50.0, 25.0), 1.0), HitTarget::Inside);
 
         // 内部但不是中心
-        assert_eq!(
-            rect.hit_test(&pos2(10.0, 10.0), 1.0),
-            HitTarget::Inside
-        );
+        assert_eq!(rect.hit_test(&pos2(10.0, 10.0), 1.0), HitTarget::Inside);
 
         // 完全外部
-        assert_eq!(
-            rect.hit_test(&pos2(-10.0, 25.0), 1.0),
-            HitTarget::Outside
-        );
+        assert_eq!(rect.hit_test(&pos2(-10.0, 25.0), 1.0), HitTarget::Outside);
 
-        assert_eq!(
-            rect.hit_test(&pos2(50.0, -10.0), 1.0),
-            HitTarget::Outside
-        );
+        assert_eq!(rect.hit_test(&pos2(50.0, -10.0), 1.0), HitTarget::Outside);
 
-        assert_eq!(
-            rect.hit_test(&pos2(150.0, 25.0), 1.0),
-            HitTarget::Outside
-        );
+        assert_eq!(rect.hit_test(&pos2(150.0, 25.0), 1.0), HitTarget::Outside);
     }
 
     // 测试边缘扩展区域
@@ -439,34 +527,19 @@ mod tests {
         let rect = test_rect();
 
         // 上边扩展区域 (y: -3 to 3)
-        assert_eq!(
-            rect.hit_test(&pos2(50.0, -2.9), 1.0),
-            HitTarget::TopEdge
-        );
+        assert_eq!(rect.hit_test(&pos2(50.0, -2.9), 1.0), HitTarget::TopEdge);
 
         // 超出扩展区域
-        assert_eq!(
-            rect.hit_test(&pos2(50.0, -3.1), 1.0),
-            HitTarget::Outside
-        );
+        assert_eq!(rect.hit_test(&pos2(50.0, -3.1), 1.0), HitTarget::Outside);
 
         // 下边扩展区域 (y: 47 to 53)
-        assert_eq!(
-            rect.hit_test(&pos2(50.0, 52.9), 1.0),
-            HitTarget::BottomEdge
-        );
+        assert_eq!(rect.hit_test(&pos2(50.0, 52.9), 1.0), HitTarget::BottomEdge);
 
         // 左边扩展区域 (x: -3 to 3)
-        assert_eq!(
-            rect.hit_test(&pos2(-2.9, 25.0), 1.0),
-            HitTarget::LeftEdge
-        );
+        assert_eq!(rect.hit_test(&pos2(-2.9, 25.0), 1.0), HitTarget::LeftEdge);
 
         // 右边扩展区域 (x: 97 to 103)
-        assert_eq!(
-            rect.hit_test(&pos2(102.9, 25.0), 1.0),
-            HitTarget::RightEdge
-        );
+        assert_eq!(rect.hit_test(&pos2(102.9, 25.0), 1.0), HitTarget::RightEdge);
     }
 
     // 测试不同 stroke_width 值
@@ -475,41 +548,29 @@ mod tests {
         let rect = test_rect();
 
         // stroke_width=1.0，tolerance=6
-        assert_eq!(
-            rect.hit_test(&pos2(50.0, 2.9), 1.0),
-            HitTarget::TopEdge
-        );
+        assert_eq!(rect.hit_test(&pos2(50.0, 2.9), 1.0), HitTarget::TopEdge);
 
         assert_eq!(
             rect.hit_test(&pos2(50.0, 3.1), 1.0),
-            HitTarget::Inside  // 在扩展区域外，但在矩形内
+            HitTarget::Inside // 在扩展区域外，但在矩形内
         );
 
         // stroke_width=10.0，tolerance=10，half=5
         // 现在扩展区域更大
-        assert_eq!(
-            rect.hit_test(&pos2(50.0, 4.9), 10.0),
-            HitTarget::TopEdge
-        );
+        assert_eq!(rect.hit_test(&pos2(50.0, 4.9), 10.0), HitTarget::TopEdge);
 
         assert_eq!(
             rect.hit_test(&pos2(50.0, 5.1), 10.0),
-            HitTarget::Inside  // 在扩展区域外，但在矩形内
+            HitTarget::Inside // 在扩展区域外，但在矩形内
         );
 
         // stroke_width=20.0，tolerance=20，half=10
         // 扩展区域非常大
-        assert_eq!(
-            rect.hit_test(&pos2(50.0, 9.9), 20.0),
-            HitTarget::TopEdge
-        );
+        assert_eq!(rect.hit_test(&pos2(50.0, 9.9), 20.0), HitTarget::TopEdge);
 
         // 注意：当扩展区域非常大时，甚至可能覆盖到矩形内部
         // 测试一个在矩形内部但在扩展区域内的点
-        assert_eq!(
-            rect.hit_test(&pos2(50.0, 8.0), 20.0),
-            HitTarget::TopEdge
-        );
+        assert_eq!(rect.hit_test(&pos2(50.0, 8.0), 20.0), HitTarget::TopEdge);
     }
 
     // 测试边界条件和特殊情况
@@ -520,7 +581,7 @@ mod tests {
         // 点在边上但x坐标超出矩形范围（但在扩展区域内）
         assert_eq!(
             rect.hit_test(&pos2(-2.9, 0.0), 1.0),
-            HitTarget::TopLeftCorner  // 同时在上边和左边
+            HitTarget::TopLeftCorner // 同时在上边和左边
         );
 
         // 点在角的扩展区域边缘
@@ -537,10 +598,7 @@ mod tests {
 
         // 负坐标测试
         let rect2 = Rect::from_two_pos(pos2(-50.0, -50.0), pos2(50.0, 50.0));
-        assert_eq!(
-            rect2.hit_test(&pos2(0.0, -50.0), 1.0),
-            HitTarget::TopEdge
-        );
+        assert_eq!(rect2.hit_test(&pos2(0.0, -50.0), 1.0), HitTarget::TopEdge);
     }
 
     // 性能测试：测试多个点
@@ -575,11 +633,14 @@ pub trait PainterExt {
     /// - `stroke`: 边框样式（颜色、宽度）
     /// - `stroke_kind`: 边框对齐方式（Inside / Outside / Middle）
     /// - `stroke_type`: 线条类型（实线 / 虚线 / 点线）
-    fn rectangle(&self, rect: &Rect,
-                        fill_color: impl Into<Color32>,
-                        stroke: impl Into<Stroke>,
-                        stroke_kind: StrokeKind,
-                        stroke_type: StrokeType);
+    fn rectangle(
+        &self,
+        rect: &Rect,
+        fill_color: impl Into<Color32>,
+        stroke: impl Into<Stroke>,
+        stroke_kind: StrokeKind,
+        stroke_type: StrokeType,
+    );
 }
 
 impl PainterExt for Painter {
@@ -598,23 +659,73 @@ impl PainterExt for Painter {
         let center_top_edge = pos2(top_left_pos.x + rect.width() / 2f32, top_left_pos.y);
         let center_bottom_edge = pos2(bottom_left_pos.x + rect.width() / 2f32, bottom_left_pos.y);
 
-        painter.rect(top_left_pos.rect(width, height), 0, Color32::TRANSPARENT, Stroke::new(1f32, Color32::WHITE), StrokeKind::Middle);
-        painter.rect(top_right_pos.rect(width, height), 0, Color32::TRANSPARENT, Stroke::new(1f32, Color32::WHITE), StrokeKind::Middle);
-        painter.rect(bottom_right_pos.rect(width, height), 0, Color32::TRANSPARENT, Stroke::new(1f32, Color32::WHITE), StrokeKind::Middle);
-        painter.rect(bottom_left_pos.rect(width, height), 0, Color32::TRANSPARENT, Stroke::new(1f32, Color32::WHITE), StrokeKind::Middle);
+        painter.rect(
+            top_left_pos.rect(width, height),
+            0,
+            Color32::TRANSPARENT,
+            Stroke::new(1f32, Color32::WHITE),
+            StrokeKind::Middle,
+        );
+        painter.rect(
+            top_right_pos.rect(width, height),
+            0,
+            Color32::TRANSPARENT,
+            Stroke::new(1f32, Color32::WHITE),
+            StrokeKind::Middle,
+        );
+        painter.rect(
+            bottom_right_pos.rect(width, height),
+            0,
+            Color32::TRANSPARENT,
+            Stroke::new(1f32, Color32::WHITE),
+            StrokeKind::Middle,
+        );
+        painter.rect(
+            bottom_left_pos.rect(width, height),
+            0,
+            Color32::TRANSPARENT,
+            Stroke::new(1f32, Color32::WHITE),
+            StrokeKind::Middle,
+        );
 
-        painter.rect(center_left_edge.rect(width, height), 0, Color32::TRANSPARENT, Stroke::new(1f32, Color32::WHITE), StrokeKind::Middle);
-        painter.rect(center_right_edge.rect(width, height), 0, Color32::TRANSPARENT, Stroke::new(1f32, Color32::WHITE), StrokeKind::Middle);
-        painter.rect(center_top_edge.rect(width, height), 0, Color32::TRANSPARENT, Stroke::new(1f32, Color32::WHITE), StrokeKind::Middle);
-        painter.rect(center_bottom_edge.rect(width, height), 0, Color32::TRANSPARENT, Stroke::new(1f32, Color32::WHITE), StrokeKind::Middle);
+        painter.rect(
+            center_left_edge.rect(width, height),
+            0,
+            Color32::TRANSPARENT,
+            Stroke::new(1f32, Color32::WHITE),
+            StrokeKind::Middle,
+        );
+        painter.rect(
+            center_right_edge.rect(width, height),
+            0,
+            Color32::TRANSPARENT,
+            Stroke::new(1f32, Color32::WHITE),
+            StrokeKind::Middle,
+        );
+        painter.rect(
+            center_top_edge.rect(width, height),
+            0,
+            Color32::TRANSPARENT,
+            Stroke::new(1f32, Color32::WHITE),
+            StrokeKind::Middle,
+        );
+        painter.rect(
+            center_bottom_edge.rect(width, height),
+            0,
+            Color32::TRANSPARENT,
+            Stroke::new(1f32, Color32::WHITE),
+            StrokeKind::Middle,
+        );
     }
 
-    fn rectangle(&self,
-                        rect: &Rect,
-                        fill_color: impl Into<Color32>,
-                        stroke: impl Into<Stroke>,
-                        stroke_kind: StrokeKind,
-                        stroke_type: StrokeType) {
+    fn rectangle(
+        &self,
+        rect: &Rect,
+        fill_color: impl Into<Color32>,
+        stroke: impl Into<Stroke>,
+        stroke_kind: StrokeKind,
+        stroke_type: StrokeType,
+    ) {
         let painter = self;
         let fill_color = fill_color.into();
         let stroke = stroke.into();
@@ -638,14 +749,18 @@ impl PainterExt for Painter {
             }
             StrokeType::DashedLine => {
                 // 虚线：使用 dashed_line，自定义 dash 和 gap 长度
-                let dash_len = if stroke.width * 3. < 6. { 6. } else { stroke.width * 3. };
+                let dash_len = if stroke.width * 3. < 6. {
+                    6.
+                } else {
+                    stroke.width * 3.
+                };
                 let gap_len = dash_len;
                 draw_dashed_rect(painter, path_rect, stroke, dash_len, gap_len);
             }
             StrokeType::DottedLine => {
                 // 点线：使用 dotted_line，根据线宽计算点间距和半径
-                let spacing = stroke.width * 2.0;   // 点间距
-                let radius = stroke.width / 2.0;     // 点半径
+                let spacing = stroke.width * 2.0; // 点间距
+                let radius = stroke.width / 2.0; // 点半径
                 draw_dotted_rect(painter, path_rect, stroke.color, spacing, radius);
             }
         }
@@ -654,18 +769,13 @@ impl PainterExt for Painter {
 
 /// 绘制矩形的虚线边框
 fn draw_dashed_rect(painter: &Painter, rect: Rect, stroke: Stroke, dash_len: f32, gap_len: f32) {
-    let [left, right, top, bottom] = [
-        rect.left(),
-        rect.right(),
-        rect.top(),
-        rect.bottom(),
-    ];
+    let [left, right, top, bottom] = [rect.left(), rect.right(), rect.top(), rect.bottom()];
 
     let edges = [
-        (Pos2::new(left, top), Pos2::new(right, top)),     // 上边
+        (Pos2::new(left, top), Pos2::new(right, top)), // 上边
         (Pos2::new(right, top), Pos2::new(right, bottom)), // 右边
         (Pos2::new(right, bottom), Pos2::new(left, bottom)), // 下边
-        (Pos2::new(left, bottom), Pos2::new(left, top)),   // 左边
+        (Pos2::new(left, bottom), Pos2::new(left, top)), // 左边
     ];
 
     for (start, end) in edges {
@@ -676,18 +786,13 @@ fn draw_dashed_rect(painter: &Painter, rect: Rect, stroke: Stroke, dash_len: f32
 
 /// 绘制矩形的点线边框
 fn draw_dotted_rect(painter: &Painter, rect: Rect, color: Color32, spacing: f32, radius: f32) {
-    let [left, right, top, bottom] = [
-        rect.left(),
-        rect.right(),
-        rect.top(),
-        rect.bottom(),
-    ];
+    let [left, right, top, bottom] = [rect.left(), rect.right(), rect.top(), rect.bottom()];
 
     let edges = [
-        (Pos2::new(left, top), Pos2::new(right, top)),     // 上边
+        (Pos2::new(left, top), Pos2::new(right, top)), // 上边
         (Pos2::new(right, top), Pos2::new(right, bottom)), // 右边
         (Pos2::new(right, bottom), Pos2::new(left, bottom)), // 下边
-        (Pos2::new(left, bottom), Pos2::new(left, top)),   // 左边
+        (Pos2::new(left, bottom), Pos2::new(left, top)), // 左边
     ];
 
     for (start, end) in edges {
