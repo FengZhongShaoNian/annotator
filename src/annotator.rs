@@ -194,6 +194,45 @@ impl Widget for &mut Annotation {
     }
 }
 
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
+pub enum ToolName {
+    /// 矩形
+    Rectangle,
+
+    /// 椭圆
+    Ellipse,
+
+    /// 直线
+    StraightLine,
+
+    /// 箭头
+    Arrow,
+
+    /// 铅笔
+    Pencil,
+
+    /// 记号笔
+    MarkerPen,
+
+    /// 马赛克
+    Mosaic,
+
+    /// 模糊
+    Blur,
+
+    /// 文本
+    Text,
+
+    /// 序号
+    SerialNumber,
+
+    /// 水印
+    Watermark,
+
+    /// 橡皮擦
+    Eraser,
+}
+
 /// 标注工具的类型
 pub enum AnnotationTool {
     /// 矩形
@@ -231,6 +270,49 @@ pub enum AnnotationTool {
 
     /// 橡皮擦
     Eraser,
+}
+
+impl AnnotationTool {
+    pub fn tool_name(&self) -> ToolName {
+        match self {
+            AnnotationTool::Rectangle(_) => {
+                ToolName::Rectangle
+            }
+            AnnotationTool::Ellipse(_) => {
+                ToolName::Ellipse
+            }
+            AnnotationTool::StraightLine => {
+                ToolName::StraightLine
+            }
+            AnnotationTool::Arrow => {
+                ToolName::Arrow
+            }
+            AnnotationTool::Pencil => {
+                ToolName::Pencil
+            }
+            AnnotationTool::MarkerPen => {
+                ToolName::MarkerPen
+            }
+            AnnotationTool::Mosaic => {
+                ToolName::Mosaic
+            }
+            AnnotationTool::Blur => {
+                ToolName::Blur
+            }
+            AnnotationTool::Text => {
+                ToolName::Text
+            }
+            AnnotationTool::SerialNumber => {
+                ToolName::SerialNumber
+            }
+            AnnotationTool::Watermark => {
+                ToolName::Watermark
+            }
+            AnnotationTool::Eraser => {
+                ToolName::Eraser
+            }
+        }
+    }
 }
 
 impl Widget for &mut AnnotationTool {
@@ -330,6 +412,26 @@ impl AnnotatorState {
     }
     pub fn secondly_toolbar_id() -> ViewId {
         "secondly-toolbar".into()
+    }
+
+    pub fn activate_annotation_tool(&mut self, tool_name: ToolName)  {
+        if let Some(active_tool) = &self.current_annotation_tool {
+            if active_tool.tool_name() == tool_name {
+                return;
+            }
+        }
+        let index = self.annotation_tools.iter().position(|t|t.tool_name() == tool_name)
+            .expect(&format!("{:?} Tool not found in AnnotatorState.annotation_tools", tool_name));
+        let tool = self.annotation_tools.remove(index);
+        if let Some(previous_tool) = self.current_annotation_tool.replace(tool) {
+            self.annotation_tools.push(previous_tool);
+        }
+    }
+
+    pub fn deactivate_annotation_tool(&mut self)  {
+        if let Some(previous_tool) = self.current_annotation_tool.take() {
+            self.annotation_tools.push(previous_tool);
+        }
     }
 }
 

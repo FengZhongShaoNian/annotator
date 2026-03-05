@@ -1,10 +1,10 @@
 use crate::annotator::ellipse::EllipseState;
 use crate::annotator::rectangle::RectangleState;
 use crate::annotator::svg_button::SvgButton;
-use crate::annotator::{AnnotatorState, AnnotationTool, SharedAnnotatorState};
+use crate::annotator::{AnnotatorState, AnnotationTool, SharedAnnotatorState, ToolName};
 use crate::application::Application;
 use crate::dpi::{LogicalPosition, LogicalSize};
-use crate::global::ReadGlobal;
+use crate::global::{ReadGlobal, ReadGlobalMut};
 use crate::icon::Icons;
 use crate::view::ViewId;
 use crate::window::AppWindow;
@@ -41,26 +41,27 @@ pub fn create_primary_toolbar(
                             let annotator_state = window
                                 .window_context
                                 .globals_by_type
-                                .take::<SharedAnnotatorState>()
-                                .unwrap();
+                                .require_ref_mut::<SharedAnnotatorState>()
+                                .clone();
 
                             let mut annotator_state_mut_ref = annotator_state.borrow_mut();
-                            let active_tool = &mut annotator_state_mut_ref.current_annotation_tool;
+                            let active_tool = annotator_state_mut_ref.current_annotation_tool
+                                .as_ref()
+                                .map(|tool|tool.tool_name());
                             
                             if ui.add(SvgButton::new(
                                 "rectangle-tool".into(),
                                 Icons::DrawRectangle.get_image(),
                                 LogicalSize::new(32., 32.),
                                 true,
-                                matches!(active_tool, Some(AnnotationTool::Rectangle(..))),
+                                matches!(active_tool, Some(ToolName::Rectangle)),
                                 ))
                                 .clicked()
                             {
-                                if matches!(active_tool, Some(AnnotationTool::Rectangle(..))) {
-                                    // annotator_state_mut_ref.current_annotation_tool = None;
+                                if matches!(active_tool, Some(ToolName::Rectangle)) {
+                                    annotator_state_mut_ref.deactivate_annotation_tool();
                                 } else {
-                                    // annotator_state.current_annotation_tool =
-                                    //     Some(AnnotationTool::Rectangle);
+                                    annotator_state_mut_ref.activate_annotation_tool(ToolName::Rectangle);
                                     window.set_view_visible(&AnnotatorState::secondly_toolbar_id(), true);
                                 }
                             }
@@ -70,15 +71,14 @@ pub fn create_primary_toolbar(
                                     Icons::DrawEllipse.get_image(),
                                     LogicalSize::new(32., 32.),
                                     true,
-                                    matches!(active_tool, Some(AnnotationTool::Ellipse(..))),
+                                    matches!(active_tool, Some(ToolName::Ellipse)),
                                 ))
                                 .clicked()
                             {
-                                if matches!(active_tool, Some(AnnotationTool::Ellipse(..))) {
-                                    // annotator_state_mut_ref.current_annotation_tool = None;
+                                if matches!(active_tool, Some(ToolName::Ellipse)) {
+                                    annotator_state_mut_ref.deactivate_annotation_tool();
                                 } else {
-                                    // annotator_state.current_annotation_tool =
-                                    //     Some(AnnotationTool::Ellipse);
+                                    annotator_state_mut_ref.activate_annotation_tool(ToolName::Ellipse);
                                     window.set_view_visible(&AnnotatorState::secondly_toolbar_id(), true);
                                 }
                             }
@@ -89,15 +89,14 @@ pub fn create_primary_toolbar(
                                     Icons::DrawLine.get_image(),
                                     LogicalSize::new(32., 32.),
                                     true,
-                                    matches!(active_tool, Some(AnnotationTool::StraightLine)),
+                                    matches!(active_tool, Some(ToolName::StraightLine)),
                                 ))
                                 .clicked()
                             {
-                                if matches!(active_tool, Some(AnnotationTool::StraightLine)) {
-                                    // annotator_state_mut_ref.current_annotation_tool = None;
+                                if matches!(active_tool, Some(ToolName::StraightLine)) {
+                                    annotator_state_mut_ref.deactivate_annotation_tool();
                                 } else {
-                                    // annotator_state.current_annotation_tool =
-                                    //     Some(AnnotationTool::StraightLine);
+                                    annotator_state_mut_ref.activate_annotation_tool(ToolName::StraightLine);
                                     window.set_view_visible(&AnnotatorState::secondly_toolbar_id(), true);
                                 }
                             }
@@ -107,14 +106,14 @@ pub fn create_primary_toolbar(
                                     Icons::DrawArrow.get_image(),
                                     LogicalSize::new(32., 32.),
                                     true,
-                                    matches!(active_tool, Some(AnnotationTool::Arrow)),
+                                    matches!(active_tool, Some(ToolName::Arrow)),
                                 ))
                                 .clicked()
                             {
-                                if matches!(active_tool, Some(AnnotationTool::Arrow)) {
-                                    // annotator_state_mut_ref.current_annotation_tool = None;
+                                if matches!(active_tool, Some(ToolName::Arrow)) {
+                                    annotator_state_mut_ref.deactivate_annotation_tool();
                                 } else {
-                                    // annotator_state.current_annotation_tool = Some(AnnotationTool::Arrow);
+                                    annotator_state_mut_ref.activate_annotation_tool(ToolName::Arrow);
                                     window.set_view_visible(&AnnotatorState::secondly_toolbar_id(), true);
                                 }
                             }
@@ -125,15 +124,14 @@ pub fn create_primary_toolbar(
                                     Icons::DrawFreehand.get_image(),
                                     LogicalSize::new(32., 32.),
                                     true,
-                                    matches!(active_tool, Some(AnnotationTool::Pencil)),
+                                    matches!(active_tool, Some(ToolName::Pencil)),
                                 ))
                                 .clicked()
                             {
-                                if matches!(active_tool, Some(AnnotationTool::Pencil)) {
-                                    // annotator_state_mut_ref.current_annotation_tool = None;
+                                if matches!(active_tool, Some(ToolName::Pencil)) {
+                                    annotator_state_mut_ref.deactivate_annotation_tool();
                                 } else {
-                                    // annotator_state.current_annotation_tool =
-                                    //     Some(AnnotationTool::Pencil);
+                                    annotator_state_mut_ref.activate_annotation_tool(ToolName::Pencil);
                                     window.set_view_visible(&AnnotatorState::secondly_toolbar_id(), true);
                                 }
                             }
@@ -144,15 +142,14 @@ pub fn create_primary_toolbar(
                                     Icons::DrawHighlight.get_image(),
                                     LogicalSize::new(32., 32.),
                                     true,
-                                    matches!(active_tool, Some(AnnotationTool::MarkerPen)),
+                                    matches!(active_tool, Some(ToolName::MarkerPen)),
                                 ))
                                 .clicked()
                             {
-                                if matches!(active_tool, Some(AnnotationTool::MarkerPen)) {
-                                    // annotator_state_mut_ref.current_annotation_tool = None;
+                                if matches!(active_tool, Some(ToolName::MarkerPen)) {
+                                    annotator_state_mut_ref.deactivate_annotation_tool();
                                 } else {
-                                    // annotator_state.current_annotation_tool =
-                                    //     Some(AnnotationTool::MarkerPen);
+                                    annotator_state_mut_ref.activate_annotation_tool(ToolName::MarkerPen);
                                     window.set_view_visible(&AnnotatorState::secondly_toolbar_id(), true);
                                 }
                             }
@@ -163,15 +160,14 @@ pub fn create_primary_toolbar(
                                     Icons::PixelArtTrace.get_image(),
                                     LogicalSize::new(32., 32.),
                                     true,
-                                    matches!(active_tool, Some(AnnotationTool::Mosaic)),
+                                    matches!(active_tool, Some(ToolName::Mosaic)),
                                 ))
                                 .clicked()
                             {
-                                if matches!(active_tool, Some(AnnotationTool::Mosaic)) {
-                                    // annotator_state_mut_ref.current_annotation_tool = None;
+                                if matches!(active_tool, Some(ToolName::Mosaic)) {
+                                    annotator_state_mut_ref.deactivate_annotation_tool();
                                 } else {
-                                    // annotator_state.current_annotation_tool =
-                                    //     Some(AnnotationTool::Mosaic);
+                                    annotator_state_mut_ref.activate_annotation_tool(ToolName::Mosaic);
                                     window.set_view_visible(&AnnotatorState::secondly_toolbar_id(), true);
                                 }
                             }
@@ -182,14 +178,14 @@ pub fn create_primary_toolbar(
                                     Icons::BlurFx.get_image(),
                                     LogicalSize::new(32., 32.),
                                     true,
-                                    matches!(active_tool, Some(AnnotationTool::Blur)),
+                                    matches!(active_tool, Some(ToolName::Blur)),
                                 ))
                                 .clicked()
                             {
-                                if matches!(active_tool, Some(AnnotationTool::Blur)) {
-                                    // annotator_state_mut_ref.current_annotation_tool = None;
+                                if matches!(active_tool, Some(ToolName::Blur)) {
+                                    annotator_state_mut_ref.deactivate_annotation_tool();
                                 } else {
-                                    // annotator_state.current_annotation_tool = Some(AnnotationTool::Blur);
+                                    annotator_state_mut_ref.activate_annotation_tool(ToolName::Blur);
                                     window.set_view_visible(&AnnotatorState::secondly_toolbar_id(), true);
                                 }
                             }
@@ -200,14 +196,14 @@ pub fn create_primary_toolbar(
                                     Icons::DrawText.get_image(),
                                     LogicalSize::new(32., 32.),
                                     true,
-                                    matches!(active_tool, Some(AnnotationTool::Text)),
+                                    matches!(active_tool, Some(ToolName::Text)),
                                 ))
                                 .clicked()
                             {
-                                if matches!(active_tool, Some(AnnotationTool::Text)) {
-                                    // annotator_state_mut_ref.current_annotation_tool = None;
+                                if matches!(active_tool, Some(ToolName::Text)) {
+                                    annotator_state_mut_ref.deactivate_annotation_tool();
                                 } else {
-                                    // annotator_state.current_annotation_tool = Some(AnnotationTool::Text);
+                                    annotator_state_mut_ref.activate_annotation_tool(ToolName::Text);
                                     window.set_view_visible(&AnnotatorState::secondly_toolbar_id(), true);
                                 }
                             }
@@ -218,15 +214,14 @@ pub fn create_primary_toolbar(
                                     Icons::DrawNumber.get_image(),
                                     LogicalSize::new(32., 32.),
                                     true,
-                                    matches!(active_tool, Some(AnnotationTool::SerialNumber)),
+                                    matches!(active_tool, Some(ToolName::SerialNumber)),
                                 ))
                                 .clicked()
                             {
-                                if matches!(active_tool, Some(AnnotationTool::SerialNumber)) {
-                                    // annotator_state_mut_ref.current_annotation_tool = None;
+                                if matches!(active_tool, Some(ToolName::SerialNumber)) {
+                                    annotator_state_mut_ref.deactivate_annotation_tool();
                                 } else {
-                                    // annotator_state.current_annotation_tool =
-                                    //     Some(AnnotationTool::SerialNumber);
+                                    annotator_state_mut_ref.activate_annotation_tool(ToolName::SerialNumber);
                                     window.set_view_visible(&AnnotatorState::secondly_toolbar_id(), true);
                                 }
                             }
@@ -237,15 +232,14 @@ pub fn create_primary_toolbar(
                                     Icons::DrawEraser.get_image(),
                                     LogicalSize::new(32., 32.),
                                     false,
-                                    matches!(active_tool, Some(AnnotationTool::Eraser)),
+                                    matches!(active_tool, Some(ToolName::Eraser)),
                                 ))
                                 .clicked()
                             {
-                                if matches!(active_tool, Some(AnnotationTool::Eraser)) {
-                                    // annotator_state_mut_ref.current_annotation_tool = None;
+                                if matches!(active_tool, Some(ToolName::Eraser)) {
+                                    annotator_state_mut_ref.deactivate_annotation_tool();
                                 } else {
-                                    // annotator_state.current_annotation_tool =
-                                    //     Some(AnnotationTool::Eraser);
+                                    annotator_state_mut_ref.activate_annotation_tool(ToolName::Eraser);
                                     window.set_view_visible(&AnnotatorState::secondly_toolbar_id(), true);
                                 }
                             }
@@ -303,7 +297,7 @@ pub fn create_primary_toolbar(
                                 ))
                                 .clicked()
                             {
-                                annotator_state_mut_ref.current_annotation_tool = None;
+                                annotator_state_mut_ref.deactivate_annotation_tool();
                                 current_view.set_visible(false);
                             }
 
@@ -315,7 +309,7 @@ pub fn create_primary_toolbar(
                             //
                             //     if let Some(tool) = active_tool {
                             //         match tool {
-                            //             AnnotationTool::Rectangle => {
+                            //             ToolName::Rectangle => {
                             //                 let rectangle_state = annotator_state
                             //                     .annotations_stack
                             //                     .last_mut()
@@ -327,7 +321,7 @@ pub fn create_primary_toolbar(
                             //                     rectangle_state.deactivate();
                             //                 }
                             //             }
-                            //             AnnotationTool::Ellipse => {
+                            //             ToolName::Ellipse => {
                             //                 let ellipse_state = annotator_state
                             //                     .annotations_stack
                             //                     .last_mut()
@@ -339,21 +333,19 @@ pub fn create_primary_toolbar(
                             //                     ellipse_state.deactivate();
                             //                 }
                             //             }
-                            //             AnnotationTool::StraightLine => {}
-                            //             AnnotationTool::Arrow => {}
-                            //             AnnotationTool::Pencil => {}
-                            //             AnnotationTool::MarkerPen => {}
-                            //             AnnotationTool::Mosaic => {}
-                            //             AnnotationTool::Blur => {}
-                            //             AnnotationTool::Text => {}
-                            //             AnnotationTool::SerialNumber => {}
-                            //             AnnotationTool::Watermark => {}
-                            //             AnnotationTool::Eraser => {}
+                            //             ToolName::StraightLine => {}
+                            //             ToolName::Arrow => {}
+                            //             ToolName::Pencil => {}
+                            //             ToolName::MarkerPen => {}
+                            //             ToolName::Mosaic => {}
+                            //             ToolName::Blur => {}
+                            //             ToolName::Text => {}
+                            //             ToolName::SerialNumber => {}
+                            //             ToolName::Watermark => {}
+                            //             ToolName::Eraser => {}
                             //         }
                             //     }
                             // }
-                            drop(annotator_state_mut_ref);
-                            window.window_context.globals_by_type.insert(TypeId::of::<SharedAnnotatorState>(), annotator_state);
                         });
                     });
             })
