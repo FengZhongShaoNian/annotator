@@ -1,5 +1,5 @@
 use crate::annotator::rectangle::RectangleTool;
-use crate::annotator::{AnnotationTool, AnnotatorState, SharedAnnotatorState};
+use crate::annotator::{AnnotationTool, AnnotatorState, SharedAnnotatorState, SharedAnnotatorStateUtil};
 use crate::application::Application;
 use crate::dpi::{LogicalPosition, PhysicalSize};
 use crate::global::{ReadGlobalMut, ReadOrInsertGlobal};
@@ -95,12 +95,9 @@ pub fn create_annotator_panel(
                             .clone();
 
                         if annotator_state.borrow().current_annotation_tool.is_some() {
-                            let mut annotator_state_mut_ref = annotator_state.borrow_mut();
-                            let mut current_annotation_tool = annotator_state_mut_ref.current_annotation_tool.take().unwrap();
-                            drop(annotator_state_mut_ref);
-                            ui.add(&mut current_annotation_tool);
-                            let mut annotator_state_mut_ref = annotator_state.borrow_mut();
-                             annotator_state_mut_ref.current_annotation_tool.replace(current_annotation_tool);
+                            annotator_state.with_current_annotation_tool(|tool| {
+                                ui.add(tool);
+                            })
                         }
 
                         annotator_state.borrow_mut()

@@ -301,6 +301,26 @@ pub type SharedAnnotatorState = Rc<RefCell<AnnotatorState>>;
 
 impl Global for SharedAnnotatorState {}
 
+pub trait SharedAnnotatorStateUtil {
+    fn with_current_annotation_tool<F>(&self, func: F ) where F: FnOnce(&mut AnnotationTool);
+}
+
+impl SharedAnnotatorStateUtil for SharedAnnotatorState {
+    fn with_current_annotation_tool<F>(&self, func: F)
+    where
+        F: FnOnce(&mut AnnotationTool)
+    {
+        let mut annotator_state_mut_ref = self.borrow_mut();
+        let mut current_annotation_tool = annotator_state_mut_ref.current_annotation_tool.take().unwrap();
+        drop(annotator_state_mut_ref);
+
+        func(&mut current_annotation_tool);
+
+        let mut annotator_state_mut_ref = self.borrow_mut();
+        annotator_state_mut_ref.current_annotation_tool.replace(current_annotation_tool);
+    }
+}
+
 impl AnnotatorState {
     pub fn annotator_panel_id() -> ViewId {
         "annotator-panel".into()
