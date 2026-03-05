@@ -175,6 +175,50 @@ pub enum Annotation {
     Eraser(EraserState),
 }
 
+impl Annotation {
+    pub fn activate(&mut self) {
+        match self {
+            Annotation::Rectangle(rectangle_state) => {
+                rectangle_state.activate();
+            }
+            Annotation::Ellipse(ellipse_state) => {
+                ellipse_state.activate();
+            }
+            Annotation::StraightLine(straight_line_state) => {}
+            Annotation::Arrow(arrow_state) => {}
+            Annotation::Pencil(pencil_state) => {}
+            Annotation::MarkerPen(marker_pen_state) => {}
+            Annotation::Mosaic(mosaic_state) => {}
+            Annotation::Blur(blur_state) => {}
+            Annotation::Text(text_state) => {}
+            Annotation::SerialNumber(serial_number_state) => {}
+            Annotation::Watermark(watermark_state) => {}
+            Annotation::Eraser(eraser_state) => {}
+        }
+    }
+
+    pub fn deactivate(&mut self) {
+        match self {
+            Annotation::Rectangle(rectangle_state) => {
+                rectangle_state.deactivate();
+            }
+            Annotation::Ellipse(ellipse_state) => {
+                ellipse_state.deactivate();
+            }
+            Annotation::StraightLine(straight_line_state) => {}
+            Annotation::Arrow(arrow_state) => {}
+            Annotation::Pencil(pencil_state) => {}
+            Annotation::MarkerPen(marker_pen_state) => {}
+            Annotation::Mosaic(mosaic_state) => {}
+            Annotation::Blur(blur_state) => {}
+            Annotation::Text(text_state) => {}
+            Annotation::SerialNumber(serial_number_state) => {}
+            Annotation::Watermark(watermark_state) => {}
+            Annotation::Eraser(eraser_state) => {}
+        }
+    }
+}
+
 impl Widget for &mut Annotation {
     fn ui(self, ui: &mut Ui) -> Response {
         match self {
@@ -275,42 +319,18 @@ pub enum AnnotationTool {
 impl AnnotationTool {
     pub fn tool_name(&self) -> ToolName {
         match self {
-            AnnotationTool::Rectangle(_) => {
-                ToolName::Rectangle
-            }
-            AnnotationTool::Ellipse(_) => {
-                ToolName::Ellipse
-            }
-            AnnotationTool::StraightLine => {
-                ToolName::StraightLine
-            }
-            AnnotationTool::Arrow => {
-                ToolName::Arrow
-            }
-            AnnotationTool::Pencil => {
-                ToolName::Pencil
-            }
-            AnnotationTool::MarkerPen => {
-                ToolName::MarkerPen
-            }
-            AnnotationTool::Mosaic => {
-                ToolName::Mosaic
-            }
-            AnnotationTool::Blur => {
-                ToolName::Blur
-            }
-            AnnotationTool::Text => {
-                ToolName::Text
-            }
-            AnnotationTool::SerialNumber => {
-                ToolName::SerialNumber
-            }
-            AnnotationTool::Watermark => {
-                ToolName::Watermark
-            }
-            AnnotationTool::Eraser => {
-                ToolName::Eraser
-            }
+            AnnotationTool::Rectangle(_) => ToolName::Rectangle,
+            AnnotationTool::Ellipse(_) => ToolName::Ellipse,
+            AnnotationTool::StraightLine => ToolName::StraightLine,
+            AnnotationTool::Arrow => ToolName::Arrow,
+            AnnotationTool::Pencil => ToolName::Pencil,
+            AnnotationTool::MarkerPen => ToolName::MarkerPen,
+            AnnotationTool::Mosaic => ToolName::Mosaic,
+            AnnotationTool::Blur => ToolName::Blur,
+            AnnotationTool::Text => ToolName::Text,
+            AnnotationTool::SerialNumber => ToolName::SerialNumber,
+            AnnotationTool::Watermark => ToolName::Watermark,
+            AnnotationTool::Eraser => ToolName::Eraser,
         }
     }
 }
@@ -384,22 +404,29 @@ pub type SharedAnnotatorState = Rc<RefCell<AnnotatorState>>;
 impl Global for SharedAnnotatorState {}
 
 pub trait SharedAnnotatorStateUtil {
-    fn with_current_annotation_tool<F>(&self, func: F ) where F: FnOnce(&mut AnnotationTool);
+    fn with_current_annotation_tool<F>(&self, func: F)
+    where
+        F: FnOnce(&mut AnnotationTool);
 }
 
 impl SharedAnnotatorStateUtil for SharedAnnotatorState {
     fn with_current_annotation_tool<F>(&self, func: F)
     where
-        F: FnOnce(&mut AnnotationTool)
+        F: FnOnce(&mut AnnotationTool),
     {
         let mut annotator_state_mut_ref = self.borrow_mut();
-        let mut current_annotation_tool = annotator_state_mut_ref.current_annotation_tool.take().unwrap();
+        let mut current_annotation_tool = annotator_state_mut_ref
+            .current_annotation_tool
+            .take()
+            .unwrap();
         drop(annotator_state_mut_ref);
 
         func(&mut current_annotation_tool);
 
         let mut annotator_state_mut_ref = self.borrow_mut();
-        annotator_state_mut_ref.current_annotation_tool.replace(current_annotation_tool);
+        annotator_state_mut_ref
+            .current_annotation_tool
+            .replace(current_annotation_tool);
     }
 }
 
@@ -414,21 +441,27 @@ impl AnnotatorState {
         "secondly-toolbar".into()
     }
 
-    pub fn activate_annotation_tool(&mut self, tool_name: ToolName)  {
+    pub fn activate_annotation_tool(&mut self, tool_name: ToolName) {
         if let Some(active_tool) = &self.current_annotation_tool {
             if active_tool.tool_name() == tool_name {
                 return;
             }
         }
-        let index = self.annotation_tools.iter().position(|t|t.tool_name() == tool_name)
-            .expect(&format!("{:?} Tool not found in AnnotatorState.annotation_tools", tool_name));
+        let index = self
+            .annotation_tools
+            .iter()
+            .position(|t| t.tool_name() == tool_name)
+            .expect(&format!(
+                "{:?} Tool not found in AnnotatorState.annotation_tools",
+                tool_name
+            ));
         let tool = self.annotation_tools.remove(index);
         if let Some(previous_tool) = self.current_annotation_tool.replace(tool) {
             self.annotation_tools.push(previous_tool);
         }
     }
 
-    pub fn deactivate_annotation_tool(&mut self)  {
+    pub fn deactivate_annotation_tool(&mut self) {
         if let Some(previous_tool) = self.current_annotation_tool.take() {
             self.annotation_tools.push(previous_tool);
         }

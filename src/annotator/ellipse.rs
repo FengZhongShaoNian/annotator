@@ -42,6 +42,9 @@ impl EllipseState {
             active,
         }
     }
+    pub fn activate(&mut self) {
+        self.active = true;
+    }
 
     pub fn deactivate(&mut self) {
         self.active = false;
@@ -286,7 +289,7 @@ impl Widget for &mut EllipseTool {
                     {
                         // 调整现有的标注
                         let mut annotation = self.pop_rectangle_annotation().unwrap();
-                        annotation.active = true;
+                        annotation.activate();
                         self.tool_state.current_annotation = Some(annotation);
                         self.tool_state.drag_action = hit_target.get_drag_action();
                     }
@@ -295,7 +298,7 @@ impl Widget for &mut EllipseTool {
                     {
                         self.peek_ellipse_annotation_mut(|mut ellipse_annotation_on_stack_top| {
                             // 把栈顶的椭圆标注设为非激活状态
-                            ellipse_annotation_on_stack_top.as_mut().unwrap().active = false;
+                            ellipse_annotation_on_stack_top.as_mut().unwrap().deactivate();
                             None::<()>
                         });
                     }
@@ -304,7 +307,7 @@ impl Widget for &mut EllipseTool {
         } else if response.clicked() {
             self.peek_ellipse_annotation_mut(|mut ellipse_annotation_on_stack_top| {
                 // 把栈顶的椭圆标注设为非激活状态
-                ellipse_annotation_on_stack_top.as_mut().unwrap().active = false;
+                ellipse_annotation_on_stack_top.as_mut().unwrap().deactivate();
                 None::<()>
             });
         }

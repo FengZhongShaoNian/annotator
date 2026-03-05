@@ -46,6 +46,10 @@ impl RectangleState {
             active,
         }
     }
+    
+    pub fn activate(&mut self) {
+        self.active = true;
+    }
 
     pub fn deactivate(&mut self) {
         self.active = false;
@@ -290,7 +294,7 @@ impl Widget for &mut RectangleTool {
                 {
                     // 调整现有的标注
                     let mut annotation = self.pop_rectangle_annotation().unwrap();
-                    annotation.active = true;
+                    annotation.activate();
                     self.tool_state.current_annotation = Some(annotation);
                     self.tool_state.drag_action = hit_target.get_drag_action();
                 }
@@ -299,7 +303,7 @@ impl Widget for &mut RectangleTool {
                 {
                     self.peek_rectangle_annotation_mut(|mut rectangle_annotation_on_stack_top| {
                         // 把栈顶的矩形标注设为非激活状态
-                        rectangle_annotation_on_stack_top.as_mut().unwrap().active = false;
+                        rectangle_annotation_on_stack_top.as_mut().unwrap().deactivate();
                         None::<()>
                     });
                 }
@@ -308,7 +312,7 @@ impl Widget for &mut RectangleTool {
         } else if response.clicked() {
             self.peek_rectangle_annotation_mut(|mut rectangle_annotation_on_stack_top| {
                 // 把栈顶的矩形标注设为非激活状态
-                rectangle_annotation_on_stack_top.as_mut().unwrap().active = false;
+                rectangle_annotation_on_stack_top.as_mut().unwrap().deactivate();
                 None::<()>
             });
         }
