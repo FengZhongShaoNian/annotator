@@ -1,14 +1,14 @@
 use crate::annotator::ellipse::EllipseState;
 use crate::annotator::rectangle::RectangleState;
 use crate::annotator::svg_button::SvgButton;
-use crate::annotator::{AnnotatorState, AnnotationTool, SharedAnnotatorState, ToolName};
+use crate::annotator::{AnnotationTool, AnnotatorState, SharedAnnotatorState, ToolName};
 use crate::application::Application;
 use crate::dpi::{LogicalPosition, LogicalSize};
 use crate::global::{ReadGlobal, ReadGlobalMut};
 use crate::icon::Icons;
 use crate::view::ViewId;
 use crate::window::AppWindow;
-use egui::{vec2, Color32, Frame};
+use egui::{Color32, Frame, vec2};
 use std::any::TypeId;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -37,7 +37,6 @@ pub fn create_primary_toolbar(
                         ui.ctx().set_cursor_icon(egui::CursorIcon::Default);
                         ui.spacing_mut().item_spacing = vec2(1.0, 0.0);
                         ui.horizontal(|ui| {
-
                             let annotator_state = window
                                 .window_context
                                 .globals_by_type
@@ -45,24 +44,30 @@ pub fn create_primary_toolbar(
                                 .clone();
 
                             let mut annotator_state_mut_ref = annotator_state.borrow_mut();
-                            let active_tool = annotator_state_mut_ref.current_annotation_tool
+                            let active_tool = annotator_state_mut_ref
+                                .current_annotation_tool
                                 .as_ref()
-                                .map(|tool|tool.tool_name());
-                            
-                            if ui.add(SvgButton::new(
-                                "rectangle-tool".into(),
-                                Icons::DrawRectangle.get_image(),
-                                LogicalSize::new(32., 32.),
-                                true,
-                                matches!(active_tool, Some(ToolName::Rectangle)),
+                                .map(|tool| tool.tool_name());
+
+                            if ui
+                                .add(SvgButton::new(
+                                    "rectangle-tool".into(),
+                                    Icons::DrawRectangle.get_image(),
+                                    LogicalSize::new(32., 32.),
+                                    true,
+                                    matches!(active_tool, Some(ToolName::Rectangle)),
                                 ))
                                 .clicked()
                             {
                                 if matches!(active_tool, Some(ToolName::Rectangle)) {
                                     annotator_state_mut_ref.deactivate_annotation_tool();
                                 } else {
-                                    annotator_state_mut_ref.activate_annotation_tool(ToolName::Rectangle);
-                                    window.set_view_visible(&AnnotatorState::secondly_toolbar_id(), true);
+                                    annotator_state_mut_ref
+                                        .activate_annotation_tool(ToolName::Rectangle);
+                                    window.set_view_visible(
+                                        &AnnotatorState::secondly_toolbar_id(),
+                                        true,
+                                    );
                                 }
                             }
                             if ui
@@ -78,8 +83,12 @@ pub fn create_primary_toolbar(
                                 if matches!(active_tool, Some(ToolName::Ellipse)) {
                                     annotator_state_mut_ref.deactivate_annotation_tool();
                                 } else {
-                                    annotator_state_mut_ref.activate_annotation_tool(ToolName::Ellipse);
-                                    window.set_view_visible(&AnnotatorState::secondly_toolbar_id(), true);
+                                    annotator_state_mut_ref
+                                        .activate_annotation_tool(ToolName::Ellipse);
+                                    window.set_view_visible(
+                                        &AnnotatorState::secondly_toolbar_id(),
+                                        true,
+                                    );
                                 }
                             }
 
@@ -96,8 +105,12 @@ pub fn create_primary_toolbar(
                                 if matches!(active_tool, Some(ToolName::StraightLine)) {
                                     annotator_state_mut_ref.deactivate_annotation_tool();
                                 } else {
-                                    annotator_state_mut_ref.activate_annotation_tool(ToolName::StraightLine);
-                                    window.set_view_visible(&AnnotatorState::secondly_toolbar_id(), true);
+                                    annotator_state_mut_ref
+                                        .activate_annotation_tool(ToolName::StraightLine);
+                                    window.set_view_visible(
+                                        &AnnotatorState::secondly_toolbar_id(),
+                                        true,
+                                    );
                                 }
                             }
                             if ui
@@ -113,8 +126,12 @@ pub fn create_primary_toolbar(
                                 if matches!(active_tool, Some(ToolName::Arrow)) {
                                     annotator_state_mut_ref.deactivate_annotation_tool();
                                 } else {
-                                    annotator_state_mut_ref.activate_annotation_tool(ToolName::Arrow);
-                                    window.set_view_visible(&AnnotatorState::secondly_toolbar_id(), true);
+                                    annotator_state_mut_ref
+                                        .activate_annotation_tool(ToolName::Arrow);
+                                    window.set_view_visible(
+                                        &AnnotatorState::secondly_toolbar_id(),
+                                        true,
+                                    );
                                 }
                             }
 
@@ -131,8 +148,12 @@ pub fn create_primary_toolbar(
                                 if matches!(active_tool, Some(ToolName::Pencil)) {
                                     annotator_state_mut_ref.deactivate_annotation_tool();
                                 } else {
-                                    annotator_state_mut_ref.activate_annotation_tool(ToolName::Pencil);
-                                    window.set_view_visible(&AnnotatorState::secondly_toolbar_id(), true);
+                                    annotator_state_mut_ref
+                                        .activate_annotation_tool(ToolName::Pencil);
+                                    window.set_view_visible(
+                                        &AnnotatorState::secondly_toolbar_id(),
+                                        true,
+                                    );
                                 }
                             }
 
@@ -149,8 +170,12 @@ pub fn create_primary_toolbar(
                                 if matches!(active_tool, Some(ToolName::MarkerPen)) {
                                     annotator_state_mut_ref.deactivate_annotation_tool();
                                 } else {
-                                    annotator_state_mut_ref.activate_annotation_tool(ToolName::MarkerPen);
-                                    window.set_view_visible(&AnnotatorState::secondly_toolbar_id(), true);
+                                    annotator_state_mut_ref
+                                        .activate_annotation_tool(ToolName::MarkerPen);
+                                    window.set_view_visible(
+                                        &AnnotatorState::secondly_toolbar_id(),
+                                        true,
+                                    );
                                 }
                             }
 
@@ -167,8 +192,12 @@ pub fn create_primary_toolbar(
                                 if matches!(active_tool, Some(ToolName::Mosaic)) {
                                     annotator_state_mut_ref.deactivate_annotation_tool();
                                 } else {
-                                    annotator_state_mut_ref.activate_annotation_tool(ToolName::Mosaic);
-                                    window.set_view_visible(&AnnotatorState::secondly_toolbar_id(), true);
+                                    annotator_state_mut_ref
+                                        .activate_annotation_tool(ToolName::Mosaic);
+                                    window.set_view_visible(
+                                        &AnnotatorState::secondly_toolbar_id(),
+                                        true,
+                                    );
                                 }
                             }
 
@@ -185,8 +214,12 @@ pub fn create_primary_toolbar(
                                 if matches!(active_tool, Some(ToolName::Blur)) {
                                     annotator_state_mut_ref.deactivate_annotation_tool();
                                 } else {
-                                    annotator_state_mut_ref.activate_annotation_tool(ToolName::Blur);
-                                    window.set_view_visible(&AnnotatorState::secondly_toolbar_id(), true);
+                                    annotator_state_mut_ref
+                                        .activate_annotation_tool(ToolName::Blur);
+                                    window.set_view_visible(
+                                        &AnnotatorState::secondly_toolbar_id(),
+                                        true,
+                                    );
                                 }
                             }
 
@@ -203,8 +236,12 @@ pub fn create_primary_toolbar(
                                 if matches!(active_tool, Some(ToolName::Text)) {
                                     annotator_state_mut_ref.deactivate_annotation_tool();
                                 } else {
-                                    annotator_state_mut_ref.activate_annotation_tool(ToolName::Text);
-                                    window.set_view_visible(&AnnotatorState::secondly_toolbar_id(), true);
+                                    annotator_state_mut_ref
+                                        .activate_annotation_tool(ToolName::Text);
+                                    window.set_view_visible(
+                                        &AnnotatorState::secondly_toolbar_id(),
+                                        true,
+                                    );
                                 }
                             }
 
@@ -221,8 +258,12 @@ pub fn create_primary_toolbar(
                                 if matches!(active_tool, Some(ToolName::SerialNumber)) {
                                     annotator_state_mut_ref.deactivate_annotation_tool();
                                 } else {
-                                    annotator_state_mut_ref.activate_annotation_tool(ToolName::SerialNumber);
-                                    window.set_view_visible(&AnnotatorState::secondly_toolbar_id(), true);
+                                    annotator_state_mut_ref
+                                        .activate_annotation_tool(ToolName::SerialNumber);
+                                    window.set_view_visible(
+                                        &AnnotatorState::secondly_toolbar_id(),
+                                        true,
+                                    );
                                 }
                             }
 
@@ -239,8 +280,12 @@ pub fn create_primary_toolbar(
                                 if matches!(active_tool, Some(ToolName::Eraser)) {
                                     annotator_state_mut_ref.deactivate_annotation_tool();
                                 } else {
-                                    annotator_state_mut_ref.activate_annotation_tool(ToolName::Eraser);
-                                    window.set_view_visible(&AnnotatorState::secondly_toolbar_id(), true);
+                                    annotator_state_mut_ref
+                                        .activate_annotation_tool(ToolName::Eraser);
+                                    window.set_view_visible(
+                                        &AnnotatorState::secondly_toolbar_id(),
+                                        true,
+                                    );
                                 }
                             }
 
@@ -301,51 +346,20 @@ pub fn create_primary_toolbar(
                                 current_view.set_visible(false);
                             }
 
-                            // if matches!(active_tool, ) != annotator_state.current_annotation_tool {
-                            //     println!(
-                            //         "标注工具由{:?}切换为{:?}",
-                            //         active_tool, annotator_state.current_annotation_tool
-                            //     );
-                            //
-                            //     if let Some(tool) = active_tool {
-                            //         match tool {
-                            //             ToolName::Rectangle => {
-                            //                 let rectangle_state = annotator_state
-                            //                     .annotations_stack
-                            //                     .last_mut()
-                            //                     .map(|annotation| {
-                            //                         annotation.downcast_mut::<RectangleState>()
-                            //                     })
-                            //                     .flatten();
-                            //                 if let Some(rectangle_state) = rectangle_state {
-                            //                     rectangle_state.deactivate();
-                            //                 }
-                            //             }
-                            //             ToolName::Ellipse => {
-                            //                 let ellipse_state = annotator_state
-                            //                     .annotations_stack
-                            //                     .last_mut()
-                            //                     .map(|annotation| {
-                            //                         annotation.downcast_mut::<EllipseState>()
-                            //                     })
-                            //                     .flatten();
-                            //                 if let Some(ellipse_state) = ellipse_state {
-                            //                     ellipse_state.deactivate();
-                            //                 }
-                            //             }
-                            //             ToolName::StraightLine => {}
-                            //             ToolName::Arrow => {}
-                            //             ToolName::Pencil => {}
-                            //             ToolName::MarkerPen => {}
-                            //             ToolName::Mosaic => {}
-                            //             ToolName::Blur => {}
-                            //             ToolName::Text => {}
-                            //             ToolName::SerialNumber => {}
-                            //             ToolName::Watermark => {}
-                            //             ToolName::Eraser => {}
-                            //         }
-                            //     }
-                            // }
+                            let tool_name = annotator_state_mut_ref
+                                .current_annotation_tool
+                                .as_ref()
+                                .map(|t| t.tool_name());
+                            if active_tool != tool_name {
+                                println!("标注工具由{:?}切换为{:?}", active_tool, tool_name);
+
+                                if let Some(_) = active_tool {
+
+                                }
+                                if let Some(_tool) = active_tool {
+
+                                }
+                            }
                         });
                     });
             })
