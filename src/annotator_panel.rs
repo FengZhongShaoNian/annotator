@@ -12,6 +12,7 @@ use std::cell::RefCell;
 use std::ops::DerefMut;
 use std::rc::Rc;
 use std::sync::Arc;
+use crate::annotator::ellipse::EllipseTool;
 
 pub fn create_annotator_panel(
     view_id: ViewId,
@@ -57,7 +58,10 @@ pub fn create_annotator_panel(
 
                     let annotator_state_rc = Rc::new(RefCell::new(annotator_state));
                     let rectangle_tool = RectangleTool::new(Rc::downgrade(&annotator_state_rc));
-                    annotator_state_rc.borrow_mut().current_annotation_tool = Some(AnnotationTool::Rectangle(rectangle_tool));
+                    let ellipse_tool = EllipseTool::new(Rc::downgrade(&annotator_state_rc));
+
+                    annotator_state_rc.borrow_mut().annotation_tools.push(AnnotationTool::Ellipse(ellipse_tool));
+                    annotator_state_rc.borrow_mut().annotation_tools.push(AnnotationTool::Rectangle(rectangle_tool));
 
                     annotator_state_rc
                 });
