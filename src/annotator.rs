@@ -1,5 +1,5 @@
-mod arrow;
-mod blur;
+pub mod arrow;
+pub mod blur;
 mod cursor;
 pub mod drop_down_box;
 pub mod ellipse;
@@ -14,7 +14,7 @@ pub(crate) mod svg_button;
 pub mod text;
 pub mod watermark;
 
-use crate::annotator::arrow::ArrowState;
+use crate::annotator::arrow::{ArrowState, ArrowTool};
 use crate::annotator::blur::BlurState;
 use crate::annotator::ellipse::{EllipseState, EllipseTool, EllipseToolState};
 use crate::annotator::eraser::EraserState;
@@ -29,10 +29,7 @@ use crate::annotator::watermark::WaterMarkState;
 use crate::global::Global;
 use crate::view::ViewId;
 use egui::ahash::HashMap;
-use egui::{
-    Color32, CornerRadius, CursorIcon, Painter, Pos2, Rect, Response, Shape, Stroke, StrokeKind,
-    TextureHandle, Ui, Widget, pos2, vec2,
-};
+use egui::{Color32, CornerRadius, CursorIcon, Painter, Pos2, Rect, Response, Shape, Stroke, StrokeKind, TextureHandle, Ui, Widget, pos2, vec2, Vec2};
 use image::RgbaImage;
 use std::any::Any;
 use std::cell::RefCell;
@@ -40,6 +37,7 @@ use std::cmp::max;
 use std::ops::{Add, Sub};
 use std::rc::Rc;
 use std::sync::Arc;
+use egui::emath::Rot2;
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum StrokeType {
@@ -188,7 +186,9 @@ impl Annotation {
             Annotation::StraightLine(straight_line_state) => {
                 straight_line_state.activate();
             }
-            Annotation::Arrow(arrow_state) => {}
+            Annotation::Arrow(arrow_state) => {
+                arrow_state.activate();
+            }
             Annotation::Pencil(pencil_state) => {}
             Annotation::MarkerPen(marker_pen_state) => {}
             Annotation::Mosaic(mosaic_state) => {}
@@ -211,7 +211,9 @@ impl Annotation {
             Annotation::StraightLine(straight_line_state) => {
                 straight_line_state.deactivate();
             }
-            Annotation::Arrow(arrow_state) => {}
+            Annotation::Arrow(arrow_state) => {
+                arrow_state.deactivate();
+            }
             Annotation::Pencil(pencil_state) => {}
             Annotation::MarkerPen(marker_pen_state) => {}
             Annotation::Mosaic(mosaic_state) => {}
@@ -229,7 +231,7 @@ impl Annotation {
             Annotation::Ellipse(ellipse_state) => ellipse_state.is_active(),
             Annotation::StraightLine(straight_line_state) => straight_line_state.is_active(),
             Annotation::Arrow(arrow_state) => {
-                todo!()
+                arrow_state.is_active()
             }
             Annotation::Pencil(pencil_state) => {
                 todo!()
@@ -287,15 +289,33 @@ impl Annotation {
             Annotation::StraightLine(straight_line_state) => {
                 straight_line_state.set_color(color);
             }
-            Annotation::Arrow(arrow_state) => {}
-            Annotation::Pencil(pencil_state) => {}
-            Annotation::MarkerPen(marker_pen_state) => {}
-            Annotation::Mosaic(mosaic_state) => {}
-            Annotation::Blur(blur_state) => {}
-            Annotation::Text(text_state) => {}
-            Annotation::SerialNumber(serial_number_state) => {}
-            Annotation::Watermark(watermark_state) => {}
-            Annotation::Eraser(eraser_state) => {}
+            Annotation::Arrow(arrow_state) => {
+                arrow_state.set_color(color);
+            }
+            Annotation::Pencil(pencil_state) => {
+                todo!()
+            }
+            Annotation::MarkerPen(marker_pen_state) => {
+                todo!()
+            }
+            Annotation::Mosaic(mosaic_state) => {
+                todo!()
+            }
+            Annotation::Blur(blur_state) => {
+                todo!()
+            }
+            Annotation::Text(text_state) => {
+                todo!()
+            }
+            Annotation::SerialNumber(serial_number_state) => {
+                todo!()
+            }
+            Annotation::Watermark(watermark_state) => {
+                todo!()
+            }
+            Annotation::Eraser(eraser_state) => {
+                unimplemented!()
+            }
         }
     }
 
@@ -308,7 +328,9 @@ impl Annotation {
             Annotation::StraightLine(straight_line_state) => {
                 straight_line_state.set_stroke_type(stroke_type);
             }
-            Annotation::Arrow(arrow_state) => {}
+            Annotation::Arrow(arrow_state) => {
+                unimplemented!()
+            }
             Annotation::Pencil(pencil_state) => {}
             Annotation::MarkerPen(marker_pen_state) => {}
             Annotation::Mosaic(mosaic_state) => {}
@@ -391,7 +413,7 @@ pub enum AnnotationTool {
     StraightLine(StraightLineTool),
 
     /// 箭头
-    Arrow,
+    Arrow(ArrowTool),
 
     /// 铅笔
     Pencil,
@@ -424,7 +446,7 @@ impl AnnotationTool {
             AnnotationTool::Rectangle(_) => ToolName::Rectangle,
             AnnotationTool::Ellipse(_) => ToolName::Ellipse,
             AnnotationTool::StraightLine(_) => ToolName::StraightLine,
-            AnnotationTool::Arrow => ToolName::Arrow,
+            AnnotationTool::Arrow(_) => ToolName::Arrow,
             AnnotationTool::Pencil => ToolName::Pencil,
             AnnotationTool::MarkerPen => ToolName::MarkerPen,
             AnnotationTool::Mosaic => ToolName::Mosaic,
@@ -443,8 +465,8 @@ impl AnnotationTool {
             AnnotationTool::StraightLine(straight_line_tool) => {
                 Some(straight_line_tool.stroke_type())
             }
-            AnnotationTool::Arrow => {
-                todo!("Arrow")
+            AnnotationTool::Arrow(_) => {
+                None
             }
             AnnotationTool::Pencil => {
                 todo!("Pencil")
@@ -478,36 +500,38 @@ impl AnnotationTool {
             AnnotationTool::Rectangle(rectangle_tool) => {
                 rectangle_tool.set_stroke_type(stroke_type);
             }
-            AnnotationTool::Ellipse(_) => {}
+            AnnotationTool::Ellipse(_) => {
+                unimplemented!("Ellipse")
+            }
             AnnotationTool::StraightLine(straight_line_tool) => {
                 straight_line_tool.set_stroke_type(stroke_type);
             }
-            AnnotationTool::Arrow => {
-                todo!("Arrow")
+            AnnotationTool::Arrow(_) => {
+                unimplemented!("Arrow")
             }
             AnnotationTool::Pencil => {
-                todo!("Pencil")
+                unimplemented!("Pencil")
             }
             AnnotationTool::MarkerPen => {
-                todo!("Marker Pen")
+                unimplemented!("Marker Pen")
             }
             AnnotationTool::Mosaic => {
-                todo!("Mosaic")
+                unimplemented!("Mosaic")
             }
             AnnotationTool::Blur => {
-                todo!("Blur")
+                unimplemented!("Blur")
             }
             AnnotationTool::Text => {
-                todo!("Text")
+                unimplemented!("Text")
             }
             AnnotationTool::SerialNumber => {
-                todo!("Serial Number")
+                unimplemented!("Serial Number")
             }
             AnnotationTool::Watermark => {
-                todo!("Watermark")
+                unimplemented!("Watermark")
             }
             AnnotationTool::Eraser => {
-                todo!("Eraser")
+                unimplemented!("Eraser")
             }
         }
     }
@@ -517,9 +541,7 @@ impl AnnotationTool {
             AnnotationTool::Rectangle(rectangle_tool) => Some(rectangle_tool.color()),
             AnnotationTool::Ellipse(ellipse_tool) => Some(ellipse_tool.color()),
             AnnotationTool::StraightLine(straight_line_tool) => Some(straight_line_tool.color()),
-            AnnotationTool::Arrow => {
-                todo!("Arrow")
-            }
+            AnnotationTool::Arrow(arrow_tool) => Some(arrow_tool.color()),
             AnnotationTool::Pencil => {
                 todo!("Pencil")
             }
@@ -558,8 +580,8 @@ impl AnnotationTool {
             AnnotationTool::StraightLine(straight_line_tool) => {
                 straight_line_tool.set_color(color);
             }
-            AnnotationTool::Arrow => {
-                todo!("Arrow")
+            AnnotationTool::Arrow(arrow_tool) => {
+                arrow_tool.set_color(color);
             }
             AnnotationTool::Pencil => {
                 todo!("Pencil")
@@ -595,9 +617,7 @@ impl Widget for &mut AnnotationTool {
             AnnotationTool::Rectangle(rectangle_tool) => rectangle_tool.ui(ui),
             AnnotationTool::Ellipse(ellipse_tool) => ellipse_tool.ui(ui),
             AnnotationTool::StraightLine(straight_line_tool) => straight_line_tool.ui(ui),
-            AnnotationTool::Arrow => {
-                todo!("Arrow")
-            }
+            AnnotationTool::Arrow(arrow_tool) => arrow_tool.ui(ui),
             AnnotationTool::Pencil => {
                 todo!("Pencil")
             }
@@ -1051,6 +1071,8 @@ pub trait PainterExt {
         stroke_kind: StrokeKind,
         stroke_type: StrokeType,
     );
+
+    fn simple_arrow(&self, origin: Pos2, vec: Vec2, stroke: impl Into<Stroke>);
 }
 
 impl PainterExt for Painter {
@@ -1133,6 +1155,18 @@ impl PainterExt for Painter {
                 draw_dotted_rect(painter, path_rect, stroke.color, spacing, radius);
             }
         }
+    }
+
+    fn simple_arrow(&self, origin: Pos2, vec: Vec2, stroke: impl Into<Stroke>) {
+        use egui::emath::Rot2;
+        let rot = Rot2::from_angle(std::f32::consts::TAU / 10.0);
+        let tip_length = 12.;
+        let tip = origin + vec;
+        let dir = vec.normalized();
+        let stroke = stroke.into();
+        self.line_segment([origin, tip], stroke);
+        self.line_segment([tip, tip - tip_length * (rot * dir)], stroke);
+        self.line_segment([tip, tip - tip_length * (rot.inverse() * dir)], stroke);
     }
 }
 
