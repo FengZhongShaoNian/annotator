@@ -765,7 +765,16 @@ impl AppWindow {
         });
         if let Some(view_id) = view_id {
             info!("Removing popup: {:?}", view_id);
-            self.views.shift_remove(&view_id);
+            let view = self.views.shift_remove(&view_id);
+            if let Some(Some(app_view)) = view {
+                match app_view {
+                    Pop(popup_view) => {
+                        self.surface_id_to_view_id.remove(&popup_view.view().surface_id());
+                    }
+                    _ => ()
+                }
+            }
+
         }
     }
 

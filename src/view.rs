@@ -6,6 +6,7 @@ use crate::window::AppWindow;
 use egui::{FullOutput, ImeEvent, PlatformOutput, RawInput};
 use sctk::shell::xdg::popup::Popup;
 use std::sync::Arc;
+use wayland_backend::client::ObjectId;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_protocols::wp::viewporter::client::wp_viewport::WpViewport;
 use crate::view::AppView::{Child, Pop, Root};
@@ -41,6 +42,7 @@ pub trait View {
     fn viewport(&self) -> &WpViewport;
     fn resize(&mut self, new_size: LogicalSize<u32>, gpu: &GpuContext);
     fn surface(&self) -> &WlSurface;
+    fn surface_id(&self) -> ObjectId;
 
     fn handle_keyboard_event(
         &mut self,

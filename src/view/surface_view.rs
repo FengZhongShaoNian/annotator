@@ -11,7 +11,9 @@ use egui_wgpu::{RendererOptions, wgpu};
 use log::info;
 use sctk::seat::keyboard::{KeyEvent, Modifiers};
 use sctk::seat::pointer::PointerEvent;
+use wayland_backend::client::ObjectId;
 use wayland_client::protocol::wl_surface::WlSurface;
+use wayland_client::Proxy;
 use wayland_protocols::wp::viewporter::client::wp_viewport::WpViewport;
 
 pub struct SurfaceView<'window> {
@@ -131,6 +133,10 @@ impl<'window> View for SurfaceView<'window> {
 
     fn surface(&self) -> &WlSurface {
         self.surface()
+    }
+
+    fn surface_id(&self) -> ObjectId {
+        self.surface().id()
     }
 
     fn handle_keyboard_event(&mut self, event: KeyEvent, pressed: bool, repeat: bool) {

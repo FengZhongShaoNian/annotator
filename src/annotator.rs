@@ -1,7 +1,7 @@
 mod arrow;
 mod blur;
 mod cursor;
-mod drop_down_box;
+pub mod drop_down_box;
 pub(crate) mod ellipse;
 mod eraser;
 mod marker_pen;
