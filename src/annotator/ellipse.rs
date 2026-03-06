@@ -1,7 +1,7 @@
 use crate::annotator::cursor::Crosshair;
 use crate::annotator::{Annotation, AnnotatorState, DragAction, HitTarget, HitTest, PainterExt};
 use egui::epaint::EllipseShape;
-use egui::{vec2, Color32, CursorIcon, Id, Pos2, Rect, Response, Sense, Stroke, Ui, Widget};
+use egui::{Color32, CursorIcon, Id, Pos2, Rect, Response, Sense, Stroke, Ui, Widget, vec2};
 use std::cell::RefCell;
 use std::rc::Weak;
 use std::time::{Duration, Instant};
@@ -48,6 +48,15 @@ impl EllipseState {
 
     pub fn deactivate(&mut self) {
         self.active = false;
+    }
+    pub fn is_active(&self) -> bool {
+        self.active
+    }
+    pub fn set_color(&mut self, color: Color32) {
+        self.style.stroke.color = color;
+        if let Some(color) = self.style.fill_color {
+            self.style.fill_color = Some(color);
+        }
     }
 }
 
@@ -102,7 +111,6 @@ pub struct EllipseTool {
     tool_state: EllipseToolState,
 }
 
-
 const MAX_STROKE_WIDTH: f32 = 62.;
 
 fn hit_test(annotation: &Option<&EllipseState>, pointer_pos: &Pos2) -> Option<HitTarget> {
@@ -135,6 +143,17 @@ impl EllipseTool {
         let tool_state = &mut self.tool_state;
         if tool_state.style.stroke.width - 1. > 0. {
             tool_state.style.stroke.width -= 1.;
+        }
+    }
+
+    pub fn color(&self) -> Color32 {
+        self.tool_state.style.stroke.color
+    }
+
+    pub fn set_color(&mut self, color: Color32) {
+        self.tool_state.style.stroke.color = color;
+        if self.tool_state.style.fill_color.is_some() {
+            self.tool_state.style.fill_color = Some(color);
         }
     }
 
@@ -241,7 +260,7 @@ impl EllipseTool {
                     Color32::RED,
                     self.tool_state.style.stroke.width,
                 )
-                    .paint_with(ui.painter());
+                .paint_with(ui.painter());
             }
         } else {
             ui.ctx().set_cursor_icon(CursorIcon::None);
@@ -251,7 +270,7 @@ impl EllipseTool {
                 Color32::RED,
                 self.tool_state.style.stroke.width,
             )
-                .paint_with(ui.painter());
+            .paint_with(ui.painter());
         }
     }
 }
@@ -275,8 +294,7 @@ impl Widget for &mut EllipseTool {
             // 拖动开始
             // 从标注栈的栈顶中获取最近的一个椭圆标注
 
-            let drag_started_pos =
-                ui.ctx().input(|i| i.pointer.press_origin()).unwrap();
+            let drag_started_pos = ui.ctx().input(|i| i.pointer.press_origin()).unwrap();
 
             let hit_target = self.peek_ellipse_annotation(|ellipse_annotation_on_stack_top| {
                 // 判断当前鼠标是否位于此椭圆标注上
@@ -285,23 +303,26 @@ impl Widget for &mut EllipseTool {
 
             match hit_target {
                 Some(hit_target)
-                if hit_target != HitTarget::Inside && hit_target != HitTarget::Outside =>
-                    {
-                        // 调整现有的标注
-                        let mut annotation = self.pop_rectangle_annotation().unwrap();
-                        annotation.activate();
-                        self.tool_state.current_annotation = Some(annotation);
-                        self.tool_state.drag_action = hit_target.get_drag_action();
-                    }
+                    if hit_target != HitTarget::Inside && hit_target != HitTarget::Outside =>
+                {
+                    // 调整现有的标注
+                    let mut annotation = self.pop_rectangle_annotation().unwrap();
+                    annotation.activate();
+                    self.tool_state.current_annotation = Some(annotation);
+                    self.tool_state.drag_action = hit_target.get_drag_action();
+                }
                 Some(hit_target)
-                if hit_target == HitTarget::Inside || hit_target == HitTarget::Outside =>
-                    {
-                        self.peek_ellipse_annotation_mut(|mut ellipse_annotation_on_stack_top| {
-                            // 把栈顶的椭圆标注设为非激活状态
-                            ellipse_annotation_on_stack_top.as_mut().unwrap().deactivate();
-                            None::<()>
-                        });
-                    }
+                    if hit_target == HitTarget::Inside || hit_target == HitTarget::Outside =>
+                {
+                    self.peek_ellipse_annotation_mut(|mut ellipse_annotation_on_stack_top| {
+                        // 把栈顶的椭圆标注设为非激活状态
+                        ellipse_annotation_on_stack_top
+                            .as_mut()
+                            .unwrap()
+                            .deactivate();
+                        None::<()>
+                    });
+                }
                 _ => {}
             }
         } else if response.clicked() {

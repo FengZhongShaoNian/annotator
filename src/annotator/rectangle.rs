@@ -54,6 +54,17 @@ impl RectangleState {
     pub fn deactivate(&mut self) {
         self.active = false;
     }
+    
+    pub fn is_active(&self) -> bool {
+        self.active
+    }
+    
+    pub fn set_color(&mut self, color: Color32) {
+        self.style.stroke.color = color;
+        if let Some(color) = self.style.fill_color {
+            self.style.fill_color = Some(color);
+        }
+    }
 }
 
 impl Widget for &mut RectangleState {
@@ -158,6 +169,9 @@ impl RectangleTool {
     
     pub fn set_color(&mut self, color: Color32) {
         self.tool_state.style.stroke.color = color;
+        if self.tool_state.style.fill_color.is_some() {
+            self.tool_state.style.fill_color = Some(color);
+        }
     }
 
     fn peek_rectangle_annotation<F, R>(&self, func: F) -> Option<R>

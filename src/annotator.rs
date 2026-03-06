@@ -218,6 +218,110 @@ impl Annotation {
             Annotation::Eraser(eraser_state) => {}
         }
     }
+    
+    pub fn is_active(&self) -> bool {
+        match self {
+            Annotation::Rectangle(rectangle_state) => {
+                rectangle_state.is_active()
+            }
+            Annotation::Ellipse(ellipse_state) => {
+                ellipse_state.is_active()
+            }
+            Annotation::StraightLine(straight_line_state) => {
+                todo!()
+            }
+            Annotation::Arrow(arrow_state) => {
+                todo!()
+            }
+            Annotation::Pencil(pencil_state) => {
+                todo!()
+            }
+            Annotation::MarkerPen(marker_pen_state) => {
+                todo!()
+            }
+            Annotation::Mosaic(mosaic_state) => {
+                todo!()
+            }
+            Annotation::Blur(blur_state) => {
+                todo!()
+            }
+            Annotation::Text(text_state) => {
+                todo!()
+            }
+            Annotation::SerialNumber(serial_number_state) => {
+                todo!()
+            }
+            Annotation::Watermark(watermark_state) => {
+                todo!()
+            }
+            Annotation::Eraser(eraser_state) => {
+                todo!()
+            }
+        }
+    }
+
+    pub fn was_created_by(&mut self, tool: &AnnotationTool) -> bool {
+        let tool_name = tool.tool_name();
+        match self {
+            Annotation::Rectangle(_) => {
+                tool_name == ToolName::Rectangle
+            }
+            Annotation::Ellipse(ellipse_state) => {
+                tool_name == ToolName::Ellipse
+            }
+            Annotation::StraightLine(_) => {
+                tool_name == ToolName::StraightLine
+            }
+            Annotation::Arrow(_) => {
+                tool_name == ToolName::Arrow
+            }
+            Annotation::Pencil(_) => {
+                tool_name == ToolName::Pencil
+            }
+            Annotation::MarkerPen(_) => {
+                tool_name == ToolName::MarkerPen
+            }
+            Annotation::Mosaic(_) => {
+                tool_name == ToolName::Mosaic
+            }
+            Annotation::Blur(_) => {
+                tool_name == ToolName::Blur
+            }
+            Annotation::Text(_) => {
+                tool_name == ToolName::Text
+            }
+            Annotation::SerialNumber(_) => {
+                tool_name == ToolName::SerialNumber
+            }
+            Annotation::Watermark(_) => {
+                tool_name == ToolName::Watermark
+            }
+            Annotation::Eraser(_) => {
+                tool_name == ToolName::Eraser
+            }
+        }
+    }
+
+    pub fn set_color(&mut self, color: Color32) {
+        match self {
+            Annotation::Rectangle(rectangle_state) => {
+                rectangle_state.set_color(color);
+            }
+            Annotation::Ellipse(ellipse_state) => {
+                ellipse_state.set_color(color);
+            }
+            Annotation::StraightLine(straight_line_state) => {}
+            Annotation::Arrow(arrow_state) => {}
+            Annotation::Pencil(pencil_state) => {}
+            Annotation::MarkerPen(marker_pen_state) => {}
+            Annotation::Mosaic(mosaic_state) => {}
+            Annotation::Blur(blur_state) => {}
+            Annotation::Text(text_state) => {}
+            Annotation::SerialNumber(serial_number_state) => {}
+            Annotation::Watermark(watermark_state) => {}
+            Annotation::Eraser(eraser_state) => {}
+        }
+    }
 }
 
 impl Widget for &mut Annotation {

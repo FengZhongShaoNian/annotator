@@ -138,6 +138,14 @@ fn create_color_selector(
     if ui.add(ColorButton::new(Color32::GOLD, button_width, button_width, current_color == Color32::GOLD)).clicked() {
         tool.set_color(Color32::GOLD);
     }
+    if current_color != tool.color().unwrap() {
+        annotation_state.annotations_stack.last_mut()
+            .map(|annotation|{
+                if annotation.was_created_by(tool) && annotation.is_active(){
+                    annotation.set_color(tool.color().unwrap());
+                }
+            });
+    }
     width.round() as u32
 }
 
