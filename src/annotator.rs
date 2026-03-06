@@ -39,6 +39,7 @@ use std::cmp::max;
 use std::ops::{Add, Sub};
 use std::rc::Rc;
 use std::sync::Arc;
+use egui::ahash::HashMap;
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum StrokeType {
@@ -387,7 +388,7 @@ pub struct AnnotatorState {
     pub background_texture_handle: Option<TextureHandle>,
 
     /// 标注工具
-    pub annotation_tools: Vec<AnnotationTool>,
+    pub annotation_tools: HashMap<ToolName, AnnotationTool>,
 
     /// 界面上显示的标注内容
     pub annotations_stack: Vec<Annotation>,
@@ -447,23 +448,15 @@ impl AnnotatorState {
                 return;
             }
         }
-        let index = self
-            .annotation_tools
-            .iter()
-            .position(|t| t.tool_name() == tool_name)
-            .expect(&format!(
-                "{:?} Tool not found in AnnotatorState.annotation_tools",
-                tool_name
-            ));
-        let tool = self.annotation_tools.remove(index);
+        let tool = self.annotation_tools.remove(&tool_name).expect(&format!("{:?}Tool does not exist", tool_name));
         if let Some(previous_tool) = self.current_annotation_tool.replace(tool) {
-            self.annotation_tools.push(previous_tool);
+            self.annotation_tools.insert(previous_tool.tool_name(), previous_tool);
         }
     }
 
     pub fn deactivate_annotation_tool(&mut self) {
         if let Some(previous_tool) = self.current_annotation_tool.take() {
-            self.annotation_tools.push(previous_tool);
+            self.annotation_tools.insert(previous_tool.tool_name(), previous_tool);
         }
     }
 }

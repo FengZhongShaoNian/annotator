@@ -1,5 +1,5 @@
 use crate::annotator::rectangle::RectangleTool;
-use crate::annotator::{AnnotationTool, AnnotatorState, SharedAnnotatorState, SharedAnnotatorStateUtil};
+use crate::annotator::{AnnotationTool, AnnotatorState, SharedAnnotatorState, SharedAnnotatorStateUtil, ToolName};
 use crate::application::Application;
 use crate::dpi::{LogicalPosition, PhysicalSize};
 use crate::global::{ReadGlobalMut, ReadOrInsertGlobal};
@@ -60,8 +60,8 @@ pub fn create_annotator_panel(
                     let rectangle_tool = RectangleTool::new(Rc::downgrade(&annotator_state_rc));
                     let ellipse_tool = EllipseTool::new(Rc::downgrade(&annotator_state_rc));
 
-                    annotator_state_rc.borrow_mut().annotation_tools.push(AnnotationTool::Ellipse(ellipse_tool));
-                    annotator_state_rc.borrow_mut().annotation_tools.push(AnnotationTool::Rectangle(rectangle_tool));
+                    annotator_state_rc.borrow_mut().annotation_tools.insert(ToolName::Rectangle, AnnotationTool::Rectangle(rectangle_tool));
+                    annotator_state_rc.borrow_mut().annotation_tools.insert(ToolName::Ellipse, AnnotationTool::Ellipse(ellipse_tool));
 
                     annotator_state_rc
                 });
