@@ -412,6 +412,84 @@ impl AnnotationTool {
             }
         }
     }
+
+    pub fn color(&self) -> Option<Color32> {
+        match self {
+            AnnotationTool::Rectangle(rectangle_tool) => Some(rectangle_tool.color()),
+            AnnotationTool::Ellipse(_) => None,
+            AnnotationTool::StraightLine => {
+                todo!("Straight Line")
+            }
+            AnnotationTool::Arrow => {
+                todo!("Arrow")
+            }
+            AnnotationTool::Pencil => {
+                todo!("Pencil")
+            }
+            AnnotationTool::MarkerPen => {
+                todo!("Marker Pen")
+            }
+            AnnotationTool::Mosaic => {
+                todo!("Mosaic")
+            }
+            AnnotationTool::Blur => {
+                todo!("Blur")
+            }
+            AnnotationTool::Text => {
+                todo!("Text")
+            }
+            AnnotationTool::SerialNumber => {
+                todo!("Serial Number")
+            }
+            AnnotationTool::Watermark => {
+                todo!("Watermark")
+            }
+            AnnotationTool::Eraser => {
+                todo!("Eraser")
+            }
+        }
+    }
+
+    pub fn set_color(&mut self, color: Color32) {
+        match self {
+            AnnotationTool::Rectangle(rectangle_tool) => {
+                rectangle_tool.set_color(color);
+            },
+            AnnotationTool::Ellipse(_) => {
+                todo!("Straight Line")
+            },
+            AnnotationTool::StraightLine => {
+                todo!("Straight Line")
+            }
+            AnnotationTool::Arrow => {
+                todo!("Arrow")
+            }
+            AnnotationTool::Pencil => {
+                todo!("Pencil")
+            }
+            AnnotationTool::MarkerPen => {
+                todo!("Marker Pen")
+            }
+            AnnotationTool::Mosaic => {
+                todo!("Mosaic")
+            }
+            AnnotationTool::Blur => {
+                todo!("Blur")
+            }
+            AnnotationTool::Text => {
+                todo!("Text")
+            }
+            AnnotationTool::SerialNumber => {
+                todo!("Serial Number")
+            }
+            AnnotationTool::Watermark => {
+                todo!("Watermark")
+            }
+            AnnotationTool::Eraser => {
+                todo!("Eraser")
+            }
+        }
+    }
 }
 
 impl Widget for &mut AnnotationTool {

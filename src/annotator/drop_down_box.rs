@@ -111,6 +111,8 @@ impl Widget for DropdownBox<'_, '_, '_, '_> {
     }
 }
 
+const STROKE_TYPE_SELECTOR_WIDTH: u32 = 100u32;
+
 pub fn create_stroke_type_selector(
     id: Id,
     app: &mut Application,
@@ -118,7 +120,7 @@ pub fn create_stroke_type_selector(
     current_view: &mut dyn View,
     annotator_state: &mut AnnotatorState,
     ui: &mut Ui,
-) {
+) -> u32 {
     let dropdown = DropdownBox {
         id,
         app,
@@ -129,7 +131,7 @@ pub fn create_stroke_type_selector(
         build_drop_down_box_button_fn: Arc::new(Box::new(|_id, ui, annotator_state| {
             let tool = annotator_state.current_annotation_tool.as_ref().unwrap();
             let stroke_type = tool.stroke_type().unwrap();
-            let (rect, response) = ui.allocate_exact_size(vec2(100., 20.), Sense::click());
+            let (rect, response) = ui.allocate_exact_size(vec2(STROKE_TYPE_SELECTOR_WIDTH as f32, 20.), Sense::click());
             if response.hovered() {
                 ui.painter().rect(
                     rect,
@@ -210,6 +212,8 @@ pub fn create_stroke_type_selector(
         )),
     };
     ui.add(dropdown);
+    
+    STROKE_TYPE_SELECTOR_WIDTH
 }
 
 struct StrokeTypeButton {

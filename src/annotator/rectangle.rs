@@ -151,6 +151,14 @@ impl RectangleTool {
     pub fn set_stroke_type(&mut self, stroke_type: StrokeType) {
         self.tool_state.style.stroke_type = stroke_type;
     }
+    
+    pub fn color(&self) -> Color32 {
+        self.tool_state.style.stroke.color
+    }
+    
+    pub fn set_color(&mut self, color: Color32) {
+        self.tool_state.style.stroke.color = color;
+    }
 
     fn peek_rectangle_annotation<F, R>(&self, func: F) -> Option<R>
     where
