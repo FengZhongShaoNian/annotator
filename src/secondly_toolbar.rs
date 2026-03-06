@@ -1,8 +1,9 @@
 use crate::annotator::drop_down_box::{DropdownBox, create_stroke_type_selector};
 use crate::annotator::{
-    AnnotationTool, AnnotatorState, PainterExt, SharedAnnotatorState, StrokeType,
+    AnnotationTool, AnnotatorState, PainterExt, SharedAnnotatorState, StrokeType, ToolName,
 };
 use crate::application::Application;
+use crate::context::Command;
 use crate::dpi::{LogicalPosition, LogicalSize};
 use crate::global::ReadGlobal;
 use crate::view::{View, ViewId};
@@ -13,7 +14,6 @@ use egui::{
 };
 use std::any::TypeId;
 use std::sync::Arc;
-use crate::context::Command;
 
 fn run_ui<F>(
     app: &mut Application,
@@ -71,15 +71,21 @@ pub fn create_secondly_toolbar(
                                 current_view,
                                 ui,
                                 move |app, window, current_view, ui, annotator_state| {
-                                    let active_tool = &mut annotator_state.current_annotation_tool;
+                                    let active_tool = annotator_state
+                                        .current_annotation_tool
+                                        .as_ref()
+                                        .map(|t| t.tool_name());
 
-                                    if active_tool.is_none() {
+                                    let Some(active_tool) = active_tool else {
                                         current_view.set_visible(false);
                                         return;
-                                    }
+                                    };
 
-                                    if matches!(active_tool, Some(AnnotationTool::Rectangle(..))) {
-                                        let mut width = create_stroke_type_selector(
+                                    let show_stroke_type_selector = active_tool
+                                        == ToolName::Rectangle
+                                        || active_tool == ToolName::StraightLine;
+                                    if show_stroke_type_selector {
+                                        create_stroke_type_selector(
                                             Id::from("stroke-type-selector"),
                                             app,
                                             window,
@@ -87,21 +93,24 @@ pub fn create_secondly_toolbar(
                                             annotator_state,
                                             ui,
                                         );
+                                    }
 
-                                        width += create_color_selector(
+                                    let show_color_selector = active_tool == ToolName::Rectangle
+                                        || active_tool == ToolName::Ellipse;
+
+                                    if show_color_selector {
+                                        create_color_selector(
                                             app,
                                             window,
                                             current_view,
                                             annotator_state,
                                             ui,
                                         );
-
-                                        width += 20;
-
-                                        let new_size = LogicalSize::new(width, current_view.size().height);
-                                        window.window_context.commands.push_back(Command::ResizeView(current_view.id(), new_size));
-                                        return;
                                     }
+
+                                    // let new_size = LogicalSize::new(width, current_view.size().height);
+                                    // window.window_context.commands.push_back(Command::ResizeView(current_view.id(), new_size));
+                                    return;
                                 },
                             );
                         })
@@ -123,25 +132,67 @@ fn create_color_selector(
     let width = button_width * 5. + ui.spacing().item_spacing.x * 5.;
     let tool = annotator_state.current_annotation_tool.as_mut().unwrap();
     let current_color = tool.color().unwrap();
-    if ui.add(ColorButton::new(Color32::RED, button_width, button_width, current_color == Color32::RED)).clicked() {
+    if ui
+        .add(ColorButton::new(
+            Color32::RED,
+            button_width,
+            button_width,
+            current_color == Color32::RED,
+        ))
+        .clicked()
+    {
         tool.set_color(Color32::RED);
     }
-    if ui.add(ColorButton::new(Color32::BLACK, button_width, button_width, current_color == Color32::BLACK)).clicked() {
+    if ui
+        .add(ColorButton::new(
+            Color32::BLACK,
+            button_width,
+            button_width,
+            current_color == Color32::BLACK,
+        ))
+        .clicked()
+    {
         tool.set_color(Color32::BLACK);
     }
-    if ui.add(ColorButton::new(Color32::BLUE, button_width, button_width, current_color == Color32::BLUE)).clicked() {
+    if ui
+        .add(ColorButton::new(
+            Color32::BLUE,
+            button_width,
+            button_width,
+            current_color == Color32::BLUE,
+        ))
+        .clicked()
+    {
         tool.set_color(Color32::BLUE);
     }
-    if ui.add(ColorButton::new(Color32::GREEN, button_width, button_width, current_color == Color32::GREEN)).clicked() {
+    if ui
+        .add(ColorButton::new(
+            Color32::GREEN,
+            button_width,
+            button_width,
+            current_color == Color32::GREEN,
+        ))
+        .clicked()
+    {
         tool.set_color(Color32::GREEN);
     }
-    if ui.add(ColorButton::new(Color32::GOLD, button_width, button_width, current_color == Color32::GOLD)).clicked() {
+    if ui
+        .add(ColorButton::new(
+            Color32::GOLD,
+            button_width,
+            button_width,
+            current_color == Color32::GOLD,
+        ))
+        .clicked()
+    {
         tool.set_color(Color32::GOLD);
     }
     if current_color != tool.color().unwrap() {
-        annotator_state.annotations_stack.last_mut()
-            .map(|annotation|{
-                if annotation.was_created_by(tool) && annotation.is_active(){
+        annotator_state
+            .annotations_stack
+            .last_mut()
+            .map(|annotation| {
+                if annotation.was_created_by(tool) && annotation.is_active() {
                     annotation.set_color(tool.color().unwrap());
                 }
             });
@@ -169,10 +220,17 @@ impl ColorButton {
 
 impl Widget for ColorButton {
     fn ui(self, ui: &mut Ui) -> Response {
-        let (rect, response) = ui.allocate_exact_size(vec2(self.width, self.height), Sense::click());
+        let (rect, response) =
+            ui.allocate_exact_size(vec2(self.width, self.height), Sense::click());
         if self.checked {
-            ui.painter().rect(rect, 0., self.color, Stroke::new(3., Color32::from_hex("#0860f2").unwrap()), StrokeKind::Inside);
-        }else {
+            ui.painter().rect(
+                rect,
+                0.,
+                self.color,
+                Stroke::new(3., Color32::from_hex("#0860f2").unwrap()),
+                StrokeKind::Inside,
+            );
+        } else {
             ui.painter().rect_filled(rect, 0., self.color);
         }
         response

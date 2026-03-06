@@ -540,7 +540,7 @@ impl AnnotationTool {
     pub fn color(&self) -> Option<Color32> {
         match self {
             AnnotationTool::Rectangle(rectangle_tool) => Some(rectangle_tool.color()),
-            AnnotationTool::Ellipse(_) => None,
+            AnnotationTool::Ellipse(ellipse_tool) => Some(ellipse_tool.color()),
             AnnotationTool::StraightLine => {
                 todo!("Straight Line")
             }
@@ -579,8 +579,8 @@ impl AnnotationTool {
             AnnotationTool::Rectangle(rectangle_tool) => {
                 rectangle_tool.set_color(color);
             },
-            AnnotationTool::Ellipse(_) => {
-                todo!("Straight Line")
+            AnnotationTool::Ellipse(ellipse_tool) => {
+                ellipse_tool.set_color(color);
             },
             AnnotationTool::StraightLine => {
                 todo!("Straight Line")
