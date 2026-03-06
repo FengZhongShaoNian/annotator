@@ -334,6 +334,84 @@ impl AnnotationTool {
             AnnotationTool::Eraser => ToolName::Eraser,
         }
     }
+
+    pub fn stroke_type(&self) -> Option<StrokeType> {
+        match self {
+            AnnotationTool::Rectangle(rectangle_tool) => Some(rectangle_tool.stroke_type()),
+            AnnotationTool::Ellipse(_) => None,
+            AnnotationTool::StraightLine => {
+                todo!("Straight Line")
+            }
+            AnnotationTool::Arrow => {
+                todo!("Arrow")
+            }
+            AnnotationTool::Pencil => {
+                todo!("Pencil")
+            }
+            AnnotationTool::MarkerPen => {
+                todo!("Marker Pen")
+            }
+            AnnotationTool::Mosaic => {
+                todo!("Mosaic")
+            }
+            AnnotationTool::Blur => {
+                todo!("Blur")
+            }
+            AnnotationTool::Text => {
+                todo!("Text")
+            }
+            AnnotationTool::SerialNumber => {
+                todo!("Serial Number")
+            }
+            AnnotationTool::Watermark => {
+                todo!("Watermark")
+            }
+            AnnotationTool::Eraser => {
+                todo!("Eraser")
+            }
+        }
+    }
+
+    pub fn set_stroke_type(&mut self, stroke_type: StrokeType) {
+        match self {
+            AnnotationTool::Rectangle(rectangle_tool) => {
+                rectangle_tool.set_stroke_type(stroke_type);
+            },
+            AnnotationTool::Ellipse(_) => {
+
+            },
+            AnnotationTool::StraightLine => {
+                todo!("Straight Line")
+            }
+            AnnotationTool::Arrow => {
+                todo!("Arrow")
+            }
+            AnnotationTool::Pencil => {
+                todo!("Pencil")
+            }
+            AnnotationTool::MarkerPen => {
+                todo!("Marker Pen")
+            }
+            AnnotationTool::Mosaic => {
+                todo!("Mosaic")
+            }
+            AnnotationTool::Blur => {
+                todo!("Blur")
+            }
+            AnnotationTool::Text => {
+                todo!("Text")
+            }
+            AnnotationTool::SerialNumber => {
+                todo!("Serial Number")
+            }
+            AnnotationTool::Watermark => {
+                todo!("Watermark")
+            }
+            AnnotationTool::Eraser => {
+                todo!("Eraser")
+            }
+        }
+    }
 }
 
 impl Widget for &mut AnnotationTool {

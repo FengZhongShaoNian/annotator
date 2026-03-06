@@ -307,7 +307,10 @@ impl Widget for &mut EllipseTool {
         } else if response.clicked() {
             self.peek_ellipse_annotation_mut(|mut ellipse_annotation_on_stack_top| {
                 // 把栈顶的椭圆标注设为非激活状态
-                ellipse_annotation_on_stack_top.as_mut().unwrap().deactivate();
+                if let Some(annotation) = ellipse_annotation_on_stack_top.as_mut() {
+                    annotation.deactivate();
+                }
+
                 None::<()>
             });
         }

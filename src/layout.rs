@@ -12,6 +12,7 @@ use image::RgbaImage;
 use sctk::shell::WaylandSurface;
 use std::cmp::max;
 use std::sync::Arc;
+use log::info;
 
 pub fn build_annotator(
     input: RawInput,
@@ -68,7 +69,6 @@ pub fn build_annotator(
             secondly_toolbar_size,
             secondly_toolbar_position,
         );
-        let secondly_toolbar_size = LogicalSize::new(600, 32);
     }
 
     let annotator_panel = window
@@ -114,6 +114,7 @@ pub fn build_annotator(
             .window_context
             .commands
             .push_back(Command::ResizeView(current_view.id(), required_window_size));
+        info!("required_window_size: {:?}", required_window_size);
         
         // 鼠标穿透
         let qh = &app.global_state.queue_handle;

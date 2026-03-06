@@ -1,16 +1,23 @@
-use crate::annotator::{AnnotationTool, AnnotatorState, SharedAnnotatorState};
+use crate::annotator::drop_down_box::{create_stroke_type_selector, DropdownBox};
+use crate::annotator::{
+    AnnotationTool, AnnotatorState, PainterExt, SharedAnnotatorState, StrokeType,
+};
 use crate::application::Application;
 use crate::dpi::{LogicalPosition, LogicalSize};
 use crate::global::ReadGlobal;
 use crate::view::{View, ViewId};
 use crate::window::AppWindow;
-use egui::{vec2, Color32, Frame, Id, Ui};
+use egui::{Color32, Frame, Id, Rect, Sense, Shape, Stroke, StrokeKind, Ui, pos2, vec2, Margin};
 use std::any::TypeId;
 use std::sync::Arc;
-use crate::annotator::drop_down_box::DropdownBox;
 
-fn run_ui<F>(app: &mut Application, window: &mut AppWindow, current_view: &mut dyn View, ui: &mut Ui, func: F)
-where
+fn run_ui<F>(
+    app: &mut Application,
+    window: &mut AppWindow,
+    current_view: &mut dyn View,
+    ui: &mut Ui,
+    func: F,
+) where
     F: Fn(&mut Application, &mut AppWindow, &mut dyn View, &mut Ui, &mut AnnotatorState),
 {
     let annotator_state = window
@@ -46,40 +53,36 @@ pub fn create_secondly_toolbar(
             // 构建 UI 的具体内容
             egui_ctx.run(input, move |ctx| {
                 egui::CentralPanel::default()
-                    .frame(Frame::new().fill(Color32::from_hex("#393b40").unwrap()))
+                    .frame(Frame::new().fill(Color32::from_hex("#393b40").unwrap()).inner_margin(Margin::same(5)))
                     .show(ctx, |ui| {
                         ui.ctx().set_cursor_icon(egui::CursorIcon::Default);
-                        ui.spacing_mut().item_spacing = vec2(1.0, 0.0);
+                        ui.horizontal_centered(|ui| {
+                            run_ui(
+                                app,
+                                window,
+                                current_view,
+                                ui,
+                                move |app, window, current_view, ui, annotator_state| {
+                                    let active_tool = &mut annotator_state.current_annotation_tool;
 
-                        run_ui(app, window, current_view, ui, move |app, window, current_view, ui, annotator_state| {
-                            let active_tool = &mut annotator_state.current_annotation_tool;
+                                    if active_tool.is_none() {
+                                        current_view.set_visible(false);
+                                        return;
+                                    }
 
-                            if active_tool.is_none() {
-                                current_view.set_visible(false);
-                                return;
-                            }
-
-                            if matches!(active_tool, Some(AnnotationTool::Rectangle(..))) {
-                                let dropdown = DropdownBox {
-                                    id: Id::from("stroke-type-selector"),
-                                    app,
-                                    window,
-                                    current_view,
-                                    annotator_state,
-                                    build_drop_down_box_button_fn: Arc::new(Box::new(|_id, ui| {
-                                        ui.button("线条样式")
-                                    })),
-                                    build_drop_down_area_fn: Arc::new(Box::new(|app, window, current_view, annotator_state, ui| {
-                                        ui.label("实线");
-                                        ui.label("虚线");
-                                        ui.label("点线");
-                                    })),
-                                };
-                                ui.add(dropdown);
-                            }
-                        });
-
-
+                                    if matches!(active_tool, Some(AnnotationTool::Rectangle(..))) {
+                                        create_stroke_type_selector(
+                                            Id::from("stroke-type-selector"),
+                                            app,
+                                            window,
+                                            current_view,
+                                            annotator_state,
+                                            ui,
+                                        )
+                                    }
+                                },
+                            );
+                        })
                     });
             })
         }),

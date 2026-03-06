@@ -144,6 +144,14 @@ impl RectangleTool {
         }
     }
 
+    pub fn stroke_type(&self) -> StrokeType {
+        self.tool_state.style.stroke_type
+    }
+
+    pub fn set_stroke_type(&mut self, stroke_type: StrokeType) {
+        self.tool_state.style.stroke_type = stroke_type;
+    }
+
     fn peek_rectangle_annotation<F, R>(&self, func: F) -> Option<R>
     where
         F: Fn(Option<&RectangleState>) -> Option<R>,
@@ -312,7 +320,10 @@ impl Widget for &mut RectangleTool {
         } else if response.clicked() {
             self.peek_rectangle_annotation_mut(|mut rectangle_annotation_on_stack_top| {
                 // 把栈顶的矩形标注设为非激活状态
-                rectangle_annotation_on_stack_top.as_mut().unwrap().deactivate();
+                if let Some(annotation) = rectangle_annotation_on_stack_top.as_mut() {
+                    annotation.deactivate();
+                }
+
                 None::<()>
             });
         }
