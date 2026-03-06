@@ -62,6 +62,14 @@ impl<'window> SubSurfaceView<'window> {
 }
 
 impl<'window> SubView for SubSurfaceView<'window> {
+    fn id(&self) -> ViewId {
+        self.view.id()
+    }
+
+    fn surface_id(&self) -> ObjectId {
+        self.view.surface().id()
+    }
+
     fn view(&self) -> &dyn View {
         &self.view
     }

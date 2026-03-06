@@ -2,7 +2,9 @@ use crate::dpi::{LogicalPosition, LogicalSize};
 use crate::view::{BuildViewFn, PopupView, View, ViewId};
 use egui_wgpu::wgpu::Surface;
 use sctk::shell::xdg::popup::Popup;
+use wayland_backend::client::ObjectId;
 use wayland_client::protocol::wl_surface::WlSurface;
+use wayland_client::Proxy;
 use wayland_protocols::wp::viewporter::client::wp_viewport::WpViewport;
 use wayland_protocols::xdg::shell::client::xdg_positioner::XdgPositioner;
 use crate::view::surface_view::SurfaceView;
@@ -49,6 +51,14 @@ impl<'window> XdgPopupView<'window> {
 }
 
 impl PopupView for XdgPopupView<'_> {
+    fn id(&self) -> ViewId {
+        self.view.id()
+    }
+
+    fn surface_id(&self) -> ObjectId {
+        self.view.surface().id()
+    }
+    
     fn view(&self) -> &dyn View {
         &self.view
     }

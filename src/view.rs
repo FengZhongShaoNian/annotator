@@ -74,6 +74,9 @@ pub(crate) type RelativePositionCalculator =
     dyn Fn(&PhysicalSize<u32>, &PhysicalSize<u32>) -> PhysicalPosition<u32>;
 
 pub trait SubView {
+    fn id(&self) -> ViewId;
+    fn surface_id(&self) -> ObjectId;
+
     fn view(&self) -> &dyn View;
 
     fn view_mut(&mut self) -> &mut dyn View;
@@ -84,6 +87,9 @@ pub trait SubView {
 }
 
 pub trait PopupView {
+    fn id(&self) -> ViewId;
+    fn surface_id(&self) -> ObjectId;
+
     fn view(&self) -> &dyn View;
 
     fn view_mut(&mut self) -> &mut dyn View;
@@ -120,6 +126,34 @@ impl AppView {
             Root(view) => view.deref_mut(),
             Child(sub_view) => sub_view.view_mut(),
             Pop(popup_view) => popup_view.view_mut(),
+        }
+    }
+
+    pub fn id(&self) -> ViewId {
+        match self {
+            Root(view) => {
+                view.id()
+            }
+            Child(sub_view) => {
+                sub_view.id()
+            }
+            Pop(popup_view) => {
+                popup_view.id()
+            }
+        }
+    }
+
+    pub fn surface_id(&self) -> ObjectId {
+        match self {
+            Root(view) => {
+                view.surface_id()
+            }
+            Child(sub_view) => {
+                sub_view.surface_id()
+            }
+            Pop(popup_view) => {
+                popup_view.surface_id()
+            }
         }
     }
 }

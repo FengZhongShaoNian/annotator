@@ -3,13 +3,14 @@ use crate::application::Application;
 use crate::dpi::LogicalSize;
 use crate::global::{ReadGlobal, ReadGlobalMut};
 use crate::view::xdg_popup_view::TriggerType;
-use crate::view::{AppView, View};
+use crate::view::{AppView, View, ViewId};
 use crate::window::{AppWindow, WindowConfiguration};
 use egui::{Color32, Frame, Id, Pos2, Rect, Response, Sense, Shape, Stroke, StrokeKind, Ui, Widget, pos2, vec2, Margin};
 use std::any::TypeId;
 use std::ops::{Add, Sub};
 use std::sync::Arc;
 use wayland_protocols::xdg::shell::client::xdg_positioner;
+use crate::context::Command;
 
 pub type BuildDropdownButtonFn = dyn Fn(&Id, &mut Ui, &mut AnnotatorState) -> Response;
 pub type BuildDropdownAreaFn =
@@ -30,9 +31,9 @@ impl Widget for DropdownBox<'_, '_, '_, '_> {
     fn ui(self, ui: &mut Ui) -> Response {
         let build_button_fn = self.build_drop_down_box_button_fn;
         let response = build_button_fn(&self.id, ui, self.annotator_state);
-        if response.clicked() {
+        let popup_view_id = format!("drop-down-box-area-{}", self.id.value()).into();
+        if response.clicked() && !self.window.views.contains_key(&popup_view_id){
             let build_drop_down_area_fn = self.build_drop_down_area_fn;
-            let popup_view_id = format!("drop-down-box-area-{}", self.id.value());
 
             let positioner = self.window.create_positioner(&self.app.global_state);
 
@@ -68,7 +69,7 @@ impl Widget for DropdownBox<'_, '_, '_, '_> {
             // 空间不足时的自动调整策略
             positioner.set_constraint_adjustment(xdg_positioner::ConstraintAdjustment::all());
             self.window.create_xdg_popup_view(
-                popup_view_id.into(),
+                popup_view_id,
                 &self.app.global_state,
                 TriggerType::MousePress,
                 positioner,
@@ -103,6 +104,8 @@ impl Widget for DropdownBox<'_, '_, '_, '_> {
                     })
                 }),
             );
+        }else if response.clicked() { 
+            self.window.window_context.commands.push_back(Command::DropView(popup_view_id));
         }
         response
     }

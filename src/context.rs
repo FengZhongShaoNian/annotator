@@ -18,6 +18,7 @@ pub struct WindowContext {
 pub enum Command {
     HideView(ViewId),
     ResizeView(ViewId, LogicalSize<u32>),
+    DropView(ViewId),
 }
 
 impl Default for WindowContext {

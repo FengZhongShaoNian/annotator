@@ -11,7 +11,7 @@ use crate::view::{AppView, BuildViewFn, PopupView, SubView, View, ViewId};
 use egui::ahash::{HashMap, HashMapExt};
 use egui::{CursorIcon, ImeEvent, PlatformOutput};
 use egui_wgpu::wgpu;
-use egui_wgpu::wgpu::{CompositeAlphaMode, SurfaceCapabilities, Surface as WgpuSurface};
+use egui_wgpu::wgpu::{CompositeAlphaMode, Surface as WgpuSurface, SurfaceCapabilities};
 use indexmap::IndexMap;
 use log::{info, warn};
 use raw_window_handle::{
@@ -124,7 +124,8 @@ impl AppWindow {
         let physical_size = window_config.size.to_physical(1.);
 
         // 初始化 wgpu
-        let (wgpu_surface, surface_config) = Self::create_wgpu_surface(global_state, &main_surface, physical_size);
+        let (wgpu_surface, surface_config) =
+            Self::create_wgpu_surface(global_state, &main_surface, physical_size);
 
         // 初始化分数缩放和视口
         let fractional_scale = global_state
@@ -214,7 +215,8 @@ impl AppWindow {
         let scale_factor = self.scale_factor().unwrap();
         let physical_size = size.to_physical(scale_factor);
 
-        let (wgpu_surface, surface_config) = Self::create_wgpu_surface(global_state, &surface, physical_size);
+        let (wgpu_surface, surface_config) =
+            Self::create_wgpu_surface(global_state, &surface, physical_size);
 
         let subview = SubSurfaceView::new(
             id,
@@ -312,7 +314,8 @@ impl AppWindow {
         let default_physical_size =
             default_logical_size.to_physical(self.scale_factor.unwrap_or(1.));
 
-        let (wgpu_surface, surface_config) = Self::create_wgpu_surface(&global_state, surface, default_physical_size);
+        let (wgpu_surface, surface_config) =
+            Self::create_wgpu_surface(&global_state, surface, default_physical_size);
         let scale_factor = self.scale_factor.unwrap();
         let mut popup_view = XdgPopupView::new(
             id,
@@ -610,37 +613,43 @@ impl AppWindow {
                     Self::update_cursor_icon_if_necessary(&platform_output, global_state);
                 }
             }
-            while let Some(command) = self.window_context.commands.pop_front() {
-                match command {
-                    Command::HideView(id) => {
-                        let view = self.views.get_mut(&id);
-                        if let Some(view) = view {
-                            if let Some(view) = view.as_mut() {
-                                let view = view.get_view_ref_mut();
-                                view.set_visible(false);
-                            }
+        }
+
+        while let Some(command) = self.window_context.commands.pop_front() {
+            match command {
+                Command::HideView(id) => {
+                    let view = self.views.get_mut(&id);
+                    if let Some(view) = view {
+                        if let Some(view) = view.as_mut() {
+                            let view = view.get_view_ref_mut();
+                            view.set_visible(false);
                         }
                     }
-                    Command::ResizeView(id, new_size) => {
-                        let mut gpu_context = app.global_state.gpu.borrow_mut();
-                        let gpu_context =
-                            gpu_context.as_mut().expect("GPU context not initialized!");
-                        let view = self.views.get_mut(&id);
-                        if let Some(view) = view {
-                            if let Some(view) = view.as_mut() {
-                                match view {
-                                    Root(view) => {
-                                        view.resize(new_size, gpu_context);
-                                    }
-                                    Child(sub_view) => {
-                                        sub_view.view_mut().resize(new_size, gpu_context);
-                                    }
-                                    Pop(popup_view) => {
-                                        popup_view.view_mut().resize(new_size, gpu_context);
-                                    }
+                }
+                Command::ResizeView(id, new_size) => {
+                    let mut gpu_context = app.global_state.gpu.borrow_mut();
+                    let gpu_context = gpu_context.as_mut().expect("GPU context not initialized!");
+                    let view = self.views.get_mut(&id);
+                    if let Some(view) = view {
+                        if let Some(view) = view.as_mut() {
+                            match view {
+                                Root(view) => {
+                                    view.resize(new_size, gpu_context);
+                                }
+                                Child(sub_view) => {
+                                    sub_view.view_mut().resize(new_size, gpu_context);
+                                }
+                                Pop(popup_view) => {
+                                    popup_view.view_mut().resize(new_size, gpu_context);
                                 }
                             }
                         }
+                    }
+                }
+                Command::DropView(id) => {
+                    let app_view = self.views.remove(&id);
+                    if let Some(Some(app_view)) = app_view {
+                        self.surface_id_to_view_id.remove(&app_view.surface_id());
                     }
                 }
             }
@@ -769,12 +778,12 @@ impl AppWindow {
             if let Some(Some(app_view)) = view {
                 match app_view {
                     Pop(popup_view) => {
-                        self.surface_id_to_view_id.remove(&popup_view.view().surface_id());
+                        self.surface_id_to_view_id
+                            .remove(&popup_view.view().surface_id());
                     }
-                    _ => ()
+                    _ => (),
                 }
             }
-
         }
     }
 
