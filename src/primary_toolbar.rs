@@ -352,13 +352,9 @@ pub fn create_primary_toolbar(
                                 .map(|t| t.tool_name());
                             if active_tool != tool_name {
                                 println!("标注工具由{:?}切换为{:?}", active_tool, tool_name);
-
-                                if let Some(_) = active_tool {
-
-                                }
-                                if let Some(_tool) = active_tool {
-
-                                }
+                                // 将栈顶的标注更新为非激活状态
+                                annotator_state_mut_ref.annotations_stack.last_mut()
+                                    .map(|annotation|annotation.deactivate());
                             }
                         });
                     });
