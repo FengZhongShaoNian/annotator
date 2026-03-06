@@ -1,5 +1,5 @@
 use crate::annotator::cursor::Crosshair;
-use crate::annotator::{Annotation, AnnotatorState, DragAction, HitTarget, HitTest, PainterExt};
+use crate::annotator::{Annotation, AnnotatorState, DragAction, HitTarget, HitTest, PainterExt, StrokeType};
 use egui::epaint::EllipseShape;
 use egui::{Color32, CursorIcon, Id, Pos2, Rect, Response, Sense, Stroke, Ui, Widget, vec2};
 use std::cell::RefCell;
@@ -137,6 +137,8 @@ impl EllipseTool {
         if tool_state.style.stroke.width + 1. < MAX_STROKE_WIDTH {
             tool_state.style.stroke.width += 1.;
         }
+        let new_width = tool_state.style.stroke.width;
+        self.update_stroke_width_for_stack_top_annotation(new_width);
     }
 
     fn decrease_stroke(&mut self) {
@@ -144,6 +146,19 @@ impl EllipseTool {
         if tool_state.style.stroke.width - 1. > 0. {
             tool_state.style.stroke.width -= 1.;
         }
+        let new_width = tool_state.style.stroke.width;
+        self.update_stroke_width_for_stack_top_annotation(new_width);
+    }
+
+    fn update_stroke_width_for_stack_top_annotation(&mut self, new_width: f32){
+        self.peek_ellipse_annotation_mut(|mut annotation| {
+            if let Some(annotation) = annotation.as_mut() {
+                if annotation.is_active() {
+                    annotation.style.stroke.width = new_width;
+                }
+            }
+            None::<()>
+        });
     }
 
     pub fn color(&self) -> Color32 {

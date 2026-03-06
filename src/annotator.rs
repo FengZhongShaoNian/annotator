@@ -322,6 +322,26 @@ impl Annotation {
             Annotation::Eraser(eraser_state) => {}
         }
     }
+
+    pub fn set_stroke_type(&mut self, stroke_type: StrokeType) {
+        match self {
+            Annotation::Rectangle(rectangle_state) => {
+                rectangle_state.set_stroke_type(stroke_type);
+            }
+            Annotation::Ellipse(ellipse_state) => {
+            }
+            Annotation::StraightLine(straight_line_state) => {}
+            Annotation::Arrow(arrow_state) => {}
+            Annotation::Pencil(pencil_state) => {}
+            Annotation::MarkerPen(marker_pen_state) => {}
+            Annotation::Mosaic(mosaic_state) => {}
+            Annotation::Blur(blur_state) => {}
+            Annotation::Text(text_state) => {}
+            Annotation::SerialNumber(serial_number_state) => {}
+            Annotation::Watermark(watermark_state) => {}
+            Annotation::Eraser(eraser_state) => {}
+        }
+    }
 }
 
 impl Widget for &mut Annotation {

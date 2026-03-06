@@ -54,16 +54,20 @@ impl RectangleState {
     pub fn deactivate(&mut self) {
         self.active = false;
     }
-    
+
     pub fn is_active(&self) -> bool {
         self.active
     }
-    
+
     pub fn set_color(&mut self, color: Color32) {
         self.style.stroke.color = color;
         if let Some(color) = self.style.fill_color {
             self.style.fill_color = Some(color);
         }
+    }
+
+    pub fn set_stroke_type(&mut self, stroke_type: StrokeType){
+        self.style.stroke_type = stroke_type;
     }
 }
 
@@ -146,6 +150,8 @@ impl RectangleTool {
         if tool_state.style.stroke.width + 1. < MAX_STROKE_WIDTH {
             tool_state.style.stroke.width += 1.;
         }
+        let new_width = tool_state.style.stroke.width;
+        self.update_stroke_width_for_stack_top_annotation(new_width);
     }
 
     fn decrease_stroke(&mut self) {
@@ -153,6 +159,19 @@ impl RectangleTool {
         if tool_state.style.stroke.width - 1. > 0. {
             tool_state.style.stroke.width -= 1.;
         }
+        let new_width = tool_state.style.stroke.width;
+        self.update_stroke_width_for_stack_top_annotation(new_width);
+    }
+
+    fn update_stroke_width_for_stack_top_annotation(&mut self, new_width: f32){
+        self.peek_rectangle_annotation_mut(|mut annotation| {
+            if let Some(annotation) = annotation.as_mut() {
+                if annotation.is_active() {
+                    annotation.style.stroke.width = new_width;
+                }
+            }
+            None::<()>
+        });
     }
 
     pub fn stroke_type(&self) -> StrokeType {

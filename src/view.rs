@@ -63,7 +63,7 @@ pub trait View {
 
     fn should_remove(&self) -> bool;
     
-    fn close(&mut self);
+    fn close_later(&mut self);
 
     /// 使用 GPU 上下文进行重绘。
     fn draw(&mut self, app: &mut Application, window: &mut AppWindow) -> Option<PlatformOutput>;

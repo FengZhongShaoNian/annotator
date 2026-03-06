@@ -116,12 +116,12 @@ fn create_color_selector(
     app: &mut Application,
     window: &mut AppWindow,
     current_view: &mut dyn View,
-    annotation_state: &mut AnnotatorState,
+    annotator_state: &mut AnnotatorState,
     ui: &mut Ui,
 ) -> u32 {
     let button_width = 18f32;
     let width = button_width * 5. + ui.spacing().item_spacing.x * 5.;
-    let tool = annotation_state.current_annotation_tool.as_mut().unwrap();
+    let tool = annotator_state.current_annotation_tool.as_mut().unwrap();
     let current_color = tool.color().unwrap();
     if ui.add(ColorButton::new(Color32::RED, button_width, button_width, current_color == Color32::RED)).clicked() {
         tool.set_color(Color32::RED);
@@ -139,7 +139,7 @@ fn create_color_selector(
         tool.set_color(Color32::GOLD);
     }
     if current_color != tool.color().unwrap() {
-        annotation_state.annotations_stack.last_mut()
+        annotator_state.annotations_stack.last_mut()
             .map(|annotation|{
                 if annotation.was_created_by(tool) && annotation.is_active(){
                     annotation.set_color(tool.color().unwrap());

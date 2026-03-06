@@ -104,7 +104,7 @@ impl Widget for DropdownBox<'_, '_, '_, '_> {
                     })
                 }),
             );
-        }else if response.clicked() { 
+        }else if response.clicked() {
             self.window.window_context.commands.push_back(Command::DropView(popup_view_id));
         }
         response
@@ -195,24 +195,36 @@ pub fn create_stroke_type_selector(
             |_app, _window, current_view, annotator_state, ui| {
                 ui.vertical_centered(|ui| {
                     let tool = annotator_state.current_annotation_tool.as_mut().unwrap();
+                    let stroke_type = tool.stroke_type().unwrap();
                     if ui.add(StrokeTypeButton::new(90., 32., StrokeType::SolidLine)).clicked() {
                         tool.set_stroke_type(StrokeType::SolidLine);
-                        current_view.close();
+                        current_view.close_later();
                     }
                     if ui.add(StrokeTypeButton::new(90., 32., StrokeType::DashedLine)).clicked() {
                         tool.set_stroke_type(StrokeType::DashedLine);
-                        current_view.close();
+                        current_view.close_later();
                     }
                     if ui.add(StrokeTypeButton::new(90., 32., StrokeType::DottedLine)).clicked() {
                         tool.set_stroke_type(StrokeType::DottedLine);
-                        current_view.close();
+                        current_view.close_later();
+                    }
+
+                    let tool = annotator_state.current_annotation_tool.as_mut().unwrap();
+                    if stroke_type != tool.stroke_type().unwrap() {
+                        annotator_state.annotations_stack.last_mut()
+                            .map(|annotation|{
+                                if annotation.was_created_by(tool) && annotation.is_active(){
+                                    annotation.set_stroke_type(tool.stroke_type().unwrap());
+                                }
+                            });
                     }
                 });
+
             },
         )),
     };
     ui.add(dropdown);
-    
+
     STROKE_TYPE_SELECTOR_WIDTH
 }
 

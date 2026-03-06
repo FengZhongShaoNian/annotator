@@ -167,7 +167,7 @@ impl<'window> View for SurfaceView<'window> {
         self.should_remove
     }
 
-    fn close(&mut self) {
+    fn close_later(&mut self) {
         self.should_remove = true;
     }
 
