@@ -303,7 +303,9 @@ impl Annotation {
                 rectangle_state.set_stroke_type(stroke_type);
             }
             Annotation::Ellipse(ellipse_state) => {}
-            Annotation::StraightLine(straight_line_state) => {}
+            Annotation::StraightLine(straight_line_state) => {
+                straight_line_state.set_stroke_type(stroke_type);
+            }
             Annotation::Arrow(arrow_state) => {}
             Annotation::Pencil(pencil_state) => {}
             Annotation::MarkerPen(marker_pen_state) => {}

@@ -397,9 +397,9 @@ impl Widget for &mut StraightLineTool {
                     if hit_target == HitTargetForStraightLine::StartPoint || hit_target == HitTargetForStraightLine::EndPoint =>
                 {
                     self.peek_straight_line_annotation_mut(
-                        |mut rectangle_annotation_on_stack_top| {
+                        |mut annotation_on_stack_top| {
                             // 把栈顶的直线标注设为非激活状态
-                            rectangle_annotation_on_stack_top
+                            annotation_on_stack_top
                                 .as_mut()
                                 .unwrap()
                                 .deactivate();
@@ -407,12 +407,21 @@ impl Widget for &mut StraightLineTool {
                         },
                     );
                 }
-                _ => {}
+                _ => {
+                    self.peek_straight_line_annotation_mut(|mut annotation_on_stack_top| {
+                        // 把栈顶的直线标注设为非激活状态
+                        if let Some(annotation) = annotation_on_stack_top.as_mut() {
+                            annotation.deactivate();
+                        }
+
+                        None::<()>
+                    });
+                }
             }
         } else if response.clicked() {
-            self.peek_straight_line_annotation_mut(|mut rectangle_annotation_on_stack_top| {
+            self.peek_straight_line_annotation_mut(|mut annotation_on_stack_top| {
                 // 把栈顶的直线标注设为非激活状态
-                if let Some(annotation) = rectangle_annotation_on_stack_top.as_mut() {
+                if let Some(annotation) = annotation_on_stack_top.as_mut() {
                     annotation.deactivate();
                 }
 
