@@ -2,17 +2,17 @@ mod arrow;
 mod blur;
 mod cursor;
 pub mod drop_down_box;
-pub(crate) mod ellipse;
-mod eraser;
-mod marker_pen;
-mod mosaic;
-mod pencil;
+pub mod ellipse;
+pub mod eraser;
+pub mod marker_pen;
+pub mod mosaic;
+pub mod pencil;
 pub mod rectangle;
-mod serial_number;
-mod straight_line;
+pub mod serial_number;
+pub mod straight_line;
 pub(crate) mod svg_button;
-mod text;
-mod watermark;
+pub mod text;
+pub mod watermark;
 
 use crate::annotator::arrow::ArrowState;
 use crate::annotator::blur::BlurState;
@@ -23,11 +23,12 @@ use crate::annotator::mosaic::MosaicState;
 use crate::annotator::pencil::PencilState;
 use crate::annotator::rectangle::{RectangleState, RectangleTool, RectangleToolState};
 use crate::annotator::serial_number::SerialNumberState;
-use crate::annotator::straight_line::StraightLineState;
+use crate::annotator::straight_line::{StraightLineState, StraightLineTool};
 use crate::annotator::text::TextState;
 use crate::annotator::watermark::WaterMarkState;
 use crate::global::Global;
 use crate::view::ViewId;
+use egui::ahash::HashMap;
 use egui::{
     Color32, CornerRadius, CursorIcon, Painter, Pos2, Rect, Response, Shape, Stroke, StrokeKind,
     TextureHandle, Ui, Widget, pos2, vec2,
@@ -39,7 +40,6 @@ use std::cmp::max;
 use std::ops::{Add, Sub};
 use std::rc::Rc;
 use std::sync::Arc;
-use egui::ahash::HashMap;
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum StrokeType {
@@ -185,7 +185,9 @@ impl Annotation {
             Annotation::Ellipse(ellipse_state) => {
                 ellipse_state.activate();
             }
-            Annotation::StraightLine(straight_line_state) => {}
+            Annotation::StraightLine(straight_line_state) => {
+                straight_line_state.activate();
+            }
             Annotation::Arrow(arrow_state) => {}
             Annotation::Pencil(pencil_state) => {}
             Annotation::MarkerPen(marker_pen_state) => {}
@@ -206,7 +208,9 @@ impl Annotation {
             Annotation::Ellipse(ellipse_state) => {
                 ellipse_state.deactivate();
             }
-            Annotation::StraightLine(straight_line_state) => {}
+            Annotation::StraightLine(straight_line_state) => {
+                straight_line_state.deactivate();
+            }
             Annotation::Arrow(arrow_state) => {}
             Annotation::Pencil(pencil_state) => {}
             Annotation::MarkerPen(marker_pen_state) => {}
@@ -218,18 +222,12 @@ impl Annotation {
             Annotation::Eraser(eraser_state) => {}
         }
     }
-    
+
     pub fn is_active(&self) -> bool {
         match self {
-            Annotation::Rectangle(rectangle_state) => {
-                rectangle_state.is_active()
-            }
-            Annotation::Ellipse(ellipse_state) => {
-                ellipse_state.is_active()
-            }
-            Annotation::StraightLine(straight_line_state) => {
-                todo!()
-            }
+            Annotation::Rectangle(rectangle_state) => rectangle_state.is_active(),
+            Annotation::Ellipse(ellipse_state) => ellipse_state.is_active(),
+            Annotation::StraightLine(straight_line_state) => straight_line_state.is_active(),
             Annotation::Arrow(arrow_state) => {
                 todo!()
             }
@@ -263,42 +261,18 @@ impl Annotation {
     pub fn was_created_by(&mut self, tool: &AnnotationTool) -> bool {
         let tool_name = tool.tool_name();
         match self {
-            Annotation::Rectangle(_) => {
-                tool_name == ToolName::Rectangle
-            }
-            Annotation::Ellipse(ellipse_state) => {
-                tool_name == ToolName::Ellipse
-            }
-            Annotation::StraightLine(_) => {
-                tool_name == ToolName::StraightLine
-            }
-            Annotation::Arrow(_) => {
-                tool_name == ToolName::Arrow
-            }
-            Annotation::Pencil(_) => {
-                tool_name == ToolName::Pencil
-            }
-            Annotation::MarkerPen(_) => {
-                tool_name == ToolName::MarkerPen
-            }
-            Annotation::Mosaic(_) => {
-                tool_name == ToolName::Mosaic
-            }
-            Annotation::Blur(_) => {
-                tool_name == ToolName::Blur
-            }
-            Annotation::Text(_) => {
-                tool_name == ToolName::Text
-            }
-            Annotation::SerialNumber(_) => {
-                tool_name == ToolName::SerialNumber
-            }
-            Annotation::Watermark(_) => {
-                tool_name == ToolName::Watermark
-            }
-            Annotation::Eraser(_) => {
-                tool_name == ToolName::Eraser
-            }
+            Annotation::Rectangle(_) => tool_name == ToolName::Rectangle,
+            Annotation::Ellipse(ellipse_state) => tool_name == ToolName::Ellipse,
+            Annotation::StraightLine(_) => tool_name == ToolName::StraightLine,
+            Annotation::Arrow(_) => tool_name == ToolName::Arrow,
+            Annotation::Pencil(_) => tool_name == ToolName::Pencil,
+            Annotation::MarkerPen(_) => tool_name == ToolName::MarkerPen,
+            Annotation::Mosaic(_) => tool_name == ToolName::Mosaic,
+            Annotation::Blur(_) => tool_name == ToolName::Blur,
+            Annotation::Text(_) => tool_name == ToolName::Text,
+            Annotation::SerialNumber(_) => tool_name == ToolName::SerialNumber,
+            Annotation::Watermark(_) => tool_name == ToolName::Watermark,
+            Annotation::Eraser(_) => tool_name == ToolName::Eraser,
         }
     }
 
@@ -328,8 +302,7 @@ impl Annotation {
             Annotation::Rectangle(rectangle_state) => {
                 rectangle_state.set_stroke_type(stroke_type);
             }
-            Annotation::Ellipse(ellipse_state) => {
-            }
+            Annotation::Ellipse(ellipse_state) => {}
             Annotation::StraightLine(straight_line_state) => {}
             Annotation::Arrow(arrow_state) => {}
             Annotation::Pencil(pencil_state) => {}
@@ -411,7 +384,7 @@ pub enum AnnotationTool {
     Ellipse(EllipseTool),
 
     /// 直线
-    StraightLine,
+    StraightLine(StraightLineTool),
 
     /// 箭头
     Arrow,
@@ -446,7 +419,7 @@ impl AnnotationTool {
         match self {
             AnnotationTool::Rectangle(_) => ToolName::Rectangle,
             AnnotationTool::Ellipse(_) => ToolName::Ellipse,
-            AnnotationTool::StraightLine => ToolName::StraightLine,
+            AnnotationTool::StraightLine(_) => ToolName::StraightLine,
             AnnotationTool::Arrow => ToolName::Arrow,
             AnnotationTool::Pencil => ToolName::Pencil,
             AnnotationTool::MarkerPen => ToolName::MarkerPen,
@@ -463,8 +436,8 @@ impl AnnotationTool {
         match self {
             AnnotationTool::Rectangle(rectangle_tool) => Some(rectangle_tool.stroke_type()),
             AnnotationTool::Ellipse(_) => None,
-            AnnotationTool::StraightLine => {
-                todo!("Straight Line")
+            AnnotationTool::StraightLine(straight_line_tool) => {
+                Some(straight_line_tool.stroke_type())
             }
             AnnotationTool::Arrow => {
                 todo!("Arrow")
@@ -500,12 +473,10 @@ impl AnnotationTool {
         match self {
             AnnotationTool::Rectangle(rectangle_tool) => {
                 rectangle_tool.set_stroke_type(stroke_type);
-            },
-            AnnotationTool::Ellipse(_) => {
-
-            },
-            AnnotationTool::StraightLine => {
-                todo!("Straight Line")
+            }
+            AnnotationTool::Ellipse(_) => {}
+            AnnotationTool::StraightLine(straight_line_tool) => {
+                straight_line_tool.set_stroke_type(stroke_type);
             }
             AnnotationTool::Arrow => {
                 todo!("Arrow")
@@ -541,9 +512,7 @@ impl AnnotationTool {
         match self {
             AnnotationTool::Rectangle(rectangle_tool) => Some(rectangle_tool.color()),
             AnnotationTool::Ellipse(ellipse_tool) => Some(ellipse_tool.color()),
-            AnnotationTool::StraightLine => {
-                todo!("Straight Line")
-            }
+            AnnotationTool::StraightLine(straight_line_tool) => Some(straight_line_tool.color()),
             AnnotationTool::Arrow => {
                 todo!("Arrow")
             }
@@ -578,12 +547,12 @@ impl AnnotationTool {
         match self {
             AnnotationTool::Rectangle(rectangle_tool) => {
                 rectangle_tool.set_color(color);
-            },
+            }
             AnnotationTool::Ellipse(ellipse_tool) => {
                 ellipse_tool.set_color(color);
-            },
-            AnnotationTool::StraightLine => {
-                todo!("Straight Line")
+            }
+            AnnotationTool::StraightLine(straight_line_tool) => {
+                straight_line_tool.set_color(color);
             }
             AnnotationTool::Arrow => {
                 todo!("Arrow")
@@ -621,9 +590,7 @@ impl Widget for &mut AnnotationTool {
         match self {
             AnnotationTool::Rectangle(rectangle_tool) => rectangle_tool.ui(ui),
             AnnotationTool::Ellipse(ellipse_tool) => ellipse_tool.ui(ui),
-            AnnotationTool::StraightLine => {
-                todo!("Straight Line")
-            }
+            AnnotationTool::StraightLine(straight_line_tool) => straight_line_tool.ui(ui),
             AnnotationTool::Arrow => {
                 todo!("Arrow")
             }
@@ -728,15 +695,20 @@ impl AnnotatorState {
                 return;
             }
         }
-        let tool = self.annotation_tools.remove(&tool_name).expect(&format!("{:?}Tool does not exist", tool_name));
+        let tool = self
+            .annotation_tools
+            .remove(&tool_name)
+            .expect(&format!("{:?}Tool does not exist", tool_name));
         if let Some(previous_tool) = self.current_annotation_tool.replace(tool) {
-            self.annotation_tools.insert(previous_tool.tool_name(), previous_tool);
+            self.annotation_tools
+                .insert(previous_tool.tool_name(), previous_tool);
         }
     }
 
     pub fn deactivate_annotation_tool(&mut self) {
         if let Some(previous_tool) = self.current_annotation_tool.take() {
-            self.annotation_tools.insert(previous_tool.tool_name(), previous_tool);
+            self.annotation_tools
+                .insert(previous_tool.tool_name(), previous_tool);
         }
     }
 }
@@ -1048,7 +1020,13 @@ mod tests {
     }
 }
 
+/// 小矩形的默认宽度和高度
+pub const DEFAULT_SIZE_FOR_SMALL_RECT: (f32, f32) = (6., 6.);
+
 pub trait PainterExt {
+    /// 将一个的扩展成一个小矩形并绘制它
+    fn small_rect(&self, pos: &Pos2);
+
     /// 为一个矩形绘制各个角以及边上的小矩形
     fn small_rects(&self, rect: &Rect);
 
@@ -1072,11 +1050,22 @@ pub trait PainterExt {
 }
 
 impl PainterExt for Painter {
+    fn small_rect(&self, pos: &Pos2) {
+        let painter = self;
+        let width = DEFAULT_SIZE_FOR_SMALL_RECT.0;
+        let height = DEFAULT_SIZE_FOR_SMALL_RECT.1;
+        painter.rect(
+            pos.rect(width, height),
+            0,
+            Color32::TRANSPARENT,
+            Stroke::new(1f32, Color32::WHITE),
+            StrokeKind::Middle,
+        );
+    }
+
     fn small_rects(&self, rect: &Rect) {
         let painter = self;
 
-        let width = 6f32;
-        let height = 6f32;
         let top_left_pos = rect.left_top();
         let top_right_pos = rect.right_top();
         let bottom_right_pos = rect.right_bottom();
@@ -1087,63 +1076,15 @@ impl PainterExt for Painter {
         let center_top_edge = pos2(top_left_pos.x + rect.width() / 2f32, top_left_pos.y);
         let center_bottom_edge = pos2(bottom_left_pos.x + rect.width() / 2f32, bottom_left_pos.y);
 
-        painter.rect(
-            top_left_pos.rect(width, height),
-            0,
-            Color32::TRANSPARENT,
-            Stroke::new(1f32, Color32::WHITE),
-            StrokeKind::Middle,
-        );
-        painter.rect(
-            top_right_pos.rect(width, height),
-            0,
-            Color32::TRANSPARENT,
-            Stroke::new(1f32, Color32::WHITE),
-            StrokeKind::Middle,
-        );
-        painter.rect(
-            bottom_right_pos.rect(width, height),
-            0,
-            Color32::TRANSPARENT,
-            Stroke::new(1f32, Color32::WHITE),
-            StrokeKind::Middle,
-        );
-        painter.rect(
-            bottom_left_pos.rect(width, height),
-            0,
-            Color32::TRANSPARENT,
-            Stroke::new(1f32, Color32::WHITE),
-            StrokeKind::Middle,
-        );
+        painter.small_rect(&top_left_pos);
+        painter.small_rect(&top_right_pos);
+        painter.small_rect(&bottom_right_pos);
+        painter.small_rect(&bottom_left_pos);
 
-        painter.rect(
-            center_left_edge.rect(width, height),
-            0,
-            Color32::TRANSPARENT,
-            Stroke::new(1f32, Color32::WHITE),
-            StrokeKind::Middle,
-        );
-        painter.rect(
-            center_right_edge.rect(width, height),
-            0,
-            Color32::TRANSPARENT,
-            Stroke::new(1f32, Color32::WHITE),
-            StrokeKind::Middle,
-        );
-        painter.rect(
-            center_top_edge.rect(width, height),
-            0,
-            Color32::TRANSPARENT,
-            Stroke::new(1f32, Color32::WHITE),
-            StrokeKind::Middle,
-        );
-        painter.rect(
-            center_bottom_edge.rect(width, height),
-            0,
-            Color32::TRANSPARENT,
-            Stroke::new(1f32, Color32::WHITE),
-            StrokeKind::Middle,
-        );
+        painter.small_rect(&center_left_edge);
+        painter.small_rect(&center_right_edge);
+        painter.small_rect(&center_top_edge);
+        painter.small_rect(&center_bottom_edge);
     }
 
     fn rectangle(
@@ -1177,22 +1118,50 @@ impl PainterExt for Painter {
             }
             StrokeType::DashedLine => {
                 // 虚线：使用 dashed_line，自定义 dash 和 gap 长度
-                let dash_len = if stroke.width * 3. < 6. {
-                    6.
-                } else {
-                    stroke.width * 3.
-                };
-                let gap_len = dash_len;
+                let dash_len = dash_len_for_dashed_line(stroke.width);
+                let gap_len = gap_len_for_dashed_line(stroke.width);
                 draw_dashed_rect(painter, path_rect, stroke, dash_len, gap_len);
             }
             StrokeType::DottedLine => {
                 // 点线：使用 dotted_line，根据线宽计算点间距和半径
-                let spacing = stroke.width * 2.0; // 点间距
-                let radius = stroke.width / 2.0; // 点半径
+                let spacing = spacing_for_dotted_line(stroke.width); // 点间距
+                let radius = radius_for_dotted_line(stroke.width); // 点半径
                 draw_dotted_rect(painter, path_rect, stroke.color, spacing, radius);
             }
         }
     }
+}
+
+pub fn dash_len_for_dashed_line(stroke_width: f32) -> f32 {
+    let dash_len = if stroke_width * 3. < 6. {
+        6.
+    } else {
+        stroke_width * 3.
+    };
+    dash_len
+}
+
+pub fn gap_len_for_dashed_line(stroke_width: f32) -> f32 {
+    let gap_len = if stroke_width * 3. < 6. {
+        6.
+    } else {
+        stroke_width * 3.
+    };
+    gap_len
+}
+
+pub fn spacing_for_dotted_line(stroke_width: f32) -> f32{
+    let spacing = stroke_width * 2.0; // 点间距
+    if spacing < 6. {
+        6.
+    } else {
+        spacing
+    }
+}
+
+pub fn radius_for_dotted_line(stroke_width: f32) -> f32{
+    let radius = stroke_width / 2.0;
+    radius
 }
 
 /// 绘制矩形的虚线边框
