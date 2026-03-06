@@ -96,7 +96,13 @@ pub fn create_secondly_toolbar(
                                     }
 
                                     let show_color_selector = active_tool == ToolName::Rectangle
-                                        || active_tool == ToolName::Ellipse;
+                                        || active_tool == ToolName::Ellipse
+                                        || active_tool == ToolName::StraightLine
+                                        || active_tool == ToolName::Arrow
+                                        || active_tool == ToolName::Pencil
+                                        || active_tool == ToolName::MarkerPen
+                                        || active_tool == ToolName::Text
+                                        || active_tool == ToolName::SerialNumber;
 
                                     if show_color_selector {
                                         create_color_selector(

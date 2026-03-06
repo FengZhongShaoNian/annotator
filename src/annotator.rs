@@ -262,7 +262,7 @@ impl Annotation {
         let tool_name = tool.tool_name();
         match self {
             Annotation::Rectangle(_) => tool_name == ToolName::Rectangle,
-            Annotation::Ellipse(ellipse_state) => tool_name == ToolName::Ellipse,
+            Annotation::Ellipse(_) => tool_name == ToolName::Ellipse,
             Annotation::StraightLine(_) => tool_name == ToolName::StraightLine,
             Annotation::Arrow(_) => tool_name == ToolName::Arrow,
             Annotation::Pencil(_) => tool_name == ToolName::Pencil,
@@ -284,7 +284,9 @@ impl Annotation {
             Annotation::Ellipse(ellipse_state) => {
                 ellipse_state.set_color(color);
             }
-            Annotation::StraightLine(straight_line_state) => {}
+            Annotation::StraightLine(straight_line_state) => {
+                straight_line_state.set_color(color);
+            }
             Annotation::Arrow(arrow_state) => {}
             Annotation::Pencil(pencil_state) => {}
             Annotation::MarkerPen(marker_pen_state) => {}
