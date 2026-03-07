@@ -20,24 +20,13 @@ mod serial;
 mod layout;
 mod annotator_panel;
 
-use crate::annotator::ellipse::{EllipseTool, EllipseState};
-use crate::annotator::rectangle::{
-    RectangleTool, RectangleState,
-};
-use crate::annotator::{Annotation, AnnotatorState, StrokeType, AnnotationTool};
 use crate::application::Application;
-use crate::dpi::{LogicalPosition, LogicalSize, PhysicalSize};
-use crate::global::{ReadGlobalMut, ReadOrInsertGlobal};
+use crate::dpi::{LogicalSize};
 use crate::window::WindowConfiguration;
-use egui::load::SizedTexture;
-use egui::{ColorImage, Frame, Image, ImageSource, Rect, pos2, vec2, Color32};
 use log::error;
 use std::env;
 use std::sync::Arc;
 use crate::layout::build_annotator;
-use crate::primary_toolbar::create_primary_toolbar;
-use crate::secondly_toolbar::create_secondly_toolbar;
-use crate::view::ViewId;
 
 fn main() {
     env_logger::init();

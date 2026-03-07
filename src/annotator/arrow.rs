@@ -1,6 +1,7 @@
 use crate::annotator::cursor::Crosshair;
-use crate::annotator::{dash_len_for_dashed_line, gap_len_for_dashed_line, radius_for_dotted_line, spacing_for_dotted_line, Annotation, AnnotatorState, HitTarget, HitTest, PainterExt, SmallRect, StrokeType, DEFAULT_SIZE_FOR_SMALL_RECT};
-use egui::{vec2, Color32, CursorIcon, Id, Pos2, Rect, Response, Sense, Shape, Stroke, Ui, Widget};
+use crate::annotator::rectangle_based::{HitTarget, HitTest};
+use crate::annotator::{Annotation, AnnotatorState, PainterExt, SmallRect, DEFAULT_SIZE_FOR_SMALL_RECT};
+use egui::{vec2, Color32, CursorIcon, Id, Pos2, Rect, Response, Sense, Stroke, Ui, Widget};
 use std::cell::RefCell;
 use std::rc::Weak;
 use std::time::{Duration, Instant};

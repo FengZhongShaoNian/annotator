@@ -2,26 +2,24 @@ pub mod arrow;
 pub mod blur;
 mod cursor;
 pub mod drop_down_box;
-pub mod ellipse;
 pub mod eraser;
 pub mod marker_pen;
 pub mod mosaic;
 pub mod pencil;
-pub mod rectangle;
 pub mod serial_number;
 pub mod straight_line;
 pub(crate) mod svg_button;
 pub mod text;
 pub mod watermark;
+pub mod rectangle_based;
 
 use crate::annotator::arrow::{ArrowState, ArrowTool};
 use crate::annotator::blur::BlurState;
-use crate::annotator::ellipse::{EllipseState, EllipseTool, EllipseToolState};
 use crate::annotator::eraser::EraserState;
 use crate::annotator::marker_pen::MarkerPentate;
 use crate::annotator::mosaic::MosaicState;
 use crate::annotator::pencil::PencilState;
-use crate::annotator::rectangle::{RectangleState, RectangleTool, RectangleToolState};
+use crate::annotator::rectangle_based::{EllipseAnnotation, EllipseTool, RectangleAnnotation, RectangleTool};
 use crate::annotator::serial_number::SerialNumberState;
 use crate::annotator::straight_line::{StraightLineState, StraightLineTool};
 use crate::annotator::text::TextState;
@@ -29,16 +27,13 @@ use crate::annotator::watermark::WaterMarkState;
 use crate::global::Global;
 use crate::view::ViewId;
 use egui::ahash::HashMap;
-use egui::{Color32, CornerRadius, CursorIcon, Painter, Pos2, Rect, Response, Shape, Stroke, StrokeKind, TextureHandle, Ui, Widget, pos2, vec2, Vec2};
+use egui::{pos2, Color32, Painter, Pos2, Rect, Response, Shape, Stroke, StrokeKind, TextureHandle, Ui, Vec2, Widget};
 use image::RgbaImage;
-use std::any::Any;
 use std::cell::RefCell;
-use std::cmp::max;
-use std::ops::{Add, Sub};
 use std::rc::Rc;
 use std::sync::Arc;
-use egui::emath::Rot2;
 
+/// 线条类型（实线、虚线、点线）
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum StrokeType {
     /// 实线
@@ -51,97 +46,82 @@ pub enum StrokeType {
     DottedLine,
 }
 
-/// 描述一个矩形的四条边
-#[derive(PartialEq, Eq, Copy, Clone)]
-pub enum Edges {
-    Top,
-    Right,
-    Bottom,
-    Left,
+
+/// 线条宽度
+pub trait StrokeWidthSupport {
+    fn stroke_width(&self) -> f32;
+    fn set_stroke_width(&mut self, stroke_width: f32);
 }
 
-/// 描述一个矩形的4个角
-#[derive(PartialEq, Eq, Copy, Clone)]
-pub enum Corner {
-    TopLeft,
-    TopRight,
-    BottomRight,
-    BottomLeft,
+/// 线条颜色
+pub trait StrokeColorSupport {
+    fn stroke_color(&self) -> Color32;
+    fn set_stroke_color(&mut self, color: Color32);
 }
 
-#[derive(Debug, Eq, PartialEq, Copy, Clone)]
-pub enum HitTarget {
-    // 边
-    TopEdge,
-    BottomEdge,
-    LeftEdge,
-    RightEdge,
-
-    // 角
-    TopLeftCorner,
-    TopRightCorner,
-    BottomLeftCorner,
-    BottomRightCorner,
-
-    // 其他可能的情况
-    Inside,
-    Outside,
+/// 线条类型
+pub trait StrokeTypeSupport {
+    fn stroke_type(&self) -> StrokeType;
+    fn set_stroke_type(&mut self, stroke_type: StrokeType);
 }
 
-impl HitTarget {
-    /// 根据HitTarget获取对应的光标
-    pub fn get_cursor(&self) -> Option<CursorIcon> {
+/// 填充颜色
+pub trait FillColorSupport {
+    fn fill_color(&self) -> Option<Color32>;
+    fn set_fill_color(&mut self, color: Color32);
+}
+
+
+#[derive(Clone, Debug)]
+pub enum Activation {
+    NotActivable,
+    Activable(bool),
+}
+impl Activation {
+    /// 当前的标注是否支持激活
+    /// 某些类型的标注可能不支持激活，那么和激活相关的逻辑、依赖激活状态的逻辑将与此标注无关(例如：一个标注被添加到栈顶后将不再可编辑)
+    pub fn support_activate(&self) -> bool {
         match self {
-            HitTarget::TopLeftCorner => Some(CursorIcon::ResizeNorthWest),
-            HitTarget::TopRightCorner => Some(CursorIcon::ResizeNorthEast),
-            HitTarget::BottomRightCorner => Some(CursorIcon::ResizeSouthEast),
-            HitTarget::BottomLeftCorner => Some(CursorIcon::ResizeSouthWest),
-            HitTarget::TopEdge => Some(CursorIcon::ResizeNorth),
-            HitTarget::RightEdge => Some(CursorIcon::ResizeEast),
-            HitTarget::BottomEdge => Some(CursorIcon::ResizeSouth),
-            HitTarget::LeftEdge => Some(CursorIcon::ResizeWest),
-            _ => None,
+            Activation::Activable(_) => true,
+            _ => false,
         }
     }
 
-    pub fn get_drag_action(&self) -> DragAction {
+    /// 激活此标注
+    pub fn activate(&mut self) {
         match self {
-            HitTarget::TopLeftCorner => DragAction::AdjustTopLeftCorner,
-            HitTarget::TopRightCorner => DragAction::AdjustTopRightCorner,
-            HitTarget::BottomRightCorner => DragAction::AdjustBottomRightCorner,
-            HitTarget::BottomLeftCorner => DragAction::AdjustBottomLeftCorner,
-            HitTarget::TopEdge => DragAction::AdjustTopEdge,
-            HitTarget::RightEdge => DragAction::AdjustRightEdge,
-            HitTarget::BottomEdge => DragAction::AdjustBottomEdge,
-            HitTarget::LeftEdge => DragAction::AdjustLeftEdge,
-            _ => DragAction::None,
+            Activation::Activable(active) => {
+                *active = true;
+            }
+            _ => unimplemented!(),
         }
     }
-}
 
-#[derive(Debug, Eq, PartialEq, Copy, Clone)]
-pub enum DragAction {
-    // 调整边
-    AdjustTopEdge,
-    AdjustBottomEdge,
-    AdjustLeftEdge,
-    AdjustRightEdge,
+    /// 取消激活此标注
+    pub fn deactivate(&mut self) {
+        match self {
+            Activation::Activable(active) => {
+                *active = false;
+            }
+            _ => (),
+        }
+    }
 
-    // 调整角
-    AdjustTopLeftCorner,
-    AdjustTopRightCorner,
-    AdjustBottomLeftCorner,
-    AdjustBottomRightCorner,
-
-    None,
+    /// 此标注是否处于激活状态
+    pub fn is_active(&self) -> bool {
+        match self {
+            Activation::Activable(active) => *active,
+            _ => false,
+        }
+    }
 }
 
 pub enum Annotation {
     /// 矩形
-    Rectangle(RectangleState),
+    Rectangle(RectangleAnnotation),
 
     /// 椭圆
-    Ellipse(EllipseState),
+    Ellipse(EllipseAnnotation),
 
     /// 直线
     StraightLine(StraightLineState),
@@ -177,11 +157,11 @@ pub enum Annotation {
 impl Annotation {
     pub fn activate(&mut self) {
         match self {
-            Annotation::Rectangle(rectangle_state) => {
-                rectangle_state.activate();
+            Annotation::Rectangle(annotation) => {
+                annotation.activate();
             }
-            Annotation::Ellipse(ellipse_state) => {
-                ellipse_state.activate();
+            Annotation::Ellipse(annotation) => {
+                annotation.activate();
             }
             Annotation::StraightLine(straight_line_state) => {
                 straight_line_state.activate();
@@ -202,11 +182,11 @@ impl Annotation {
 
     pub fn deactivate(&mut self) {
         match self {
-            Annotation::Rectangle(rectangle_state) => {
-                rectangle_state.deactivate();
+            Annotation::Rectangle(annotation) => {
+                annotation.deactivate();
             }
-            Annotation::Ellipse(ellipse_state) => {
-                ellipse_state.deactivate();
+            Annotation::Ellipse(annotation) => {
+                annotation.deactivate();
             }
             Annotation::StraightLine(straight_line_state) => {
                 straight_line_state.deactivate();
@@ -227,8 +207,8 @@ impl Annotation {
 
     pub fn is_active(&self) -> bool {
         match self {
-            Annotation::Rectangle(rectangle_state) => rectangle_state.is_active(),
-            Annotation::Ellipse(ellipse_state) => ellipse_state.is_active(),
+            Annotation::Rectangle(annotation) => annotation.is_active(),
+            Annotation::Ellipse(annotation) => annotation.is_active(),
             Annotation::StraightLine(straight_line_state) => straight_line_state.is_active(),
             Annotation::Arrow(arrow_state) => {
                 arrow_state.is_active()
@@ -280,11 +260,11 @@ impl Annotation {
 
     pub fn set_color(&mut self, color: Color32) {
         match self {
-            Annotation::Rectangle(rectangle_state) => {
-                rectangle_state.set_color(color);
+            Annotation::Rectangle(annotation) => {
+                annotation.set_color(color);
             }
-            Annotation::Ellipse(ellipse_state) => {
-                ellipse_state.set_color(color);
+            Annotation::Ellipse(annotation) => {
+                annotation.set_color(color);
             }
             Annotation::StraightLine(straight_line_state) => {
                 straight_line_state.set_color(color);
@@ -321,10 +301,10 @@ impl Annotation {
 
     pub fn set_stroke_type(&mut self, stroke_type: StrokeType) {
         match self {
-            Annotation::Rectangle(rectangle_state) => {
-                rectangle_state.set_stroke_type(stroke_type);
+            Annotation::Rectangle(annotation) => {
+                annotation.set_stroke_type(stroke_type);
             }
-            Annotation::Ellipse(ellipse_state) => {}
+            Annotation::Ellipse(annotation) => {}
             Annotation::StraightLine(straight_line_state) => {
                 straight_line_state.set_stroke_type(stroke_type);
             }
@@ -346,8 +326,8 @@ impl Annotation {
 impl Widget for &mut Annotation {
     fn ui(self, ui: &mut Ui) -> Response {
         match self {
-            Annotation::Rectangle(rectangle_state) => ui.add(rectangle_state),
-            Annotation::Ellipse(ellipse_state) => ui.add(ellipse_state),
+            Annotation::Rectangle(annotation) => ui.add(annotation),
+            Annotation::Ellipse(annotation) => ui.add(annotation),
             Annotation::StraightLine(straight_line_state) => ui.add(straight_line_state),
             Annotation::Arrow(arrow_state) => ui.add(arrow_state),
             Annotation::Pencil(pencil_state) => ui.add(pencil_state),
@@ -538,8 +518,8 @@ impl AnnotationTool {
 
     pub fn color(&self) -> Option<Color32> {
         match self {
-            AnnotationTool::Rectangle(rectangle_tool) => Some(rectangle_tool.color()),
-            AnnotationTool::Ellipse(ellipse_tool) => Some(ellipse_tool.color()),
+            AnnotationTool::Rectangle(rectangle_tool) => Some(rectangle_tool.stroke_color()),
+            AnnotationTool::Ellipse(ellipse_tool) => Some(ellipse_tool.stroke_color()),
             AnnotationTool::StraightLine(straight_line_tool) => Some(straight_line_tool.color()),
             AnnotationTool::Arrow(arrow_tool) => Some(arrow_tool.color()),
             AnnotationTool::Pencil => {
@@ -750,297 +730,6 @@ impl SmallRect for Pos2 {
         let top_left_pos = pos2(pos.x - half_width, pos.y - half_height);
         let right_bottom_pos = pos2(pos.x + half_width, pos.y + half_height);
         Rect::from_two_pos(top_left_pos, right_bottom_pos)
-    }
-}
-
-pub trait HitTest {
-    /// 对矩形做碰撞检测
-    /// 矩形的stroke_kind固定为StrokeKind::Middle
-    fn hit_test(&self, pointer_pos: &Pos2, stroke_width: f32) -> HitTarget;
-}
-
-impl HitTest for Rect {
-    /// 对矩形的4条边做碰撞检测（不会特别精准），返回发生碰撞的边
-    /// 矩形的stroke_kind固定为StrokeKind::Middle
-    fn hit_test(&self, pointer_pos: &Pos2, stroke_width: f32) -> HitTarget {
-        // 允许一定的误差
-        let tolerance = 6.;
-
-        let tolerance = if tolerance > stroke_width {
-            tolerance
-        } else {
-            stroke_width
-        };
-        let half = tolerance / 2.;
-
-        let mut edges = Vec::new();
-
-        // 矩形：
-        //  (min.x, min.y)   (max.x, min.y)
-        //
-        //  (min.x, max.y)   (max.x, max.y)
-
-        let min_pos = self.min;
-        let max_pos = self.max;
-
-        // 把每一条边当作一个小矩形来对待
-        // 上边
-        let small_rect = Rect::from_two_pos(
-            pos2(min_pos.x - half, min_pos.y - half),
-            pos2(max_pos.x + half, min_pos.y + half),
-        );
-        if small_rect.contains(*pointer_pos) {
-            edges.push(HitTarget::TopEdge);
-        }
-
-        // 右边
-        let small_rect = Rect::from_two_pos(
-            pos2(max_pos.x - half, min_pos.y - half),
-            pos2(max_pos.x + half, max_pos.y + half),
-        );
-        if small_rect.contains(*pointer_pos) {
-            edges.push(HitTarget::RightEdge);
-        }
-
-        // 下边
-        let small_rect = Rect::from_two_pos(
-            pos2(min_pos.x - half, max_pos.y - half),
-            pos2(max_pos.x + half, max_pos.y + half),
-        );
-        if small_rect.contains(*pointer_pos) {
-            edges.push(HitTarget::BottomEdge);
-        }
-
-        // 左边
-        let small_rect = Rect::from_two_pos(
-            pos2(min_pos.x - half, min_pos.y - half),
-            pos2(min_pos.x + half, max_pos.y + half),
-        );
-        if small_rect.contains(*pointer_pos) {
-            edges.push(HitTarget::LeftEdge);
-        }
-
-        if edges.contains(&HitTarget::TopEdge) && edges.contains(&HitTarget::LeftEdge) {
-            return HitTarget::TopLeftCorner;
-        }
-
-        if edges.contains(&HitTarget::TopEdge) && edges.contains(&HitTarget::RightEdge) {
-            return HitTarget::TopRightCorner;
-        }
-
-        if edges.contains(&HitTarget::BottomEdge) && edges.contains(&HitTarget::RightEdge) {
-            return HitTarget::BottomRightCorner;
-        }
-
-        if edges.contains(&HitTarget::BottomEdge) && edges.contains(&HitTarget::LeftEdge) {
-            return HitTarget::BottomLeftCorner;
-        }
-
-        if edges.is_empty() {
-            if self.contains(*pointer_pos) {
-                return HitTarget::Inside;
-            }
-        } else {
-            return *edges.first().unwrap();
-        }
-
-        HitTarget::Outside
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // 创建测试用的矩形 (x: 0-100, y: 0-50)
-    fn test_rect() -> Rect {
-        Rect::from_two_pos(pos2(0.0, 0.0), pos2(100.0, 50.0))
-    }
-
-    // 测试基本边界情况
-    #[test]
-    fn test_hit_test_basic_edges() {
-        let rect = test_rect();
-
-        // 测试上边 - 中点
-        assert_eq!(rect.hit_test(&pos2(50.0, 0.0), 1.0), HitTarget::TopEdge);
-
-        // 测试上边 - 偏移3像素内 (tolerance=6, half=3)
-        assert_eq!(rect.hit_test(&pos2(50.0, 2.9), 1.0), HitTarget::TopEdge);
-
-        // 测试下边
-        assert_eq!(rect.hit_test(&pos2(50.0, 50.0), 1.0), HitTarget::BottomEdge);
-
-        // 测试左边
-        assert_eq!(rect.hit_test(&pos2(0.0, 25.0), 1.0), HitTarget::LeftEdge);
-
-        // 测试右边
-        assert_eq!(rect.hit_test(&pos2(100.0, 25.0), 1.0), HitTarget::RightEdge);
-    }
-
-    // 测试角点检测
-    #[test]
-    fn test_hit_test_corners() {
-        let rect = test_rect();
-
-        // 左上角
-        assert_eq!(
-            rect.hit_test(&pos2(0.0, 0.0), 1.0),
-            HitTarget::TopLeftCorner
-        );
-
-        // 右上角
-        assert_eq!(
-            rect.hit_test(&pos2(100.0, 0.0), 1.0),
-            HitTarget::TopRightCorner
-        );
-
-        // 左下角
-        assert_eq!(
-            rect.hit_test(&pos2(0.0, 50.0), 1.0),
-            HitTarget::BottomLeftCorner
-        );
-
-        // 右下角
-        assert_eq!(
-            rect.hit_test(&pos2(100.0, 50.0), 1.0),
-            HitTarget::BottomRightCorner
-        );
-    }
-
-    // 测试角点区域扩展 (tolerance=6, half=3)
-    #[test]
-    fn test_hit_test_corner_extended() {
-        let rect = test_rect();
-
-        // 左上角扩展区域 (x: -3 to 3, y: -3 to 3)
-        assert_eq!(
-            rect.hit_test(&pos2(2.9, 2.9), 1.0),
-            HitTarget::TopLeftCorner
-        );
-
-        // 右上角扩展区域 (x: 97 to 103, y: -3 to 3)
-        assert_eq!(
-            rect.hit_test(&pos2(97.1, 2.9), 1.0),
-            HitTarget::TopRightCorner
-        );
-    }
-
-    // 测试内部和外部
-    #[test]
-    fn test_hit_test_inside_outside() {
-        let rect = test_rect();
-
-        // 内部中心点
-        assert_eq!(rect.hit_test(&pos2(50.0, 25.0), 1.0), HitTarget::Inside);
-
-        // 内部但不是中心
-        assert_eq!(rect.hit_test(&pos2(10.0, 10.0), 1.0), HitTarget::Inside);
-
-        // 完全外部
-        assert_eq!(rect.hit_test(&pos2(-10.0, 25.0), 1.0), HitTarget::Outside);
-
-        assert_eq!(rect.hit_test(&pos2(50.0, -10.0), 1.0), HitTarget::Outside);
-
-        assert_eq!(rect.hit_test(&pos2(150.0, 25.0), 1.0), HitTarget::Outside);
-    }
-
-    // 测试边缘扩展区域
-    #[test]
-    fn test_hit_test_edge_extended() {
-        let rect = test_rect();
-
-        // 上边扩展区域 (y: -3 to 3)
-        assert_eq!(rect.hit_test(&pos2(50.0, -2.9), 1.0), HitTarget::TopEdge);
-
-        // 超出扩展区域
-        assert_eq!(rect.hit_test(&pos2(50.0, -3.1), 1.0), HitTarget::Outside);
-
-        // 下边扩展区域 (y: 47 to 53)
-        assert_eq!(rect.hit_test(&pos2(50.0, 52.9), 1.0), HitTarget::BottomEdge);
-
-        // 左边扩展区域 (x: -3 to 3)
-        assert_eq!(rect.hit_test(&pos2(-2.9, 25.0), 1.0), HitTarget::LeftEdge);
-
-        // 右边扩展区域 (x: 97 to 103)
-        assert_eq!(rect.hit_test(&pos2(102.9, 25.0), 1.0), HitTarget::RightEdge);
-    }
-
-    // 测试不同 stroke_width 值
-    #[test]
-    fn test_hit_test_different_stroke_width() {
-        let rect = test_rect();
-
-        // stroke_width=1.0，tolerance=6
-        assert_eq!(rect.hit_test(&pos2(50.0, 2.9), 1.0), HitTarget::TopEdge);
-
-        assert_eq!(
-            rect.hit_test(&pos2(50.0, 3.1), 1.0),
-            HitTarget::Inside // 在扩展区域外，但在矩形内
-        );
-
-        // stroke_width=10.0，tolerance=10，half=5
-        // 现在扩展区域更大
-        assert_eq!(rect.hit_test(&pos2(50.0, 4.9), 10.0), HitTarget::TopEdge);
-
-        assert_eq!(
-            rect.hit_test(&pos2(50.0, 5.1), 10.0),
-            HitTarget::Inside // 在扩展区域外，但在矩形内
-        );
-
-        // stroke_width=20.0，tolerance=20，half=10
-        // 扩展区域非常大
-        assert_eq!(rect.hit_test(&pos2(50.0, 9.9), 20.0), HitTarget::TopEdge);
-
-        // 注意：当扩展区域非常大时，甚至可能覆盖到矩形内部
-        // 测试一个在矩形内部但在扩展区域内的点
-        assert_eq!(rect.hit_test(&pos2(50.0, 8.0), 20.0), HitTarget::TopEdge);
-    }
-
-    // 测试边界条件和特殊情况
-    #[test]
-    fn test_hit_test_edge_cases() {
-        let rect = test_rect();
-
-        // 点在边上但x坐标超出矩形范围（但在扩展区域内）
-        assert_eq!(
-            rect.hit_test(&pos2(-2.9, 0.0), 1.0),
-            HitTarget::TopLeftCorner // 同时在上边和左边
-        );
-
-        // 点在角的扩展区域边缘
-        assert_eq!(
-            rect.hit_test(&pos2(3.0, 3.0), 1.0),
-            HitTarget::TopLeftCorner
-        );
-
-        // 点刚好在扩展区域边界上
-        assert_eq!(
-            rect.hit_test(&pos2(103.0, 3.0), 1.0),
-            HitTarget::TopRightCorner
-        );
-
-        // 负坐标测试
-        let rect2 = Rect::from_two_pos(pos2(-50.0, -50.0), pos2(50.0, 50.0));
-        assert_eq!(rect2.hit_test(&pos2(0.0, -50.0), 1.0), HitTarget::TopEdge);
-    }
-
-    // 性能测试：测试多个点
-    #[test]
-    fn test_hit_test_multiple_points() {
-        let rect = test_rect();
-        let stroke_width = 1.0;
-
-        // 创建测试点网格
-        for x in -10..=110 {
-            for y in -10..=60 {
-                let x = x as f32;
-                let y = y as f32;
-                let point = pos2(x, y);
-                let _result = rect.hit_test(&point, stroke_width);
-                // 这里我们不验证具体结果，只是确保不会panic
-            }
-        }
     }
 }
 

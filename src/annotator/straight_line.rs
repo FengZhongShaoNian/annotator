@@ -1,11 +1,12 @@
 use crate::annotator::cursor::Crosshair;
-use crate::annotator::{Annotation, AnnotatorState, DEFAULT_SIZE_FOR_SMALL_RECT, DragAction, HitTarget, HitTest, PainterExt, SmallRect, StrokeType, spacing_for_dotted_line, radius_for_dotted_line, dash_len_for_dashed_line, gap_len_for_dashed_line};
+use crate::annotator::{Annotation, AnnotatorState, DEFAULT_SIZE_FOR_SMALL_RECT, PainterExt, SmallRect, StrokeType, spacing_for_dotted_line, radius_for_dotted_line, dash_len_for_dashed_line, gap_len_for_dashed_line};
 use egui::{
     Color32, CursorIcon, Id, Pos2, Rect, Response, Sense, Shape, Stroke, StrokeKind, Ui, Widget,
 };
 use std::cell::RefCell;
 use std::rc::Weak;
 use std::time::{Duration, Instant};
+use crate::annotator::rectangle_based::{HitTarget, HitTest};
 
 #[derive(Debug, Copy, Clone)]
 pub struct StraightLineStyle {
