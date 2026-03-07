@@ -639,8 +639,6 @@ macro_rules! impl_widget_for {
                         let value = memory.data.get_temp_mut_or_default::<f32>(Id::from("rectangle-based-tool-scroll-delta"));
                         *value += scroll_delta;
 
-                        println!("value: {:?}", value);
-
                         while *value >= step_threshold {
                             *value -= step_threshold;
                             let stroke_width = self.stroke_width();
