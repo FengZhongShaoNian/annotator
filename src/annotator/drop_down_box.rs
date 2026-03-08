@@ -1,4 +1,4 @@
-use crate::annotator::{AnnotatorState, SharedAnnotatorState, StrokeType};
+use crate::annotator::{AnnotationCommon, AnnotatorState, SharedAnnotatorState, StrokeType, StrokeTypeSupport};
 use crate::application::Application;
 use crate::dpi::LogicalSize;
 use crate::global::{ReadGlobal, ReadGlobalMut};
@@ -130,7 +130,7 @@ pub fn create_stroke_type_selector(
         drop_down_area_size: LogicalSize::new(100, 120),
         build_drop_down_box_button_fn: Arc::new(Box::new(|_id, ui, annotator_state| {
             let tool = annotator_state.current_annotation_tool.as_ref().unwrap();
-            let stroke_type = tool.stroke_type().unwrap();
+            let stroke_type = tool.stroke_type();
             let (rect, response) = ui.allocate_exact_size(vec2(STROKE_TYPE_SELECTOR_WIDTH as f32, 20.), Sense::click());
             if response.hovered() {
                 ui.painter().rect(
@@ -195,7 +195,7 @@ pub fn create_stroke_type_selector(
             |_app, _window, current_view, annotator_state, ui| {
                 ui.vertical_centered(|ui| {
                     let tool = annotator_state.current_annotation_tool.as_mut().unwrap();
-                    let stroke_type = tool.stroke_type().unwrap();
+                    let stroke_type = tool.stroke_type();
                     if ui.add(StrokeTypeButton::new(90., 32., StrokeType::SolidLine)).clicked() {
                         tool.set_stroke_type(StrokeType::SolidLine);
                         current_view.close_later();
@@ -210,11 +210,11 @@ pub fn create_stroke_type_selector(
                     }
 
                     let tool = annotator_state.current_annotation_tool.as_mut().unwrap();
-                    if stroke_type != tool.stroke_type().unwrap() {
+                    if stroke_type != tool.stroke_type() {
                         annotator_state.annotations_stack.last_mut()
                             .map(|annotation|{
-                                if annotation.was_created_by(tool) && annotation.is_active(){
-                                    annotation.set_stroke_type(tool.stroke_type().unwrap());
+                                if annotation.was_created_by(tool) && annotation.activation().is_active(){
+                                    annotation.set_stroke_type(tool.stroke_type());
                                 }
                             });
                     }

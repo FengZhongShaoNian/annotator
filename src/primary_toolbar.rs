@@ -1,5 +1,5 @@
 use crate::annotator::svg_button::SvgButton;
-use crate::annotator::{AnnotatorState, SharedAnnotatorState, ToolName};
+use crate::annotator::{AnnotationCommon, AnnotatorState, SharedAnnotatorState, ToolName};
 use crate::application::Application;
 use crate::dpi::{LogicalPosition, LogicalSize};
 use crate::global::ReadGlobalMut;
@@ -349,7 +349,7 @@ pub fn create_primary_toolbar(
                                 println!("标注工具由{:?}切换为{:?}", active_tool, tool_name);
                                 // 将栈顶的标注更新为非激活状态
                                 annotator_state_mut_ref.annotations_stack.last_mut()
-                                    .map(|annotation|annotation.deactivate());
+                                    .map(|annotation|annotation.activation_mut().deactivate());
                             }
                         });
                     });

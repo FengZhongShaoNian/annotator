@@ -1,8 +1,5 @@
 use crate::annotator::cursor::Crosshair;
-use crate::annotator::{
-    Activation, Annotation, AnnotatorState, FillColorSupport, PainterExt, StrokeColorSupport,
-    StrokeType, StrokeTypeSupport, StrokeWidthSupport, ToolName,
-};
+use crate::annotator::{ActivationState, ActivationSupport, Annotation, AnnotationCommon, AnnotationStyle, AnnotationToolCommon, AnnotationToolWidgetCommon, AnnotatorState, FillColorSupport, PainterExt, SharedAnnotatorState, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport, ToolName};
 use egui::epaint::EllipseShape;
 use egui::{
     Color32, CursorIcon, Id, Pos2, Rect, Response, Sense, Stroke, StrokeKind, Ui, Widget, pos2,
@@ -11,116 +8,27 @@ use egui::{
 use std::cell::RefCell;
 use std::rc::Weak;
 
-pub trait RectangleBasedAnnotationStyle:
-StrokeWidthSupport + StrokeColorSupport + StrokeTypeSupport + FillColorSupport + Default
-{
-}
-
-/// 基于矩形的标注
-#[derive(Debug, Clone)]
-pub struct RectangleBasedAnnotation<S>
-where
-    S: RectangleBasedAnnotationStyle,
-{
-    /// 区域
-    rect: Rect,
-    /// 样式
-    style: S,
-    /// 激活状态
-    activation: Activation,
-}
-
-impl<S> RectangleBasedAnnotation<S>
-where
-    S: RectangleBasedAnnotationStyle,
-{
-    /// 当前的标注是否支持激活
-    /// 某些类型的标注可能不支持激活，那么和激活相关的逻辑、依赖激活状态的逻辑将与此标注无关(意味着一个标注被放到栈顶后就不能再次编辑它了)
-    pub fn support_activate(&self) -> bool {
-        self.activation.support_activate()
-    }
-
-    /// 激活此标注
-    pub fn activate(&mut self) {
-        self.activation.activate();
-    }
-
-    /// 取消激活此标注
-    pub fn deactivate(&mut self) {
-        self.activation.deactivate();
-    }
-
-    /// 此标注是否处于激活状态
-    pub fn is_active(&self) -> bool {
-        self.activation.is_active()
-    }
-}
-
-impl<S> StrokeWidthSupport for RectangleBasedAnnotation<S>
-where
-    S: RectangleBasedAnnotationStyle,
-{
-    fn stroke_width(&self) -> f32 {
-        self.style.stroke_width()
-    }
-
-    fn set_stroke_width(&mut self, stroke_width: f32) {
-        self.style.set_stroke_width(stroke_width);
-    }
-}
-
-impl<S> StrokeColorSupport for RectangleBasedAnnotation<S>
-where
-    S: RectangleBasedAnnotationStyle,
-{
-    fn stroke_color(&self) -> Color32 {
-        self.style.stroke_color()
-    }
-
-    fn set_stroke_color(&mut self, color: Color32) {
-        self.style.set_stroke_color(color);
-    }
-}
-
-impl<S> StrokeTypeSupport for RectangleBasedAnnotation<S>
-where
-    S: RectangleBasedAnnotationStyle,
-{
-    fn stroke_type(&self) -> StrokeType {
-        self.style.stroke_type()
-    }
-
-    fn set_stroke_type(&mut self, stroke_type: StrokeType) {
-        self.style.set_stroke_type(stroke_type);
-    }
-}
-
-impl<S> FillColorSupport for RectangleBasedAnnotation<S>
-where
-    S: RectangleBasedAnnotationStyle,
-{
-    fn fill_color(&self) -> Option<Color32> {
-        self.style.fill_color()
-    }
-
-    fn set_fill_color(&mut self, color: Color32) {
-        self.style.set_fill_color(color);
-    }
-}
-
 #[derive(Debug, Copy, Clone)]
 pub struct RectangleStyle {
     /// 线条颜色和宽度
-    pub stroke: Stroke,
+    stroke: Stroke,
     /// 线条类型
-    pub stroke_type: StrokeType,
+    stroke_type: StrokeType,
     /// 填充颜色
-    pub fill_color: Option<Color32>,
+    fill_color: Option<Color32>,
 }
 
 impl StrokeWidthSupport for RectangleStyle {
+    fn supports_get_stroke_width(&self) -> bool {
+        true
+    }
+
     fn stroke_width(&self) -> f32 {
         self.stroke.width
+    }
+
+    fn supports_set_stroke_width(&self) -> bool {
+        true
     }
 
     fn set_stroke_width(&mut self, stroke_width: f32) {
@@ -129,8 +37,16 @@ impl StrokeWidthSupport for RectangleStyle {
 }
 
 impl StrokeColorSupport for RectangleStyle {
+    fn supports_get_stroke_color(&self) -> bool {
+        true
+    }
+
     fn stroke_color(&self) -> Color32 {
         self.stroke.color
+    }
+
+    fn supports_set_stroke_color(&self) -> bool {
+        true
     }
 
     fn set_stroke_color(&mut self, color: Color32) {
@@ -139,8 +55,16 @@ impl StrokeColorSupport for RectangleStyle {
 }
 
 impl StrokeTypeSupport for RectangleStyle {
+    fn supports_get_stroke_type(&self) -> bool {
+        true
+    }
+
     fn stroke_type(&self) -> StrokeType {
         self.stroke_type
+    }
+
+    fn supports_set_stroke_type(&self) -> bool {
+        true
     }
 
     fn set_stroke_type(&mut self, stroke_type: StrokeType) {
@@ -149,13 +73,24 @@ impl StrokeTypeSupport for RectangleStyle {
 }
 
 impl FillColorSupport for RectangleStyle {
+    fn supports_get_fill_color(&self) -> bool {
+        true
+    }
+
     fn fill_color(&self) -> Option<Color32> {
         self.fill_color
+    }
+
+    fn supports_set_fill_color(&self) -> bool {
+        true
     }
 
     fn set_fill_color(&mut self, color: Color32) {
         self.fill_color = Some(color);
     }
+}
+
+impl AnnotationStyle for RectangleStyle {
 }
 
 impl Default for RectangleStyle {
@@ -179,8 +114,16 @@ pub struct EllipseStyle {
 }
 
 impl StrokeWidthSupport for EllipseStyle {
+    fn supports_get_stroke_width(&self) -> bool {
+        true
+    }
+
     fn stroke_width(&self) -> f32 {
         self.stroke.width
+    }
+
+    fn supports_set_stroke_width(&self) -> bool {
+        true
     }
 
     fn set_stroke_width(&mut self, stroke_width: f32) {
@@ -189,8 +132,16 @@ impl StrokeWidthSupport for EllipseStyle {
 }
 
 impl StrokeColorSupport for EllipseStyle {
+    fn supports_get_stroke_color(&self) -> bool {
+        true
+    }
+
     fn stroke_color(&self) -> Color32 {
         self.stroke.color
+    }
+
+    fn supports_set_stroke_color(&self) -> bool {
+        true
     }
 
     fn set_stroke_color(&mut self, color: Color32) {
@@ -199,23 +150,42 @@ impl StrokeColorSupport for EllipseStyle {
 }
 
 impl StrokeTypeSupport for EllipseStyle {
+    fn supports_get_stroke_type(&self) -> bool {
+        true
+    }
+
     fn stroke_type(&self) -> StrokeType {
         self.stroke_type
     }
 
-    fn set_stroke_type(&mut self, stroke_type: StrokeType) {
-        self.stroke_type = stroke_type;
+    fn supports_set_stroke_type(&self) -> bool {
+        false
+    }
+
+    fn set_stroke_type(&mut self, _stroke_type: StrokeType) {
+        unimplemented!()
     }
 }
 
 impl FillColorSupport for EllipseStyle {
+    fn supports_get_fill_color(&self) -> bool {
+        true
+    }
+
     fn fill_color(&self) -> Option<Color32> {
         self.fill_color
+    }
+
+    fn supports_set_fill_color(&self) -> bool {
+        true
     }
 
     fn set_fill_color(&mut self, color: Color32) {
         self.fill_color = Some(color);
     }
+}
+
+impl AnnotationStyle for EllipseStyle {
 }
 
 impl Default for EllipseStyle {
@@ -228,53 +198,136 @@ impl Default for EllipseStyle {
     }
 }
 
-impl RectangleBasedAnnotationStyle for RectangleStyle {}
-
-impl RectangleBasedAnnotationStyle for EllipseStyle {}
+/// 基于矩形的标注
+#[derive(Debug, Clone)]
+pub struct RectangleBasedAnnotation<S>
+where
+    S: AnnotationStyle,
+{
+    /// 区域
+    rect: Rect,
+    /// 样式
+    style: S,
+    /// 激活状态
+    activation: ActivationSupport,
+}
 
 impl<S> RectangleBasedAnnotation<S>
 where
-    S: RectangleBasedAnnotationStyle,
+    S: AnnotationStyle,
 {
-    pub fn rect(&self) -> &Rect {
-        &self.rect
-    }
-
-    pub fn set_color(&mut self, color: Color32) {
-        self.set_stroke_color(color);
-        // fill_color有值，意味着启用了fill_color
-        if self.fill_color().is_some() {
-            self.set_fill_color(color);
+    pub fn new(rect: Rect, style: S, activation: ActivationSupport) -> Self {
+        Self {
+            rect,
+            style,
+            activation,
         }
     }
 
-    pub fn get_color(&self) -> Color32 {
-        self.stroke_color()
+    pub fn rect(&self) -> &Rect {
+        &self.rect
+    }
+}
+
+impl<S> StrokeWidthSupport for RectangleBasedAnnotation<S>
+where
+    S: AnnotationStyle,
+{
+    fn supports_get_stroke_width(&self) -> bool {
+        self.style.supports_get_stroke_width()
+    }
+
+    fn stroke_width(&self) -> f32 {
+        self.style.stroke_width()
+    }
+
+    fn supports_set_stroke_width(&self) -> bool {
+        self.style.supports_set_stroke_width()
+    }
+
+    fn set_stroke_width(&mut self, stroke_width: f32) {
+        self.style.set_stroke_width(stroke_width)
+    }
+}
+
+impl<S> StrokeColorSupport for RectangleBasedAnnotation<S>
+where
+    S: AnnotationStyle,
+{
+    fn supports_get_stroke_color(&self) -> bool {
+        self.style.supports_get_stroke_color()
+    }
+
+    fn stroke_color(&self) -> Color32 {
+        self.style.stroke_color()
+    }
+
+    fn supports_set_stroke_color(&self) -> bool {
+        self.style.supports_set_stroke_color()
+    }
+
+    fn set_stroke_color(&mut self, color: Color32) {
+        self.style.set_stroke_color(color);
+    }
+}
+
+impl<S> StrokeTypeSupport for RectangleBasedAnnotation<S>
+where
+    S: AnnotationStyle,
+{
+    fn supports_get_stroke_type(&self) -> bool {
+        self.style.supports_get_stroke_type()
+    }
+
+    fn stroke_type(&self) -> StrokeType {
+        self.style.stroke_type()
+    }
+
+    fn supports_set_stroke_type(&self) -> bool {
+        self.style.supports_set_stroke_type()
+    }
+
+    fn set_stroke_type(&mut self, stroke_type: StrokeType) {
+        self.style.set_stroke_type(stroke_type);
+    }
+}
+
+impl<S> FillColorSupport for RectangleBasedAnnotation<S>
+where
+    S: AnnotationStyle,
+{
+    fn supports_get_fill_color(&self) -> bool {
+        self.style.supports_get_fill_color()
+    }
+
+    fn fill_color(&self) -> Option<Color32> {
+        self.style.fill_color()
+    }
+
+    fn supports_set_fill_color(&self) -> bool {
+        self.style.supports_set_fill_color()
+    }
+
+    fn set_fill_color(&mut self, color: Color32) {
+        self.style.set_fill_color(color);
+    }
+}
+
+impl<S> AnnotationCommon for RectangleBasedAnnotation<S>
+where
+    S: AnnotationStyle,
+{
+    fn activation(&self) -> &ActivationSupport {
+        &self.activation
+    }
+
+    fn activation_mut(&mut self) -> &mut ActivationSupport {
+        &mut self.activation
     }
 }
 
 pub type RectangleAnnotation = RectangleBasedAnnotation<RectangleStyle>;
 pub type EllipseAnnotation = RectangleBasedAnnotation<EllipseStyle>;
-
-impl RectangleAnnotation {
-    pub fn new(rect: Rect, style: RectangleStyle, activation: Activation) -> Self {
-        Self {
-            rect,
-            style,
-            activation,
-        }
-    }
-}
-
-impl EllipseAnnotation {
-    pub fn new(rect: Rect, style: EllipseStyle, activation: Activation) -> Self {
-        Self {
-            rect,
-            style,
-            activation,
-        }
-    }
-}
 
 impl Into<Annotation> for RectangleAnnotation {
     fn into(self) -> Annotation {
@@ -346,7 +399,7 @@ impl Widget for &mut EllipseAnnotation {
 
 pub struct RectangleBasedToolState<S>
 where
-    S: RectangleBasedAnnotationStyle + Default,
+    S: AnnotationStyle + Default,
 {
     /// 样式
     style: S,
@@ -358,7 +411,7 @@ where
 
 impl<S> Default for RectangleBasedToolState<S>
 where
-    S: RectangleBasedAnnotationStyle + Default,
+    S: AnnotationStyle + Default,
 {
     fn default() -> Self {
         Self {
@@ -371,6 +424,7 @@ where
 
 const NOTHING: Option<()> = None::<()>;
 
+/// 从栈顶访问T类型的标注
 trait StackTopAccessor<T> {
     fn peek_annotation<F, R>(&self, func: F) -> Option<R>
     where
@@ -473,88 +527,62 @@ impl StackTopAccessor<EllipseAnnotation> for AnnotatorState {
     }
 }
 
-trait Tool {
-    fn tool_name(&self) -> ToolName;
-}
-
 pub struct RectangleBasedTool<S>
 where
-    S: RectangleBasedAnnotationStyle + Default,
+    S: AnnotationStyle + Default,
 {
     annotator_state: Weak<RefCell<AnnotatorState>>,
     tool_state: RectangleBasedToolState<S>,
-    tool_name: ToolName,
 }
+
 impl<S> RectangleBasedTool<S>
 where
-    S: RectangleBasedAnnotationStyle + Default,
+    S: AnnotationStyle + Default,
 {
-    pub fn set_color(&mut self, color: Color32) {
-        self.set_stroke_color(color);
-        // fill_color有值，意味着启用了fill_color
-        if self.fill_color().is_some() {
-            self.set_fill_color(color);
-        }
-    }
-
-    pub fn get_color(&self) -> Color32 {
-        self.stroke_color()
-    }
-}
-
-pub type RectangleTool = RectangleBasedTool<RectangleStyle>;
-pub type EllipseTool = RectangleBasedTool<EllipseStyle>;
-
-impl RectangleTool {
-    pub fn new(annotator_state: Weak<RefCell<AnnotatorState>>) -> RectangleTool {
+    pub fn new(annotator_state: Weak<RefCell<AnnotatorState>>) -> RectangleBasedTool<S> {
+        let tool_state = RectangleBasedToolState::default();
         Self {
             annotator_state,
-            tool_state: Default::default(),
-            tool_name: ToolName::Rectangle,
+            tool_state,
         }
-    }
-}
-
-impl EllipseTool {
-    pub fn new(annotator_state: Weak<RefCell<AnnotatorState>>) -> EllipseTool {
-        Self {
-            annotator_state,
-            tool_state: Default::default(),
-            tool_name: ToolName::Ellipse,
-        }
-    }
-}
-
-impl Tool for RectangleTool {
-    fn tool_name(&self) -> ToolName {
-        ToolName::Rectangle
-    }
-}
-
-impl Tool for EllipseTool {
-    fn tool_name(&self) -> ToolName {
-        ToolName::Ellipse
     }
 }
 
 impl<S> StrokeWidthSupport for RectangleBasedTool<S>
 where
-    S: RectangleBasedAnnotationStyle + Default,
+    S: AnnotationStyle + Default,
 {
+    fn supports_get_stroke_width(&self) -> bool {
+        self.tool_state.style.supports_get_stroke_width()
+    }
+
     fn stroke_width(&self) -> f32 {
         self.tool_state.style.stroke_width()
+    }
+
+    fn supports_set_stroke_width(&self) -> bool {
+        self.tool_state.style.supports_set_stroke_width()
     }
 
     fn set_stroke_width(&mut self, stroke_width: f32) {
         self.tool_state.style.set_stroke_width(stroke_width);
     }
 }
+
 impl<S> StrokeColorSupport for RectangleBasedTool<S>
 where
-    S: RectangleBasedAnnotationStyle + Default,
+    S: AnnotationStyle + Default,
 {
+    fn supports_get_stroke_color(&self) -> bool {
+        self.tool_state.style.supports_get_stroke_color()
+    }
+
     fn stroke_color(&self) -> Color32 {
         self.tool_state.style.stroke_color()
+    }
+
+    fn supports_set_stroke_color(&self) -> bool {
+        self.tool_state.style.supports_set_stroke_color()
     }
 
     fn set_stroke_color(&mut self, color: Color32) {
@@ -564,10 +592,18 @@ where
 
 impl<S> StrokeTypeSupport for RectangleBasedTool<S>
 where
-    S: RectangleBasedAnnotationStyle + Default,
+    S: AnnotationStyle + Default,
 {
+    fn supports_get_stroke_type(&self) -> bool {
+        self.tool_state.style.supports_get_stroke_type()
+    }
+
     fn stroke_type(&self) -> StrokeType {
         self.tool_state.style.stroke_type()
+    }
+
+    fn supports_set_stroke_type(&self) -> bool {
+        self.tool_state.style.supports_set_stroke_type()
     }
 
     fn set_stroke_type(&mut self, stroke_type: StrokeType) {
@@ -577,10 +613,18 @@ where
 
 impl<S> FillColorSupport for RectangleBasedTool<S>
 where
-    S: RectangleBasedAnnotationStyle + Default,
+    S: AnnotationStyle + Default,
 {
+    fn supports_get_fill_color(&self) -> bool {
+        self.tool_state.style.supports_get_fill_color()
+    }
+
     fn fill_color(&self) -> Option<Color32> {
         self.tool_state.style.fill_color()
+    }
+
+    fn supports_set_fill_color(&self) -> bool {
+        self.tool_state.style.supports_set_fill_color()
     }
 
     fn set_fill_color(&mut self, color: Color32) {
@@ -588,76 +632,60 @@ where
     }
 }
 
-const MAX_STROKE_WIDTH: f32 = 62.;
-
-impl RectangleTool {
-    fn update_stroke_width_for_stack_top_annotation(&mut self, new_width: f32) {
-        self.peek_annotation_mut(|mut annotation: Option<&mut RectangleAnnotation>| {
-            if let Some(annotation) = annotation.as_mut() {
-                if annotation.support_activate() && annotation.is_active() {
-                    annotation.set_stroke_width(new_width);
-                }
-            }
-            NOTHING
-        });
-    }
-
-    fn peek_annotation<F, R>(&self, func: F) -> Option<R>
-    where
-        F: Fn(Option<&RectangleAnnotation>) -> Option<R>,
-    {
-        let annotator_state = self.annotator_state.upgrade().unwrap();
-        let annotator_state = annotator_state.borrow();
-        annotator_state.peek_annotation(func)
-    }
-
-    fn peek_annotation_mut<F, R>(&self, func: F) -> Option<R>
-    where
-        F: Fn(Option<&mut RectangleAnnotation>) -> Option<R>,
-    {
-        let annotator_state = self.annotator_state.upgrade().unwrap();
-        let mut annotator_state = annotator_state.borrow_mut();
-        annotator_state.peek_annotation_mut(func)
-    }
-
-    fn pop_annotation(&self) -> Option<RectangleAnnotation> {
-        let annotator_state = self.annotator_state.upgrade().unwrap();
-        annotator_state.borrow_mut().pop_annotation()
+impl<S> AnnotationToolCommon for RectangleBasedTool<S>
+where
+    S: AnnotationStyle + Default,
+{
+    fn annotator_state(&self) -> SharedAnnotatorState {
+        self.annotator_state.upgrade().unwrap()
     }
 }
+
+impl<S> AnnotationToolWidgetCommon for RectangleBasedTool<S>
+where
+    S: AnnotationStyle + Default,{
+}
+
+pub type RectangleTool = RectangleBasedTool<RectangleStyle>;
+pub type EllipseTool = RectangleBasedTool<EllipseStyle>;
+
+macro_rules! impl_stack_top_access_for {
+    ($($tool:ty=>$annotation:ty),*) => {
+        $(
+            impl $tool {
+                fn peek_annotation<F, R>(&self, func: F) -> Option<R>
+                where
+                    F: Fn(Option<&$annotation>) -> Option<R>,
+                {
+                    let annotator_state = self.annotator_state();
+                    let annotator_state = annotator_state.borrow();
+                    annotator_state.peek_annotation(func)
+                }
+
+                fn peek_annotation_mut<F, R>(&self, func: F) -> Option<R>
+                where
+                    F: Fn(Option<&mut $annotation>) -> Option<R>,
+                {
+                    let annotator_state = self.annotator_state();
+                    let mut annotator_state = annotator_state.borrow_mut();
+                    annotator_state.peek_annotation_mut(func)
+                }
+
+                fn pop_annotation(&self) -> Option<$annotation> {
+                    let annotator_state = self.annotator_state();
+                    annotator_state.borrow_mut().pop_annotation()
+                }
+            }
+        )*
+    };
+}
+
+impl_stack_top_access_for!(RectangleTool=>RectangleAnnotation, EllipseTool=>EllipseAnnotation);
 
 macro_rules! impl_widget_for {
     ($($tool:ty=>$annotation:ty),*) => {
         $(
         impl $tool {
-            fn handle_wheel_event(&mut self, ui: &mut Ui) {
-                // 滚动鼠标滚轮调整线条大小
-                let scroll_delta = ui.ctx().input(|i| i.smooth_scroll_delta.y);
-                if scroll_delta != 0. {
-                    ui.memory_mut(|memory| {
-                        let step_threshold = 9f32;
-                        let value = memory.data.get_temp_mut_or_default::<f32>(Id::from("rectangle-based-tool-scroll-delta"));
-                        *value += scroll_delta;
-
-                        while *value >= step_threshold {
-                            *value -= step_threshold;
-                            let stroke_width = self.stroke_width();
-                            if stroke_width > 1. {
-                                self.set_stroke_width( stroke_width - 1.);
-                            }
-                        }
-
-                        while *value <= -step_threshold{
-                            *value += step_threshold;
-                            let stroke_width = self.stroke_width();
-                            if stroke_width < MAX_STROKE_WIDTH {
-                                self.set_stroke_width(stroke_width + 1.0);
-                            }
-                        }
-                    });
-                }
-            }
-
             fn update_cursor_icon(&self, ui: &mut Ui) {
                 let Some(pointer_pos) = ui.ctx().pointer_hover_pos() else {
                     return;
@@ -735,13 +763,13 @@ macro_rules! impl_widget_for {
                             if hit_target != HitTarget::Inside && hit_target != HitTarget::Outside =>
                             {
                                 let support_activate = self.peek_annotation(|annotation_on_stack_top: Option<&$annotation>| {
-                                    Some(annotation_on_stack_top.unwrap().activation.support_activate())
+                                    Some(annotation_on_stack_top.unwrap().activation().supports_activate())
                                 }).unwrap();
 
                                 if support_activate {
                                     // 调整现有的标注
                                     let mut annotation = self.pop_annotation().unwrap();
-                                    annotation.activate();
+                                    annotation.activation_mut().activate();
                                     self.tool_state.current_annotation = Some(annotation);
                                     self.tool_state.drag_action = hit_target.get_drag_action();
                                 }
@@ -751,7 +779,7 @@ macro_rules! impl_widget_for {
                             {
                                 self.peek_annotation_mut(|mut annotation_on_stack_top| {
                                     // 把栈顶的标注设为非激活状态
-                                    annotation_on_stack_top.as_mut().unwrap().deactivate();
+                                    annotation_on_stack_top.as_mut().unwrap().activation_mut().deactivate();
                                     None::<()>
                                 });
                             }
@@ -761,7 +789,7 @@ macro_rules! impl_widget_for {
                     self.peek_annotation_mut(|mut annotation_on_stack_top| {
                         // 把栈顶的标注设为非激活状态
                         if let Some(annotation) = annotation_on_stack_top.as_mut() {
-                            annotation.deactivate();
+                            annotation.activation_mut().deactivate();
                         }
 
                         None::<()>
@@ -808,7 +836,7 @@ macro_rules! impl_widget_for {
                     } else {
                         let drag_started_pos = ui.ctx().input(|i| i.pointer.press_origin()).unwrap();
                         let rect = Rect::from_two_pos(drag_started_pos, pointer_pos);
-                        let mut annotation = <$annotation>::new(rect, self.tool_state.style, Activation::Activable(true));
+                        let mut annotation = <$annotation>::new(rect, self.tool_state.style, ActivationSupport::Supported(ActivationState::new(true)));
                         self.tool_state.current_annotation = Some(annotation.clone());
                         self.tool_state.drag_action = DragAction::None;
                         ui.add(&mut annotation);
@@ -834,41 +862,6 @@ macro_rules! impl_widget_for {
     };
 }
 
-impl EllipseTool {
-    fn update_stroke_width_for_stack_top_annotation(&mut self, new_width: f32) {
-        self.peek_annotation_mut(|mut annotation: Option<&mut EllipseAnnotation>| {
-            if let Some(annotation) = annotation.as_mut() {
-                if annotation.support_activate() && annotation.is_active() {
-                    annotation.set_stroke_width(new_width);
-                }
-            }
-            NOTHING
-        });
-    }
-
-    fn peek_annotation<F, R>(&self, func: F) -> Option<R>
-    where
-        F: Fn(Option<&EllipseAnnotation>) -> Option<R>,
-    {
-        let annotator_state = self.annotator_state.upgrade().unwrap();
-        let annotator_state = annotator_state.borrow();
-        annotator_state.peek_annotation(func)
-    }
-
-    fn peek_annotation_mut<F, R>(&self, func: F) -> Option<R>
-    where
-        F: Fn(Option<&mut EllipseAnnotation>) -> Option<R>,
-    {
-        let annotator_state = self.annotator_state.upgrade().unwrap();
-        let mut annotator_state = annotator_state.borrow_mut();
-        annotator_state.peek_annotation_mut(func)
-    }
-
-    fn pop_annotation(&self) -> Option<EllipseAnnotation> {
-        let annotator_state = self.annotator_state.upgrade().unwrap();
-        annotator_state.borrow_mut().pop_annotation()
-    }
-}
 
 impl_widget_for!(RectangleTool => RectangleAnnotation, EllipseTool => EllipseAnnotation);
 

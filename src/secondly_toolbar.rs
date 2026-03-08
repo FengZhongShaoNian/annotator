@@ -1,7 +1,5 @@
 use crate::annotator::drop_down_box::{DropdownBox, create_stroke_type_selector};
-use crate::annotator::{
-    AnnotationTool, AnnotatorState, PainterExt, SharedAnnotatorState, StrokeType, ToolName,
-};
+use crate::annotator::{AnnotationCommon, AnnotationTool, AnnotatorState, FillColorSupport, PainterExt, SharedAnnotatorState, StrokeColorSupport, StrokeType, StrokeTypeSupport, ToolName};
 use crate::application::Application;
 use crate::context::Command;
 use crate::dpi::{LogicalPosition, LogicalSize};
@@ -73,18 +71,17 @@ pub fn create_secondly_toolbar(
                                 move |app, window, current_view, ui, annotator_state| {
                                     let active_tool = annotator_state
                                         .current_annotation_tool
-                                        .as_ref()
-                                        .map(|t| t.tool_name());
+                                        .as_ref();
 
                                     let Some(active_tool) = active_tool else {
                                         current_view.set_visible(false);
                                         return;
                                     };
 
-                                    let show_stroke_type_selector = active_tool
-                                        == ToolName::Rectangle
-                                        || active_tool == ToolName::StraightLine;
-                                    if show_stroke_type_selector {
+                                    let supports_set_stroke_type = active_tool.supports_set_stroke_type();
+                                    let supports_set_stroke_color = active_tool.supports_set_stroke_color();
+
+                                    if supports_set_stroke_type {
                                         create_stroke_type_selector(
                                             Id::from("stroke-type-selector"),
                                             app,
@@ -95,16 +92,7 @@ pub fn create_secondly_toolbar(
                                         );
                                     }
 
-                                    let show_color_selector = active_tool == ToolName::Rectangle
-                                        || active_tool == ToolName::Ellipse
-                                        || active_tool == ToolName::StraightLine
-                                        || active_tool == ToolName::Arrow
-                                        || active_tool == ToolName::Pencil
-                                        || active_tool == ToolName::MarkerPen
-                                        || active_tool == ToolName::Text
-                                        || active_tool == ToolName::SerialNumber;
-
-                                    if show_color_selector {
+                                    if supports_set_stroke_color {
                                         create_color_selector(
                                             app,
                                             window,
@@ -137,7 +125,7 @@ fn create_color_selector(
     let button_width = 18f32;
     let width = button_width * 5. + ui.spacing().item_spacing.x * 5.;
     let tool = annotator_state.current_annotation_tool.as_mut().unwrap();
-    let current_color = tool.color().unwrap();
+    let current_color = tool.stroke_color();
     if ui
         .add(ColorButton::new(
             Color32::RED,
@@ -147,7 +135,10 @@ fn create_color_selector(
         ))
         .clicked()
     {
-        tool.set_color(Color32::RED);
+        tool.set_stroke_color(Color32::RED);
+        if tool.fill_color().is_some() {
+            tool.set_fill_color(Color32::RED);
+        }
     }
     if ui
         .add(ColorButton::new(
@@ -158,7 +149,10 @@ fn create_color_selector(
         ))
         .clicked()
     {
-        tool.set_color(Color32::BLACK);
+        tool.set_stroke_color(Color32::BLACK);
+        if tool.fill_color().is_some() {
+            tool.set_fill_color(Color32::BLACK);
+        }
     }
     if ui
         .add(ColorButton::new(
@@ -169,7 +163,10 @@ fn create_color_selector(
         ))
         .clicked()
     {
-        tool.set_color(Color32::BLUE);
+        tool.set_stroke_color(Color32::BLUE);
+        if tool.fill_color().is_some() {
+            tool.set_fill_color(Color32::BLUE);
+        }
     }
     if ui
         .add(ColorButton::new(
@@ -180,7 +177,10 @@ fn create_color_selector(
         ))
         .clicked()
     {
-        tool.set_color(Color32::GREEN);
+        tool.set_stroke_color(Color32::GREEN);
+        if tool.fill_color().is_some() {
+            tool.set_fill_color(Color32::GREEN);
+        }
     }
     if ui
         .add(ColorButton::new(
@@ -191,15 +191,21 @@ fn create_color_selector(
         ))
         .clicked()
     {
-        tool.set_color(Color32::GOLD);
+        tool.set_stroke_color(Color32::GOLD);
+        if tool.fill_color().is_some() {
+            tool.set_fill_color(Color32::GOLD);
+        }
     }
-    if current_color != tool.color().unwrap() {
+    if current_color != tool.stroke_color() {
         annotator_state
             .annotations_stack
             .last_mut()
             .map(|annotation| {
-                if annotation.was_created_by(tool) && annotation.is_active() {
-                    annotation.set_color(tool.color().unwrap());
+                if annotation.was_created_by(tool) && annotation.activation().is_active() {
+                    annotation.set_stroke_color(tool.stroke_color());
+                    if annotation.fill_color().is_some() && tool.fill_color().is_some() {
+                        annotation.set_fill_color(tool.fill_color().unwrap());
+                    }
                 }
             });
     }
