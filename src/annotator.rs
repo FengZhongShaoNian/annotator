@@ -1,4 +1,3 @@
-pub mod arrow;
 pub mod blur;
 mod cursor;
 pub mod drop_down_box;
@@ -7,13 +6,12 @@ pub mod marker_pen;
 pub mod mosaic;
 pub mod pencil;
 pub mod serial_number;
-pub mod straight_line;
 pub(crate) mod svg_button;
 pub mod text;
 pub mod watermark;
 pub mod rectangle_based;
+pub mod straight_line_based;
 
-use crate::annotator::arrow::{ArrowState, ArrowTool};
 use crate::annotator::blur::BlurState;
 use crate::annotator::eraser::EraserState;
 use crate::annotator::marker_pen::MarkerPentate;
@@ -21,7 +19,7 @@ use crate::annotator::mosaic::MosaicState;
 use crate::annotator::pencil::PencilState;
 use crate::annotator::rectangle_based::{EllipseAnnotation, EllipseTool, RectangleAnnotation, RectangleTool};
 use crate::annotator::serial_number::SerialNumberState;
-use crate::annotator::straight_line::{StraightLineState, StraightLineTool};
+use crate::annotator::straight_line_based::{ArrowAnnotation, ArrowTool, StraightLineAnnotation, StraightLineTool};
 use crate::annotator::text::TextState;
 use crate::annotator::watermark::WaterMarkState;
 use crate::global::Global;
@@ -30,7 +28,7 @@ use egui::ahash::HashMap;
 use egui::{pos2, Color32, Id, Painter, Pos2, Rect, Response, Shape, Stroke, StrokeKind, TextureHandle, Ui, Vec2, Widget};
 use image::RgbaImage;
 use std::cell::RefCell;
-use std::rc::{Rc, Weak};
+use std::rc::Rc;
 use std::sync::Arc;
 
 /// 线条类型（实线、虚线、点线）
@@ -205,10 +203,10 @@ pub enum Annotation {
     Ellipse(EllipseAnnotation),
 
     /// 直线
-    StraightLine(StraightLineState),
+    StraightLine(StraightLineAnnotation),
 
     /// 箭头
-    Arrow(ArrowState),
+    Arrow(ArrowAnnotation),
 
     /// 铅笔
     Pencil(PencilState),
@@ -265,10 +263,10 @@ impl StrokeWidthSupport for Annotation {
                 inner.supports_get_stroke_width()
             }
             Annotation::StraightLine(inner) => {
-                todo!()
+                inner.supports_get_stroke_width()
             }
             Annotation::Arrow(inner) => {
-                todo!()
+                inner.supports_get_stroke_width()
             }
             Annotation::Pencil(inner) => {
                 todo!()
@@ -306,10 +304,10 @@ impl StrokeWidthSupport for Annotation {
                 inner.stroke_width()
             }
             Annotation::StraightLine(inner) => {
-                todo!()
+                inner.stroke_width()
             }
             Annotation::Arrow(inner) => {
-                todo!()
+                inner.stroke_width()
             }
             Annotation::Pencil(inner) => {
                 todo!()
@@ -347,10 +345,10 @@ impl StrokeWidthSupport for Annotation {
                 inner.supports_set_stroke_width()
             }
             Annotation::StraightLine(inner) => {
-                todo!()
+                inner.supports_set_stroke_width()
             }
             Annotation::Arrow(inner) => {
-                todo!()
+                inner.supports_set_stroke_width()
             }
             Annotation::Pencil(inner) => {
                 todo!()
@@ -388,10 +386,10 @@ impl StrokeWidthSupport for Annotation {
                 inner.set_stroke_width(stroke_width);
             }
             Annotation::StraightLine(inner) => {
-                todo!()
+                inner.set_stroke_width(stroke_width);
             }
             Annotation::Arrow(inner) => {
-                todo!()
+                inner.set_stroke_width(stroke_width);
             }
             Annotation::Pencil(inner) => {
                 todo!()
@@ -472,10 +470,10 @@ impl StrokeColorSupport for Annotation {
                 inner.stroke_color()
             }
             Annotation::StraightLine(inner) => {
-                todo!()
+                inner.stroke_color()
             }
             Annotation::Arrow(inner) => {
-                todo!()
+                inner.stroke_color()
             }
             Annotation::Pencil(inner) => {
                 todo!()
@@ -513,10 +511,10 @@ impl StrokeColorSupport for Annotation {
                 inner.supports_set_stroke_color()
             }
             Annotation::StraightLine(inner) => {
-                todo!()
+                inner.supports_set_stroke_color()
             }
             Annotation::Arrow(inner) => {
-                todo!()
+                inner.supports_set_stroke_color()
             }
             Annotation::Pencil(inner) => {
                 todo!()
@@ -554,10 +552,10 @@ impl StrokeColorSupport for Annotation {
                 inner.set_stroke_color(color);
             }
             Annotation::StraightLine(inner) => {
-                todo!()
+                inner.set_stroke_color(color);
             }
             Annotation::Arrow(inner) => {
-                todo!()
+                inner.set_stroke_color(color);
             }
             Annotation::Pencil(inner) => {
                 todo!()
@@ -597,10 +595,10 @@ impl StrokeTypeSupport for Annotation {
                 inner.supports_get_stroke_type()
             }
             Annotation::StraightLine(inner) => {
-                todo!()
+                inner.supports_get_stroke_type()
             }
             Annotation::Arrow(inner) => {
-                todo!()
+                inner.supports_get_stroke_type()
             }
             Annotation::Pencil(inner) => {
                 todo!()
@@ -638,10 +636,10 @@ impl StrokeTypeSupport for Annotation {
                 inner.stroke_type()
             }
             Annotation::StraightLine(inner) => {
-                todo!()
+                inner.stroke_type()
             }
             Annotation::Arrow(inner) => {
-                todo!()
+                inner.stroke_type()
             }
             Annotation::Pencil(inner) => {
                 todo!()
@@ -679,10 +677,10 @@ impl StrokeTypeSupport for Annotation {
                 inner.supports_set_stroke_type()
             }
             Annotation::StraightLine(inner) => {
-                todo!()
+                inner.supports_set_stroke_type()
             }
             Annotation::Arrow(inner) => {
-                todo!()
+                inner.supports_set_stroke_type()
             }
             Annotation::Pencil(inner) => {
                 todo!()
@@ -720,10 +718,10 @@ impl StrokeTypeSupport for Annotation {
                 inner.set_stroke_type(stroke_type);
             }
             Annotation::StraightLine(inner) => {
-                todo!()
+                inner.set_stroke_type(stroke_type);
             }
             Annotation::Arrow(inner) => {
-                todo!()
+                inner.set_stroke_type(stroke_type);
             }
             Annotation::Pencil(inner) => {
                 todo!()
@@ -763,10 +761,10 @@ impl FillColorSupport for Annotation {
                 inner.supports_get_fill_color()
             }
             Annotation::StraightLine(inner) => {
-                todo!()
+                inner.supports_get_fill_color()
             }
             Annotation::Arrow(inner) => {
-                todo!()
+                inner.supports_get_fill_color()
             }
             Annotation::Pencil(inner) => {
                 todo!()
@@ -804,10 +802,10 @@ impl FillColorSupport for Annotation {
                 inner.fill_color()
             }
             Annotation::StraightLine(inner) => {
-                todo!()
+                inner.fill_color()
             }
             Annotation::Arrow(inner) => {
-                todo!()
+                inner.fill_color()
             }
             Annotation::Pencil(inner) => {
                 todo!()
@@ -845,10 +843,10 @@ impl FillColorSupport for Annotation {
                 inner.supports_set_fill_color()
             }
             Annotation::StraightLine(inner) => {
-                todo!()
+                inner.supports_set_fill_color()
             }
             Annotation::Arrow(inner) => {
-                todo!()
+                inner.supports_set_fill_color()
             }
             Annotation::Pencil(inner) => {
                 todo!()
@@ -886,10 +884,10 @@ impl FillColorSupport for Annotation {
                 inner.set_fill_color(color);
             }
             Annotation::StraightLine(inner) => {
-                todo!()
+                inner.set_fill_color(color);
             }
             Annotation::Arrow(inner) => {
-                todo!()
+                inner.set_fill_color(color);
             }
             Annotation::Pencil(inner) => {
                 todo!()
@@ -929,10 +927,10 @@ impl AnnotationCommon for Annotation {
                 inner.activation()
             }
             Annotation::StraightLine(inner) => {
-                todo!()
+                inner.activation()
             }
             Annotation::Arrow(inner) => {
-                todo!()
+                inner.activation()
             }
             Annotation::Pencil(inner) => {
                 todo!()
@@ -970,10 +968,10 @@ impl AnnotationCommon for Annotation {
                 inner.activation_mut()
             }
             Annotation::StraightLine(inner) => {
-                todo!()
+                inner.activation_mut()
             }
             Annotation::Arrow(inner) => {
-                todo!()
+                inner.activation_mut()
             }
             Annotation::Pencil(inner) => {
                 todo!()
@@ -1008,16 +1006,16 @@ impl Widget for &mut Annotation {
         match self {
             Annotation::Rectangle(annotation) => ui.add(annotation),
             Annotation::Ellipse(annotation) => ui.add(annotation),
-            Annotation::StraightLine(straight_line_state) => ui.add(straight_line_state),
-            Annotation::Arrow(arrow_state) => ui.add(arrow_state),
-            Annotation::Pencil(pencil_state) => ui.add(pencil_state),
-            Annotation::MarkerPen(marker_pen_state) => ui.add(marker_pen_state),
-            Annotation::Mosaic(mosaic_state) => ui.add(mosaic_state),
-            Annotation::Blur(blur_state) => ui.add(blur_state),
-            Annotation::Text(text_state) => ui.add(text_state),
-            Annotation::SerialNumber(serial_number_state) => ui.add(serial_number_state),
-            Annotation::Watermark(watermark_state) => ui.add(watermark_state),
-            Annotation::Eraser(eraser_state) => ui.add(eraser_state),
+            Annotation::StraightLine(annotation) => ui.add(annotation),
+            Annotation::Arrow(annotation) => ui.add(annotation),
+            Annotation::Pencil(annotation) => ui.add(annotation),
+            Annotation::MarkerPen(annotation) => ui.add(annotation),
+            Annotation::Mosaic(annotation) => ui.add(annotation),
+            Annotation::Blur(annotation) => ui.add(annotation),
+            Annotation::Text(annotation) => ui.add(annotation),
+            Annotation::SerialNumber(annotation) => ui.add(annotation),
+            Annotation::Watermark(annotation) => ui.add(annotation),
+            Annotation::Eraser(annotation) => ui.add(annotation),
         }
     }
 }
@@ -1128,11 +1126,11 @@ impl StrokeWidthSupport for AnnotationTool {
             AnnotationTool::Ellipse(tool) => {
                 tool.supports_get_stroke_width()
             }
-            AnnotationTool::StraightLine(_) => {
-                todo!()
+            AnnotationTool::StraightLine(tool) => {
+                tool.supports_get_stroke_width()
             }
-            AnnotationTool::Arrow(_) => {
-                todo!()
+            AnnotationTool::Arrow(tool) => {
+                tool.supports_get_stroke_width()
             }
             AnnotationTool::Pencil => {
                 todo!()
@@ -1169,11 +1167,11 @@ impl StrokeWidthSupport for AnnotationTool {
             AnnotationTool::Ellipse(tool) => {
                 tool.stroke_width()
             }
-            AnnotationTool::StraightLine(_) => {
-                todo!()
+            AnnotationTool::StraightLine(tool) => {
+                tool.stroke_width()
             }
-            AnnotationTool::Arrow(_) => {
-                todo!()
+            AnnotationTool::Arrow(tool) => {
+                tool.stroke_width()
             }
             AnnotationTool::Pencil => {
                 todo!()
@@ -1210,11 +1208,11 @@ impl StrokeWidthSupport for AnnotationTool {
             AnnotationTool::Ellipse(tool) => {
                 tool.supports_set_stroke_width()
             }
-            AnnotationTool::StraightLine(_) => {
-                todo!()
+            AnnotationTool::StraightLine(tool) => {
+                tool.supports_set_stroke_width()
             }
-            AnnotationTool::Arrow(_) => {
-                todo!()
+            AnnotationTool::Arrow(tool) => {
+                tool.supports_set_stroke_width()
             }
             AnnotationTool::Pencil => {
                 todo!()
@@ -1251,11 +1249,11 @@ impl StrokeWidthSupport for AnnotationTool {
             AnnotationTool::Ellipse(tool) => {
                 tool.set_stroke_width(stroke_width);
             }
-            AnnotationTool::StraightLine(_) => {
-                todo!()
+            AnnotationTool::StraightLine(tool) => {
+                tool.set_stroke_width(stroke_width);
             }
-            AnnotationTool::Arrow(_) => {
-                todo!()
+            AnnotationTool::Arrow(tool) => {
+                tool.set_stroke_width(stroke_width);
             }
             AnnotationTool::Pencil => {
                 todo!()
@@ -1294,11 +1292,11 @@ impl StrokeColorSupport for AnnotationTool {
             AnnotationTool::Ellipse(tool) => {
                 tool.supports_get_stroke_color()
             }
-            AnnotationTool::StraightLine(_) => {
-                todo!()
+            AnnotationTool::StraightLine(tool) => {
+                tool.supports_get_stroke_color()
             }
-            AnnotationTool::Arrow(_) => {
-                todo!()
+            AnnotationTool::Arrow(tool) => {
+                tool.supports_get_stroke_color()
             }
             AnnotationTool::Pencil => {
                 todo!()
@@ -1335,11 +1333,11 @@ impl StrokeColorSupport for AnnotationTool {
             AnnotationTool::Ellipse(tool) => {
                 tool.stroke_color()
             }
-            AnnotationTool::StraightLine(_) => {
-                todo!()
+            AnnotationTool::StraightLine(tool) => {
+                tool.stroke_color()
             }
-            AnnotationTool::Arrow(_) => {
-                todo!()
+            AnnotationTool::Arrow(tool) => {
+                tool.stroke_color()
             }
             AnnotationTool::Pencil => {
                 todo!()
@@ -1376,11 +1374,11 @@ impl StrokeColorSupport for AnnotationTool {
             AnnotationTool::Ellipse(tool) => {
                 tool.supports_set_stroke_color()
             }
-            AnnotationTool::StraightLine(_) => {
-                todo!()
+            AnnotationTool::StraightLine(tool) => {
+                tool.supports_set_stroke_color()
             }
-            AnnotationTool::Arrow(_) => {
-                todo!()
+            AnnotationTool::Arrow(tool) => {
+                tool.supports_set_stroke_color()
             }
             AnnotationTool::Pencil => {
                 todo!()
@@ -1417,11 +1415,11 @@ impl StrokeColorSupport for AnnotationTool {
             AnnotationTool::Ellipse(tool) => {
                 tool.set_stroke_color(color);
             }
-            AnnotationTool::StraightLine(_) => {
-                todo!()
+            AnnotationTool::StraightLine(tool) => {
+                tool.set_stroke_color(color);
             }
-            AnnotationTool::Arrow(_) => {
-                todo!()
+            AnnotationTool::Arrow(tool) => {
+                tool.set_stroke_color(color);
             }
             AnnotationTool::Pencil => {
                 todo!()
@@ -1460,11 +1458,11 @@ impl StrokeTypeSupport for AnnotationTool {
             AnnotationTool::Ellipse(tool) => {
                 tool.supports_get_stroke_type()
             }
-            AnnotationTool::StraightLine(_) => {
-                todo!()
+            AnnotationTool::StraightLine(tool) => {
+                tool.supports_get_stroke_type()
             }
-            AnnotationTool::Arrow(_) => {
-                todo!()
+            AnnotationTool::Arrow(tool) => {
+                tool.supports_get_stroke_type()
             }
             AnnotationTool::Pencil => {
                 todo!()
@@ -1501,11 +1499,11 @@ impl StrokeTypeSupport for AnnotationTool {
             AnnotationTool::Ellipse(tool) => {
                 tool.stroke_type()
             }
-            AnnotationTool::StraightLine(_) => {
-                todo!()
+            AnnotationTool::StraightLine(tool) => {
+                tool.stroke_type()
             }
-            AnnotationTool::Arrow(_) => {
-                todo!()
+            AnnotationTool::Arrow(tool) => {
+                tool.stroke_type()
             }
             AnnotationTool::Pencil => {
                 todo!()
@@ -1542,11 +1540,11 @@ impl StrokeTypeSupport for AnnotationTool {
             AnnotationTool::Ellipse(tool) => {
                 tool.supports_set_stroke_type()
             }
-            AnnotationTool::StraightLine(_) => {
-                todo!()
+            AnnotationTool::StraightLine(tool) => {
+                tool.supports_set_stroke_type()
             }
-            AnnotationTool::Arrow(_) => {
-                todo!()
+            AnnotationTool::Arrow(tool) => {
+                tool.supports_set_stroke_type()
             }
             AnnotationTool::Pencil => {
                 todo!()
@@ -1583,11 +1581,11 @@ impl StrokeTypeSupport for AnnotationTool {
             AnnotationTool::Ellipse(tool) => {
                 tool.set_stroke_type(stroke_type);
             }
-            AnnotationTool::StraightLine(_) => {
-                todo!()
+            AnnotationTool::StraightLine(tool) => {
+                tool.set_stroke_type(stroke_type);
             }
-            AnnotationTool::Arrow(_) => {
-                todo!()
+            AnnotationTool::Arrow(tool) => {
+                tool.set_stroke_type(stroke_type);
             }
             AnnotationTool::Pencil => {
                 todo!()
@@ -1626,11 +1624,11 @@ impl FillColorSupport for AnnotationTool {
             AnnotationTool::Ellipse(tool) => {
                 tool.supports_get_fill_color()
             }
-            AnnotationTool::StraightLine(_) => {
-                todo!()
+            AnnotationTool::StraightLine(tool) => {
+                tool.supports_get_fill_color()
             }
-            AnnotationTool::Arrow(_) => {
-                todo!()
+            AnnotationTool::Arrow(tool) => {
+                tool.supports_get_fill_color()
             }
             AnnotationTool::Pencil => {
                 todo!()
@@ -1667,11 +1665,11 @@ impl FillColorSupport for AnnotationTool {
             AnnotationTool::Ellipse(tool) => {
                 tool.fill_color()
             }
-            AnnotationTool::StraightLine(_) => {
-                todo!()
+            AnnotationTool::StraightLine(tool) => {
+                tool.fill_color()
             }
-            AnnotationTool::Arrow(_) => {
-                todo!()
+            AnnotationTool::Arrow(tool) => {
+                tool.fill_color()
             }
             AnnotationTool::Pencil => {
                 todo!()
@@ -1708,11 +1706,11 @@ impl FillColorSupport for AnnotationTool {
             AnnotationTool::Ellipse(tool) => {
                 tool.supports_set_fill_color()
             }
-            AnnotationTool::StraightLine(_) => {
-                todo!()
+            AnnotationTool::StraightLine(tool) => {
+                tool.supports_set_fill_color()
             }
-            AnnotationTool::Arrow(_) => {
-                todo!()
+            AnnotationTool::Arrow(tool) => {
+                tool.supports_set_fill_color()
             }
             AnnotationTool::Pencil => {
                 todo!()
@@ -1749,11 +1747,11 @@ impl FillColorSupport for AnnotationTool {
             AnnotationTool::Ellipse(tool) => {
                 tool.set_fill_color(color);
             }
-            AnnotationTool::StraightLine(_) => {
-                todo!()
+            AnnotationTool::StraightLine(tool) => {
+                tool.set_fill_color(color);
             }
-            AnnotationTool::Arrow(_) => {
-                todo!()
+            AnnotationTool::Arrow(tool) => {
+                tool.set_fill_color(color);
             }
             AnnotationTool::Pencil => {
                 todo!()
@@ -1852,6 +1850,51 @@ pub struct AnnotatorState {
 pub type SharedAnnotatorState = Rc<RefCell<AnnotatorState>>;
 
 impl Global for SharedAnnotatorState {}
+
+/// 从栈顶访问T类型的标注
+pub trait StackTopAccessor<T> {
+    fn peek_annotation<F, R>(&self, func: F) -> Option<R>
+    where
+        F: Fn(Option<&T>) -> Option<R>;
+
+    fn peek_annotation_mut<F, R>(&mut self, func: F) -> Option<R>
+    where
+        F: Fn(Option<&mut T>) -> Option<R>;
+
+    fn pop_annotation(&mut self) -> Option<T>;
+}
+
+
+#[macro_export] macro_rules! impl_stack_top_access_for {
+    ($($tool:ty=>$annotation:ty),*) => {
+        $(
+            impl $tool {
+                fn peek_annotation<F, R>(&self, func: F) -> Option<R>
+                where
+                    F: Fn(Option<&$annotation>) -> Option<R>,
+                {
+                    let annotator_state = self.annotator_state();
+                    let annotator_state = annotator_state.borrow();
+                    annotator_state.peek_annotation(func)
+                }
+
+                fn peek_annotation_mut<F, R>(&self, func: F) -> Option<R>
+                where
+                    F: Fn(Option<&mut $annotation>) -> Option<R>,
+                {
+                    let annotator_state = self.annotator_state();
+                    let mut annotator_state = annotator_state.borrow_mut();
+                    annotator_state.peek_annotation_mut(func)
+                }
+
+                fn pop_annotation(&self) -> Option<$annotation> {
+                    let annotator_state = self.annotator_state();
+                    annotator_state.borrow_mut().pop_annotation()
+                }
+            }
+        )*
+    };
+}
 
 pub trait SharedAnnotatorStateUtil {
     fn with_current_annotation_tool<F>(&self, func: F)

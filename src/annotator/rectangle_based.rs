@@ -1,5 +1,5 @@
 use crate::annotator::cursor::Crosshair;
-use crate::annotator::{ActivationState, ActivationSupport, Annotation, AnnotationCommon, AnnotationStyle, AnnotationToolCommon, AnnotationToolWidgetCommon, AnnotatorState, FillColorSupport, PainterExt, SharedAnnotatorState, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport};
+use crate::annotator::{ActivationState, ActivationSupport, Annotation, AnnotationCommon, AnnotationStyle, AnnotationToolCommon, AnnotationToolWidgetCommon, AnnotatorState, FillColorSupport, PainterExt, SharedAnnotatorState, StackTopAccessor, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport};
 use egui::epaint::EllipseShape;
 use egui::{
     pos2, vec2, Color32, CursorIcon, Pos2, Rect, Response, Sense, Stroke, StrokeKind, Ui,
@@ -7,6 +7,7 @@ use egui::{
 };
 use std::cell::RefCell;
 use std::rc::Weak;
+use crate::impl_stack_top_access_for;
 
 #[derive(Debug, Copy, Clone)]
 pub struct RectangleStyle {
@@ -424,19 +425,6 @@ where
 
 const NOTHING: Option<()> = None::<()>;
 
-/// 从栈顶访问T类型的标注
-trait StackTopAccessor<T> {
-    fn peek_annotation<F, R>(&self, func: F) -> Option<R>
-    where
-        F: Fn(Option<&T>) -> Option<R>;
-
-    fn peek_annotation_mut<F, R>(&mut self, func: F) -> Option<R>
-    where
-        F: Fn(Option<&mut T>) -> Option<R>;
-
-    fn pop_annotation(&mut self) -> Option<T>;
-}
-
 impl StackTopAccessor<RectangleAnnotation> for AnnotatorState {
     fn peek_annotation<F, R>(&self, func: F) -> Option<R>
     where
@@ -649,36 +637,6 @@ where
 pub type RectangleTool = RectangleBasedTool<RectangleStyle>;
 pub type EllipseTool = RectangleBasedTool<EllipseStyle>;
 
-macro_rules! impl_stack_top_access_for {
-    ($($tool:ty=>$annotation:ty),*) => {
-        $(
-            impl $tool {
-                fn peek_annotation<F, R>(&self, func: F) -> Option<R>
-                where
-                    F: Fn(Option<&$annotation>) -> Option<R>,
-                {
-                    let annotator_state = self.annotator_state();
-                    let annotator_state = annotator_state.borrow();
-                    annotator_state.peek_annotation(func)
-                }
-
-                fn peek_annotation_mut<F, R>(&self, func: F) -> Option<R>
-                where
-                    F: Fn(Option<&mut $annotation>) -> Option<R>,
-                {
-                    let annotator_state = self.annotator_state();
-                    let mut annotator_state = annotator_state.borrow_mut();
-                    annotator_state.peek_annotation_mut(func)
-                }
-
-                fn pop_annotation(&self) -> Option<$annotation> {
-                    let annotator_state = self.annotator_state();
-                    annotator_state.borrow_mut().pop_annotation()
-                }
-            }
-        )*
-    };
-}
 
 impl_stack_top_access_for!(RectangleTool=>RectangleAnnotation, EllipseTool=>EllipseAnnotation);
 
@@ -934,7 +892,7 @@ impl HitTarget {
 }
 
 #[derive(Debug, Eq, PartialEq, Copy, Clone)]
-pub enum DragAction {
+enum DragAction {
     // 调整边
     AdjustTopEdge,
     AdjustBottomEdge,

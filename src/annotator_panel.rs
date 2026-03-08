@@ -1,6 +1,4 @@
-use crate::annotator::arrow::ArrowTool;
 use crate::annotator::rectangle_based::{EllipseTool, RectangleTool};
-use crate::annotator::straight_line::StraightLineTool;
 use crate::annotator::{AnnotationTool, AnnotatorState, SharedAnnotatorState, SharedAnnotatorStateUtil, ToolName};
 use crate::application::Application;
 use crate::dpi::{LogicalPosition, PhysicalSize};
@@ -13,6 +11,7 @@ use image::RgbaImage;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
+use crate::annotator::straight_line_based::{ArrowTool, StraightLineTool};
 
 pub fn create_annotator_panel(
     view_id: ViewId,
