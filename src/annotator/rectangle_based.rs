@@ -1,9 +1,9 @@
 use crate::annotator::cursor::Crosshair;
-use crate::annotator::{ActivationState, ActivationSupport, Annotation, AnnotationCommon, AnnotationStyle, AnnotationToolCommon, AnnotationToolWidgetCommon, AnnotatorState, FillColorSupport, PainterExt, SharedAnnotatorState, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport, ToolName};
+use crate::annotator::{ActivationState, ActivationSupport, Annotation, AnnotationCommon, AnnotationStyle, AnnotationToolCommon, AnnotationToolWidgetCommon, AnnotatorState, FillColorSupport, PainterExt, SharedAnnotatorState, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport};
 use egui::epaint::EllipseShape;
 use egui::{
-    Color32, CursorIcon, Id, Pos2, Rect, Response, Sense, Stroke, StrokeKind, Ui, Widget, pos2,
-    vec2,
+    pos2, vec2, Color32, CursorIcon, Pos2, Rect, Response, Sense, Stroke, StrokeKind, Ui,
+    Widget,
 };
 use std::cell::RefCell;
 use std::rc::Weak;
