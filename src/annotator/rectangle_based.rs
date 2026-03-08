@@ -1,5 +1,5 @@
 use crate::annotator::cursor::Crosshair;
-use crate::annotator::{ActivationState, ActivationSupport, Annotation, AnnotationCommon, AnnotationStyle, AnnotationToolCommon, AnnotationToolWidgetCommon, AnnotatorState, FillColorSupport, PainterExt, SharedAnnotatorState, StackTopAccessor, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport};
+use crate::annotator::{ActivationState, ActivationSupport, Annotation, AnnotationCommon, AnnotationStyle, AnnotationToolCommon, WheelHandler, AnnotatorState, FillColorSupport, PainterExt, SharedAnnotatorState, StackTopAccessor, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport};
 use egui::epaint::EllipseShape;
 use egui::{
     pos2, vec2, Color32, CursorIcon, Pos2, Rect, Response, Sense, Stroke, StrokeKind, Ui,
@@ -7,7 +7,8 @@ use egui::{
 };
 use std::cell::RefCell;
 use std::rc::Weak;
-use crate::impl_stack_top_access_for;
+use crate::annotator::straight_line_based::{ArrowAnnotation, ArrowTool};
+use crate::{impl_stack_top_access_for, impl_stroke_width_handler_for};
 
 #[derive(Debug, Copy, Clone)]
 pub struct RectangleStyle {
@@ -629,16 +630,15 @@ where
     }
 }
 
-impl<S> AnnotationToolWidgetCommon for RectangleBasedTool<S>
-where
-    S: AnnotationStyle + Default,{
-}
-
 pub type RectangleTool = RectangleBasedTool<RectangleStyle>;
 pub type EllipseTool = RectangleBasedTool<EllipseStyle>;
 
-
 impl_stack_top_access_for!(RectangleTool=>RectangleAnnotation, EllipseTool=>EllipseAnnotation);
+
+/// 限制最大的线条宽度
+const MAX_STROKE_WIDTH: f32 = 62.;
+
+impl_stroke_width_handler_for!(RectangleTool => MAX_STROKE_WIDTH, EllipseTool => MAX_STROKE_WIDTH);
 
 macro_rules! impl_widget_for {
     ($($tool:ty=>$annotation:ty),*) => {

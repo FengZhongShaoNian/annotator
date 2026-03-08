@@ -1,14 +1,14 @@
 use crate::annotator::cursor::Crosshair;
-use crate::annotator::rectangle_based::{HitTarget, HitTest};
+use crate::annotator::rectangle_based::{EllipseTool, HitTarget, HitTest, RectangleTool};
 use crate::annotator::{
     ActivationState, ActivationSupport, Annotation, AnnotationCommon, AnnotationStyle,
-    AnnotationToolCommon, AnnotationToolWidgetCommon, AnnotatorState, DEFAULT_SIZE_FOR_SMALL_RECT,
+    AnnotationToolCommon, WheelHandler, AnnotatorState, DEFAULT_SIZE_FOR_SMALL_RECT,
     FillColorSupport, PainterExt, SharedAnnotatorState, SmallRect, StackTopAccessor,
     StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport,
     dash_len_for_dashed_line, gap_len_for_dashed_line, radius_for_dotted_line,
     spacing_for_dotted_line,
 };
-use crate::impl_stack_top_access_for;
+use crate::{impl_stack_top_access_for, impl_stroke_width_handler_for};
 use egui::{Color32, CursorIcon, Pos2, Rect, Response, Sense, Shape, Stroke, Ui, Widget, vec2};
 use std::cell::RefCell;
 use std::rc::Weak;
@@ -671,12 +671,17 @@ where
     }
 }
 
-impl<S> AnnotationToolWidgetCommon for StraightLineBasedTool<S> where S: AnnotationStyle + Default {}
-
 pub type StraightLineTool = StraightLineBasedTool<StraightLineStyle>;
 pub type ArrowTool = StraightLineBasedTool<ArrowStyle>;
 
+
 impl_stack_top_access_for!(StraightLineTool=>StraightLineAnnotation, ArrowTool=>ArrowAnnotation);
+
+/// 限制最大的线条宽度
+const MAX_STROKE_WIDTH_FOR_STRAIGHT_LINE: f32 = 62.;
+const MAX_STROKE_WIDTH_FOR_ARROW: f32 = 6.;
+
+impl_stroke_width_handler_for!(StraightLineTool => MAX_STROKE_WIDTH_FOR_STRAIGHT_LINE, ArrowTool => MAX_STROKE_WIDTH_FOR_ARROW);
 
 macro_rules! impl_widget_for {
     ($($tool:ty=>$annotation:ty),*) => {

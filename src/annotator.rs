@@ -159,14 +159,13 @@ pub trait AnnotationToolCommon : StrokeWidthSupport + StrokeColorSupport + Strok
     fn annotator_state(&self) -> SharedAnnotatorState;
 }
 
-/// 限制最大的线条宽度
-const MAX_STROKE_WIDTH: f32 = 62.;
+pub enum WheelDirection {
+    Up,
+    Down,
+}
 
-pub trait AnnotationToolWidgetCommon : StrokeWidthSupport{
+pub trait WheelHandler {
     fn handle_wheel_event(&mut self, ui: &mut Ui) {
-        if !self.supports_set_stroke_width() {
-            return;
-        }
         // 滚动鼠标滚轮调整线条大小
         let scroll_delta = ui.ctx().input(|i| i.smooth_scroll_delta.y);
         if scroll_delta != 0. {
@@ -177,21 +176,55 @@ pub trait AnnotationToolWidgetCommon : StrokeWidthSupport{
 
                 while *value >= step_threshold {
                     *value -= step_threshold;
-                    let stroke_width = self.stroke_width();
-                    if stroke_width > 1. {
-                        self.set_stroke_width( stroke_width - 1.);
-                    }
+                    self.on_scroll_delta_changed(step_threshold);
                 }
 
                 while *value <= -step_threshold{
                     *value += step_threshold;
-                    let stroke_width = self.stroke_width();
-                    if stroke_width < MAX_STROKE_WIDTH {
-                        self.set_stroke_width(stroke_width + 1.0);
-                    }
+                    self.on_scroll_delta_changed(-step_threshold);
                 }
             });
         }
+    }
+
+    fn on_scroll_delta_changed(&mut self, value: f32);
+}
+
+#[macro_export] macro_rules! impl_stroke_width_handler_for {
+    ($($tool:ty=>$max_stroke_width:expr),*) => {
+        $(
+        
+        impl WheelHandler for $tool {
+            fn on_scroll_delta_changed(&mut self, value: f32) {
+                if !self.supports_set_stroke_width() {
+                    return;
+                }
+                let mut stroke_width = self.stroke_width();
+                if value > 0. {
+                    if stroke_width > 1. {
+                        stroke_width -= 1.;
+                    }
+                }else {
+                    if stroke_width < $max_stroke_width {
+                        stroke_width += 1.0;
+                    }
+                }
+                self.set_stroke_width(stroke_width);
+                self.peek_annotation_mut(|option| {
+                    match option {
+                        Some(annotation) => {
+                            if annotation.activation.is_active() && annotation.supports_get_stroke_width() {
+                                annotation.set_stroke_width(stroke_width);
+                            }
+                        }
+                        _ => ()
+                    }
+                    NOTHING
+                });
+            }
+        }
+        
+        )*
     }
 }
 
