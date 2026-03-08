@@ -159,11 +159,6 @@ pub trait AnnotationToolCommon : StrokeWidthSupport + StrokeColorSupport + Strok
     fn annotator_state(&self) -> SharedAnnotatorState;
 }
 
-pub enum WheelDirection {
-    Up,
-    Down,
-}
-
 pub trait WheelHandler {
     fn handle_wheel_event(&mut self, ui: &mut Ui) {
         // 滚动鼠标滚轮调整线条大小
@@ -193,7 +188,7 @@ pub trait WheelHandler {
 #[macro_export] macro_rules! impl_stroke_width_handler_for {
     ($($tool:ty=>$max_stroke_width:expr),*) => {
         $(
-        
+
         impl WheelHandler for $tool {
             fn on_scroll_delta_changed(&mut self, value: f32) {
                 if !self.supports_set_stroke_width() {
@@ -223,7 +218,7 @@ pub trait WheelHandler {
                 });
             }
         }
-        
+
         )*
     }
 }
