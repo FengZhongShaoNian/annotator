@@ -79,3 +79,38 @@ impl Crosshair {
         ));
     }
 }
+
+
+/// 圆形光标
+pub struct Circle {
+    /// 光标中点的坐标
+    center_pos: Pos2,
+    /// 光标的颜色
+    color: Color32,
+    /// 光标的直径
+    diameter: f32,
+}
+
+impl Circle {
+    pub fn new(center_pos: Pos2, color: Color32, diameter: f32) -> Self {
+        Self {
+            center_pos,
+            color,
+            diameter,
+        }
+    }
+
+    pub fn paint_with(self, painter: &Painter) {
+        let radius = self.diameter / 2.;
+        let center_pos = self.center_pos;
+        let color = self.color;
+
+        // 绘制中间的圆点
+        painter.circle(
+            center_pos,
+            radius,
+            color,
+            Stroke::new(0.5, color),
+        );
+    }
+}

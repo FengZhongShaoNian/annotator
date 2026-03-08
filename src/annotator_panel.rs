@@ -11,6 +11,7 @@ use image::RgbaImage;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
+use crate::annotator::free_line_based::{MarkerPenTool, PencilTool};
 use crate::annotator::straight_line_based::{ArrowTool, StraightLineTool};
 
 pub fn create_annotator_panel(
@@ -60,11 +61,15 @@ pub fn create_annotator_panel(
                     let ellipse_tool = EllipseTool::new(Rc::downgrade(&annotator_state_rc));
                     let straight_line_tool = StraightLineTool::new(Rc::downgrade(&annotator_state_rc));
                     let arrow_tool = ArrowTool::new(Rc::downgrade(&annotator_state_rc));
+                    let pencil_tool = PencilTool::new(Rc::downgrade(&annotator_state_rc));
+                    let marker_pen_tool = MarkerPenTool::new(Rc::downgrade(&annotator_state_rc));
 
                     annotator_state_rc.borrow_mut().annotation_tools.insert(ToolName::Rectangle, AnnotationTool::Rectangle(rectangle_tool));
                     annotator_state_rc.borrow_mut().annotation_tools.insert(ToolName::Ellipse, AnnotationTool::Ellipse(ellipse_tool));
                     annotator_state_rc.borrow_mut().annotation_tools.insert(ToolName::StraightLine, AnnotationTool::StraightLine(straight_line_tool));
                     annotator_state_rc.borrow_mut().annotation_tools.insert(ToolName::Arrow, AnnotationTool::Arrow(arrow_tool));
+                    annotator_state_rc.borrow_mut().annotation_tools.insert(ToolName::Pencil, AnnotationTool::Pencil(pencil_tool));
+                    annotator_state_rc.borrow_mut().annotation_tools.insert(ToolName::MarkerPen, AnnotationTool::MarkerPen(marker_pen_tool));
 
                     annotator_state_rc
                 });
