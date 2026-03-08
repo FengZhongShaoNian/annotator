@@ -3,9 +3,7 @@ mod cursor;
 pub mod drop_down_box;
 pub mod eraser;
 pub mod free_line_based;
-pub mod marker_pen;
 pub mod mosaic;
-pub mod pencil;
 pub mod rectangle_based;
 pub mod serial_number;
 pub mod straight_line_based;
@@ -18,9 +16,7 @@ use crate::annotator::eraser::EraserState;
 use crate::annotator::free_line_based::{
     MarkerPenAnnotation, MarkerPenTool, PencilAnnotation, PencilTool,
 };
-use crate::annotator::marker_pen::MarkerPentate;
 use crate::annotator::mosaic::MosaicState;
-use crate::annotator::pencil::PencilState;
 use crate::annotator::rectangle_based::{
     EllipseAnnotation, EllipseTool, RectangleAnnotation, RectangleTool,
 };
