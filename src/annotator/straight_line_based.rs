@@ -195,7 +195,7 @@ impl Default for ArrowStyle {
     }
 }
 
-/// 基于矩形的标注
+/// 基于直线的标注
 #[derive(Debug, Clone)]
 pub struct StraightLineBasedAnnotation<S>
 where
