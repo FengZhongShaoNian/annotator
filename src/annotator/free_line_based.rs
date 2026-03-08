@@ -67,11 +67,11 @@ impl StrokeTypeSupport for PencilStyle {
     }
 
     fn supports_set_stroke_type(&self) -> bool {
-        true
+        false
     }
 
-    fn set_stroke_type(&mut self, stroke_type: StrokeType) {
-        self.stroke_type = stroke_type;
+    fn set_stroke_type(&mut self, _stroke_type: StrokeType) {
+        unimplemented!()
     }
 }
 

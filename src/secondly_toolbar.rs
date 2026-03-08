@@ -126,76 +126,157 @@ fn create_color_selector(
     let width = button_width * 5. + ui.spacing().item_spacing.x * 5.;
     let tool = annotator_state.current_annotation_tool.as_mut().unwrap();
     let current_color = tool.stroke_color();
-    if ui
-        .add(ColorButton::new(
-            Color32::RED,
-            button_width,
-            button_width,
-            current_color == Color32::RED,
-        ))
-        .clicked()
-    {
-        tool.set_stroke_color(Color32::RED);
-        if tool.fill_color().is_some() {
-            tool.set_fill_color(Color32::RED);
+    if tool.tool_name() != ToolName::MarkerPen {
+        if ui
+            .add(ColorButton::new(
+                Color32::RED,
+                button_width,
+                button_width,
+                current_color == Color32::RED,
+            ))
+            .clicked()
+        {
+            tool.set_stroke_color(Color32::RED);
+            if tool.fill_color().is_some() {
+                tool.set_fill_color(Color32::RED);
+            }
+        }
+        if ui
+            .add(ColorButton::new(
+                Color32::BLACK,
+                button_width,
+                button_width,
+                current_color == Color32::BLACK,
+            ))
+            .clicked()
+        {
+            tool.set_stroke_color(Color32::BLACK);
+            if tool.fill_color().is_some() {
+                tool.set_fill_color(Color32::BLACK);
+            }
+        }
+        if ui
+            .add(ColorButton::new(
+                Color32::BLUE,
+                button_width,
+                button_width,
+                current_color == Color32::BLUE,
+            ))
+            .clicked()
+        {
+            tool.set_stroke_color(Color32::BLUE);
+            if tool.fill_color().is_some() {
+                tool.set_fill_color(Color32::BLUE);
+            }
+        }
+        if ui
+            .add(ColorButton::new(
+                Color32::GREEN,
+                button_width,
+                button_width,
+                current_color == Color32::GREEN,
+            ))
+            .clicked()
+        {
+            tool.set_stroke_color(Color32::GREEN);
+            if tool.fill_color().is_some() {
+                tool.set_fill_color(Color32::GREEN);
+            }
+        }
+        if ui
+            .add(ColorButton::new(
+                Color32::GOLD,
+                button_width,
+                button_width,
+                current_color == Color32::GOLD,
+            ))
+            .clicked()
+        {
+            tool.set_stroke_color(Color32::GOLD);
+            if tool.fill_color().is_some() {
+                tool.set_fill_color(Color32::GOLD);
+            }
+        }
+    }else {
+        // 马克笔是半透明的
+        let red = Color32::from_rgba_unmultiplied(255, 0, 0, 76);
+        if ui
+            .add(ColorButton::new(
+                red,
+                button_width,
+                button_width,
+                current_color == red,
+            ))
+            .clicked()
+        {
+            tool.set_stroke_color(red);
+            if tool.fill_color().is_some() {
+                tool.set_fill_color(red);
+            }
+        }
+        let black = Color32::from_rgba_unmultiplied(0, 0, 0, 76);
+        if ui
+            .add(ColorButton::new(
+                black,
+                button_width,
+                button_width,
+                current_color == black,
+            ))
+            .clicked()
+        {
+            tool.set_stroke_color(black);
+            if tool.fill_color().is_some() {
+                tool.set_fill_color(black);
+            }
+        }
+
+        let blue = Color32::from_rgba_unmultiplied(0, 0, 255, 76);
+        if ui
+            .add(ColorButton::new(
+                blue,
+                button_width,
+                button_width,
+                current_color == blue,
+            ))
+            .clicked()
+        {
+            tool.set_stroke_color(blue);
+            if tool.fill_color().is_some() {
+                tool.set_fill_color(blue);
+            }
+        }
+        let green = Color32::from_rgba_unmultiplied(0, 255, 0, 76);
+        if ui
+            .add(ColorButton::new(
+                green,
+                button_width,
+                button_width,
+                current_color == green,
+            ))
+            .clicked()
+        {
+            tool.set_stroke_color(green);
+            if tool.fill_color().is_some() {
+                tool.set_fill_color(green);
+            }
+        }
+        let gold = Color32::from_rgba_unmultiplied(255, 215, 0, 76);
+        if ui
+            .add(ColorButton::new(
+                gold,
+                button_width,
+                button_width,
+                current_color == gold,
+            ))
+            .clicked()
+        {
+            tool.set_stroke_color(gold);
+            if tool.fill_color().is_some() {
+                tool.set_fill_color(gold);
+            }
         }
     }
-    if ui
-        .add(ColorButton::new(
-            Color32::BLACK,
-            button_width,
-            button_width,
-            current_color == Color32::BLACK,
-        ))
-        .clicked()
-    {
-        tool.set_stroke_color(Color32::BLACK);
-        if tool.fill_color().is_some() {
-            tool.set_fill_color(Color32::BLACK);
-        }
-    }
-    if ui
-        .add(ColorButton::new(
-            Color32::BLUE,
-            button_width,
-            button_width,
-            current_color == Color32::BLUE,
-        ))
-        .clicked()
-    {
-        tool.set_stroke_color(Color32::BLUE);
-        if tool.fill_color().is_some() {
-            tool.set_fill_color(Color32::BLUE);
-        }
-    }
-    if ui
-        .add(ColorButton::new(
-            Color32::GREEN,
-            button_width,
-            button_width,
-            current_color == Color32::GREEN,
-        ))
-        .clicked()
-    {
-        tool.set_stroke_color(Color32::GREEN);
-        if tool.fill_color().is_some() {
-            tool.set_fill_color(Color32::GREEN);
-        }
-    }
-    if ui
-        .add(ColorButton::new(
-            Color32::GOLD,
-            button_width,
-            button_width,
-            current_color == Color32::GOLD,
-        ))
-        .clicked()
-    {
-        tool.set_stroke_color(Color32::GOLD);
-        if tool.fill_color().is_some() {
-            tool.set_fill_color(Color32::GOLD);
-        }
-    }
+
     if current_color != tool.stroke_color() {
         annotator_state
             .annotations_stack
