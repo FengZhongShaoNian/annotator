@@ -1,5 +1,6 @@
 use crate::annotator::cursor::Crosshair;
-use crate::annotator::{ActivationState, ActivationSupport, Annotation, AnnotationCommon, AnnotationStyle, AnnotationToolCommon, WheelHandler, AnnotatorState, FillColorSupport, PainterExt, SharedAnnotatorState, StackTopAccessor, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport};
+use crate::annotator::{ActivationState, ActivationSupport, Annotation, AnnotationCommon, AnnotationStyle, AnnotationToolCommon, AnnotatorState, FillColorSupport, PainterExt, SharedAnnotatorState, StackTopAccessor, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport, WheelHandler};
+use crate::{impl_stack_top_access_for, impl_stroke_width_handler_for};
 use egui::epaint::EllipseShape;
 use egui::{
     pos2, vec2, Color32, CursorIcon, Pos2, Rect, Response, Sense, Stroke, StrokeKind, Ui,
@@ -7,8 +8,6 @@ use egui::{
 };
 use std::cell::RefCell;
 use std::rc::Weak;
-use crate::annotator::straight_line_based::{ArrowAnnotation, ArrowTool};
-use crate::{impl_stack_top_access_for, impl_stroke_width_handler_for};
 
 #[derive(Debug, Copy, Clone)]
 pub struct RectangleStyle {
