@@ -1,11 +1,12 @@
-use egui::{Response, Ui, Widget};
+use egui::{Painter, Response, Ui, Widget};
+use crate::annotator::Paint;
 
 pub struct BlurState{
 
 }
 
-impl Widget for &mut BlurState {
-    fn ui(self, ui: &mut Ui) -> Response {
+impl Paint for BlurState {
+    fn paint_with(&mut self, painter: &Painter) {
         todo!()
     }
 }

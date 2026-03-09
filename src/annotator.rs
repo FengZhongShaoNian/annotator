@@ -158,6 +158,10 @@ pub trait AnnotationStyle:
 {
 }
 
+pub trait Paint {
+    fn paint_with(&mut self, painter: &Painter);
+}
+
 pub trait AnnotationCommon:
     StrokeWidthSupport + StrokeColorSupport + StrokeTypeSupport + FillColorSupport
 {
@@ -1042,21 +1046,21 @@ impl AnnotationCommon for Annotation {
     }
 }
 
-impl Widget for &mut Annotation {
-    fn ui(self, ui: &mut Ui) -> Response {
+impl Paint for Annotation {
+    fn paint_with(&mut self, painter: &Painter) {
         match self {
-            Annotation::Rectangle(annotation) => ui.add(annotation),
-            Annotation::Ellipse(annotation) => ui.add(annotation),
-            Annotation::StraightLine(annotation) => ui.add(annotation),
-            Annotation::Arrow(annotation) => ui.add(annotation),
-            Annotation::Pencil(annotation) => ui.add(annotation),
-            Annotation::MarkerPen(annotation) => ui.add(annotation),
-            Annotation::Mosaic(annotation) => ui.add(annotation),
-            Annotation::Blur(annotation) => ui.add(annotation),
-            Annotation::Text(annotation) => ui.add(annotation),
-            Annotation::SerialNumber(annotation) => ui.add(annotation),
-            Annotation::Watermark(annotation) => ui.add(annotation),
-            Annotation::Eraser(annotation) => ui.add(annotation),
+            Annotation::Rectangle(annotation) => annotation.paint_with(painter),
+            Annotation::Ellipse(annotation) => annotation.paint_with(painter),
+            Annotation::StraightLine(annotation) => annotation.paint_with(painter),
+            Annotation::Arrow(annotation) => annotation.paint_with(painter),
+            Annotation::Pencil(annotation) => annotation.paint_with(painter),
+            Annotation::MarkerPen(annotation) => annotation.paint_with(painter),
+            Annotation::Mosaic(annotation) => annotation.paint_with(painter),
+            Annotation::Blur(annotation) => annotation.paint_with(painter),
+            Annotation::Text(annotation) => annotation.paint_with(painter),
+            Annotation::SerialNumber(annotation) => annotation.paint_with(painter),
+            Annotation::Watermark(annotation) => annotation.paint_with(painter),
+            Annotation::Eraser(annotation) => annotation.paint_with(painter),
         }
     }
 }

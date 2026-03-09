@@ -1,5 +1,5 @@
 use crate::annotator::rectangle_based::{EllipseTool, RectangleTool};
-use crate::annotator::{AnnotationTool, AnnotatorState, SharedAnnotatorState, SharedAnnotatorStateUtil, ToolName};
+use crate::annotator::{AnnotationTool, AnnotatorState, Paint, SharedAnnotatorState, SharedAnnotatorStateUtil, ToolName};
 use crate::application::Application;
 use crate::dpi::{LogicalPosition, PhysicalSize};
 use crate::global::{ReadGlobalMut, ReadOrInsertGlobal};
@@ -120,7 +120,7 @@ pub fn create_annotator_panel(
                             .annotations_stack
                             .iter_mut()
                             .for_each(|annotation| {
-                                ui.add(annotation);
+                                annotation.paint_with(ui.painter());
                             });
 
                         // Area::new(Id::from("text_edit")).movable(true).current_pos(annotator_state.pos).show(ctx, |ui| {

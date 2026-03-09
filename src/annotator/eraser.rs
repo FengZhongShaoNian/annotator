@@ -1,11 +1,12 @@
-use egui::{Response, Ui, Widget};
+use egui::{Painter, Response, Ui, Widget};
+use crate::annotator::Paint;
 
 pub struct EraserState{
 
 }
 
-impl Widget for &mut EraserState {
-    fn ui(self, ui: &mut Ui) -> Response {
+impl Paint for EraserState {
+    fn paint_with(&mut self, painter: &Painter) {
         todo!()
     }
 }

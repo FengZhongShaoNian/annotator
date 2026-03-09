@@ -1,11 +1,12 @@
-use egui::{Response, Ui, Widget};
+use egui::{Painter, Response, Ui, Widget};
+use crate::annotator::Paint;
 
 pub struct WaterMarkState{
 
 }
 
-impl Widget for &mut WaterMarkState {
-    fn ui(self, ui: &mut Ui) -> Response {
+impl Paint for WaterMarkState {
+    fn paint_with(&mut self, painter: &Painter) {
         todo!()
     }
 }
