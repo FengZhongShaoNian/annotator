@@ -11,17 +11,18 @@ use egui_wgpu::RendererOptions;
 use image::{ImageBuffer, Rgba};
 use std::sync::oneshot;
 
-pub type BuildUI = Box<dyn Fn(RawInput, &mut egui::Context) -> FullOutput>;
+pub type BuildUI = Box<dyn FnOnce(RawInput, &mut egui::Context) -> FullOutput>;
 pub fn render_egui_to_image(
     gpu_context: &GpuContext,
     virtual_screen_size: LogicalSize<u32>,
     pixels_per_point: f32,
     build_ui: BuildUI,
-) -> ImageBuffer<Rgba<u8>, BufferView> {
+) /*-> ImageBuffer<Rgba<u8>, BufferView>*/ {
     let device = gpu_context.device.clone();
+    let physical_size = virtual_screen_size.to_physical(pixels_per_point as f64);
     let texture_size = Extent3d {
-        width: virtual_screen_size.width,
-        height: virtual_screen_size.height,
+        width: physical_size.width,
+        height: physical_size.height,
         depth_or_array_layers: 1,
     };
     let texture_desc = TextureDescriptor {
@@ -70,6 +71,16 @@ pub fn render_egui_to_image(
     // 创建命令编码器
     let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor::default());
 
+    let queue = gpu_context.queue.clone();
+    // 更新EGUI顶点/索引缓冲区
+    renderer.update_buffers(
+        &device,
+        &queue,
+        &mut encoder,
+        &paint_jobs,
+        &screen_descriptor,
+    );
+
     // 开始渲染通道，使用离屏纹理视图
     {
         let render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
@@ -98,18 +109,23 @@ pub fn render_egui_to_image(
         );
     }
 
-    let queue = gpu_context.queue.clone();
+
     // 提交命令
     queue.submit(Some(encoder.finish()));
 
-    let buffer_size = (texture_size.width * texture_size.height * 4) as usize; // RGBA 每像素 4 字节
+    // 计算对齐后的 bytes_per_row
+    let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+    let unpadded_bytes_per_row = texture_size.width * 4;
+    let padded_bytes_per_row = (unpadded_bytes_per_row + align - 1) & !(align - 1);
+    let buffer_size = (padded_bytes_per_row * texture_size.height) as wgpu::BufferAddress;
+
+    // 创建目标缓冲区，用于接收像素数据
     let buffer = device.create_buffer(&BufferDescriptor {
         label: Some("output buffer"),
         size: buffer_size as u64,
         usage: BufferUsages::COPY_DST | BufferUsages::MAP_READ,
         mapped_at_creation: false,
     });
-
     let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor::default());
     encoder.copy_texture_to_buffer(
         TexelCopyTextureInfo {
@@ -122,7 +138,7 @@ pub fn render_egui_to_image(
             buffer: &buffer,
             layout: TexelCopyBufferLayout {
                 offset: 0,
-                bytes_per_row: Some(4 * texture_size.width),
+                bytes_per_row: Some(padded_bytes_per_row),
                 rows_per_image: Some(texture_size.height),
             },
         },
@@ -143,17 +159,21 @@ pub fn render_egui_to_image(
         device.poll(PollType::wait_indefinitely()).unwrap();
 
         if let Ok(Ok(())) = rx.recv() {
-            let data = buffer_slice.get_mapped_range();
+            {
+                let data = buffer_slice.get_mapped_range();
 
-            use image::{ImageBuffer, Rgba};
-            let image_buffer =
-                ImageBuffer::<Rgba<u8>, _>::from_raw(texture_size.width, texture_size.height, data)
-                    .unwrap();
+                use image::{ImageBuffer, Rgba};
+                let image_buffer =
+                    ImageBuffer::<Rgba<u8>, _>::from_raw(texture_size.width, texture_size.height, data)
+                        .unwrap();
+
+                image_buffer.save("/home/one/Pictures/image.png").unwrap();
+            }
+
 
             // 解除缓冲区映射
             buffer.unmap();
 
-            image_buffer
         } else {
             panic!("从 gpu 读取数据失败！");
         }

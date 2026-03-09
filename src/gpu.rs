@@ -3,6 +3,7 @@ use egui_wgpu::wgpu;
 use egui_wgpu::wgpu::Instance;
 
 /// GpuContext 封装了 wgpu 相关的内容
+#[derive(Clone)]
 pub struct GpuContext {
     pub instance: Instance,
     pub adapter: wgpu::Adapter,

@@ -1,6 +1,7 @@
 use egui::{Painter, Response, Ui, Widget};
 use crate::annotator::Paint;
 
+#[derive(Clone)]
 pub struct EraserState{
 
 }

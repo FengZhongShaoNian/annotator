@@ -1,14 +1,17 @@
 use crate::annotator::{ActivationSupport, Annotation, AnnotationCommon, AnnotatorState, FillColorSupport, Paint, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport};
-use crate::dpi::{LogicalBounds, PhysicalBounds};
-use egui::{pos2, Color32, ColorImage, CursorIcon, Painter, Pos2, Rect, Response, Sense, TextureHandle, Ui, Widget};
+use crate::dpi::{LogicalBounds, LogicalSize, PhysicalBounds};
+use egui::{pos2, Color32, ColorImage, CursorIcon, Frame, Image, ImageSource, Painter, Pos2, Rect, Response, Sense, TextureHandle, Ui, Widget};
 use image::GenericImageView;
 use image::{Rgba, RgbaImage};
 use std::cell::RefCell;
 use std::cmp::{max, min};
 use std::default::Default;
-use std::rc::Weak;
+use std::rc::{Rc, Weak};
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
+use egui::load::SizedTexture;
+use crate::egui_off_screen_render::render_egui_to_image;
+use crate::gpu::GpuContext;
 
 fn mosaic(image: &RgbaImage, bounds: PhysicalBounds<u32>, block_size: u32) -> Result<RgbaImage, image::ImageError> {
     // 转换为 RgbImage 以便直接修改像素
@@ -223,13 +226,15 @@ where
 pub struct ImageBasedTool<S: Default + Clone> {
     annotator_state: Weak<RefCell<AnnotatorState>>,
     tool_state: ImageBasedToolState<S>,
+    gpu_context: GpuContext
 }
 
 impl<S: Default + Clone> ImageBasedTool<S> {
-    pub fn new(annotator_state: Weak<RefCell<AnnotatorState>>) -> Self {
+    pub fn new(annotator_state: Weak<RefCell<AnnotatorState>>, gpu_context: GpuContext) -> Self {
         Self {
             annotator_state,
             tool_state: Default::default(),
+            gpu_context
         }
     }
 }
@@ -256,6 +261,31 @@ impl Widget for &mut MosaicTool {
         if response.drag_started() {
             let drag_started_pos = ui.ctx().input(|i| i.pointer.press_origin()).unwrap();
             self.tool_state.drag_start_pos = Some(drag_started_pos);
+
+            let virtual_screen_size = LogicalSize::new(sense_area.width(), sense_area.height()).cast();
+            let annotator_state = self.annotator_state.upgrade().unwrap();
+            let texture_handle = Rc::new(annotator_state.borrow().background_texture_handle.clone().unwrap());
+            let annotations = annotator_state.borrow().annotations_stack.clone();
+            let image = render_egui_to_image(&self.gpu_context, virtual_screen_size, ui.ctx().pixels_per_point(), Box::new(move |input,context|{
+                let mut annotaions = annotations;
+                context.run(input, move |ctx| {
+                    egui::CentralPanel::default()
+                        .frame(Frame::new())
+                        .show(ctx, |ui| {
+                            // let bg_image = Image::new(ImageSource::Texture(SizedTexture::from_handle(
+                            //     &texture_handle.clone(),
+                            // )));
+                            // bg_image.paint_at(ui, Rect::from_min_size(pos2(0., 0.), ui.available_size()));
+
+                            annotaions
+                                .iter_mut()
+                                .for_each(|annotation| {
+                                    annotation.paint_with(ui.painter());
+                                });
+                        });
+                })
+            }));
+            // image.save("/home/one/Pictures/saved-image.png").unwrap();
         }
 
         if response.dragged() {

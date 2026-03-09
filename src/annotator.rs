@@ -242,6 +242,7 @@ macro_rules! impl_stroke_width_handler_for {
     }
 }
 
+#[derive(Clone)]
 pub enum Annotation {
     /// 矩形
     Rectangle(RectangleAnnotation),
