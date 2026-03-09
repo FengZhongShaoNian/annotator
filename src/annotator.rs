@@ -3,7 +3,7 @@ mod cursor;
 pub mod drop_down_box;
 pub mod eraser;
 pub mod free_line_based;
-pub mod mosaic;
+pub mod image_based;
 pub mod rectangle_based;
 pub mod serial_number;
 pub mod straight_line_based;
@@ -16,7 +16,6 @@ use crate::annotator::eraser::EraserState;
 use crate::annotator::free_line_based::{
     MarkerPenAnnotation, MarkerPenTool, PencilAnnotation, PencilTool,
 };
-use crate::annotator::mosaic::MosaicState;
 use crate::annotator::rectangle_based::{
     EllipseAnnotation, EllipseTool, RectangleAnnotation, RectangleTool,
 };
@@ -37,6 +36,7 @@ use image::RgbaImage;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
+use crate::annotator::image_based::{MosaicAnnotation, MosaicTool};
 
 /// 线条类型（实线、虚线、点线）
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
@@ -258,7 +258,7 @@ pub enum Annotation {
     MarkerPen(MarkerPenAnnotation),
 
     /// 马赛克
-    Mosaic(MosaicState),
+    Mosaic(MosaicAnnotation),
 
     /// 模糊
     Blur(BlurState),
@@ -978,8 +978,7 @@ impl AnnotationCommon for Annotation {
                 inner.activation()
             }
             Annotation::Mosaic(inner) => {
-                // inner.activation()
-                todo!()
+                inner.activation()
             }
             Annotation::Blur(inner) => {
                 // inner.activation()
@@ -1017,8 +1016,7 @@ impl AnnotationCommon for Annotation {
                 inner.activation_mut()
             }
             Annotation::Mosaic(inner) => {
-                // inner.activation_mut()
-                todo!()
+                inner.activation_mut()
             }
             Annotation::Blur(inner) => {
                 // inner.activation_mut()
@@ -1123,7 +1121,7 @@ pub enum AnnotationTool {
     MarkerPen(MarkerPenTool),
 
     /// 马赛克
-    Mosaic,
+    Mosaic(MosaicTool),
 
     /// 模糊
     Blur,
@@ -1150,7 +1148,7 @@ impl AnnotationTool {
             AnnotationTool::Arrow(_) => ToolName::Arrow,
             AnnotationTool::Pencil(_) => ToolName::Pencil,
             AnnotationTool::MarkerPen(_) => ToolName::MarkerPen,
-            AnnotationTool::Mosaic => ToolName::Mosaic,
+            AnnotationTool::Mosaic(_) => ToolName::Mosaic,
             AnnotationTool::Blur => ToolName::Blur,
             AnnotationTool::Text => ToolName::Text,
             AnnotationTool::SerialNumber => ToolName::SerialNumber,
@@ -1169,8 +1167,8 @@ impl StrokeWidthSupport for AnnotationTool {
             AnnotationTool::Arrow(tool) => tool.supports_get_stroke_width(),
             AnnotationTool::Pencil(tool) => tool.supports_get_stroke_width(),
             AnnotationTool::MarkerPen(tool) => tool.supports_get_stroke_width(),
-            AnnotationTool::Mosaic => {
-                todo!()
+            AnnotationTool::Mosaic(_tool) => {
+                false
             }
             AnnotationTool::Blur => {
                 todo!()
@@ -1198,9 +1196,7 @@ impl StrokeWidthSupport for AnnotationTool {
             AnnotationTool::Arrow(tool) => tool.stroke_width(),
             AnnotationTool::Pencil(tool) => tool.stroke_width(),
             AnnotationTool::MarkerPen(tool) => tool.stroke_width(),
-            AnnotationTool::Mosaic => {
-                todo!()
-            }
+            AnnotationTool::Mosaic(_tool) => 0.,
             AnnotationTool::Blur => {
                 todo!()
             }
@@ -1227,8 +1223,8 @@ impl StrokeWidthSupport for AnnotationTool {
             AnnotationTool::Arrow(tool) => tool.supports_set_stroke_width(),
             AnnotationTool::Pencil(tool) => tool.supports_set_stroke_width(),
             AnnotationTool::MarkerPen(tool) => tool.supports_set_stroke_width(),
-            AnnotationTool::Mosaic => {
-                todo!()
+            AnnotationTool::Mosaic(_) => {
+                false
             }
             AnnotationTool::Blur => {
                 todo!()
@@ -1268,7 +1264,7 @@ impl StrokeWidthSupport for AnnotationTool {
             AnnotationTool::MarkerPen(tool) => {
                 tool.set_stroke_width(stroke_width);
             }
-            AnnotationTool::Mosaic => {
+            AnnotationTool::Mosaic(_) => {
                 todo!()
             }
             AnnotationTool::Blur => {
@@ -1299,8 +1295,8 @@ impl StrokeColorSupport for AnnotationTool {
             AnnotationTool::Arrow(tool) => tool.supports_get_stroke_color(),
             AnnotationTool::Pencil(tool) => tool.supports_get_stroke_color(),
             AnnotationTool::MarkerPen(tool) => tool.supports_get_stroke_color(),
-            AnnotationTool::Mosaic => {
-                todo!()
+            AnnotationTool::Mosaic(_) => {
+                false
             }
             AnnotationTool::Blur => {
                 todo!()
@@ -1328,7 +1324,7 @@ impl StrokeColorSupport for AnnotationTool {
             AnnotationTool::Arrow(tool) => tool.stroke_color(),
             AnnotationTool::Pencil(tool) => tool.stroke_color(),
             AnnotationTool::MarkerPen(tool) => tool.stroke_color(),
-            AnnotationTool::Mosaic => {
+            AnnotationTool::Mosaic(_) => {
                 todo!()
             }
             AnnotationTool::Blur => {
@@ -1357,8 +1353,8 @@ impl StrokeColorSupport for AnnotationTool {
             AnnotationTool::Arrow(tool) => tool.supports_set_stroke_color(),
             AnnotationTool::Pencil(tool) => tool.supports_set_stroke_color(),
             AnnotationTool::MarkerPen(tool) => tool.supports_set_stroke_color(),
-            AnnotationTool::Mosaic => {
-                todo!()
+            AnnotationTool::Mosaic(_) => {
+                false
             }
             AnnotationTool::Blur => {
                 todo!()
@@ -1398,7 +1394,7 @@ impl StrokeColorSupport for AnnotationTool {
             AnnotationTool::MarkerPen(tool) => {
                 tool.set_stroke_color(color);
             }
-            AnnotationTool::Mosaic => {
+            AnnotationTool::Mosaic(_) => {
                 todo!()
             }
             AnnotationTool::Blur => {
@@ -1429,8 +1425,8 @@ impl StrokeTypeSupport for AnnotationTool {
             AnnotationTool::Arrow(tool) => tool.supports_get_stroke_type(),
             AnnotationTool::Pencil(tool) => tool.supports_get_stroke_type(),
             AnnotationTool::MarkerPen(tool) => tool.supports_get_stroke_type(),
-            AnnotationTool::Mosaic => {
-                todo!()
+            AnnotationTool::Mosaic(_) => {
+                false
             }
             AnnotationTool::Blur => {
                 todo!()
@@ -1458,7 +1454,7 @@ impl StrokeTypeSupport for AnnotationTool {
             AnnotationTool::Arrow(tool) => tool.stroke_type(),
             AnnotationTool::Pencil(tool) => tool.stroke_type(),
             AnnotationTool::MarkerPen(tool) => tool.stroke_type(),
-            AnnotationTool::Mosaic => {
+            AnnotationTool::Mosaic(_) => {
                 todo!()
             }
             AnnotationTool::Blur => {
@@ -1487,8 +1483,8 @@ impl StrokeTypeSupport for AnnotationTool {
             AnnotationTool::Arrow(tool) => tool.supports_set_stroke_type(),
             AnnotationTool::Pencil(tool) => tool.supports_set_stroke_type(),
             AnnotationTool::MarkerPen(tool) => tool.supports_set_stroke_type(),
-            AnnotationTool::Mosaic => {
-                todo!()
+            AnnotationTool::Mosaic(_) => {
+                false
             }
             AnnotationTool::Blur => {
                 todo!()
@@ -1528,7 +1524,7 @@ impl StrokeTypeSupport for AnnotationTool {
             AnnotationTool::MarkerPen(tool) => {
                 tool.set_stroke_type(stroke_type);
             }
-            AnnotationTool::Mosaic => {
+            AnnotationTool::Mosaic(_) => {
                 todo!()
             }
             AnnotationTool::Blur => {
@@ -1559,9 +1555,8 @@ impl FillColorSupport for AnnotationTool {
             AnnotationTool::Arrow(tool) => tool.supports_get_fill_color(),
             AnnotationTool::Pencil(tool) => tool.supports_get_fill_color(),
             AnnotationTool::MarkerPen(tool) => tool.supports_get_fill_color(),
-            AnnotationTool::Mosaic => {
-                // tool.supports_get_fill_color()
-                todo!()
+            AnnotationTool::Mosaic(_) => {
+                false
             }
             AnnotationTool::Blur => {
                 // tool.supports_get_fill_color()
@@ -1594,7 +1589,7 @@ impl FillColorSupport for AnnotationTool {
             AnnotationTool::Arrow(tool) => tool.fill_color(),
             AnnotationTool::Pencil(tool) => tool.fill_color(),
             AnnotationTool::MarkerPen(tool) => tool.fill_color(),
-            AnnotationTool::Mosaic => {
+            AnnotationTool::Mosaic(_) => {
                 // tool.fill_color()
                 todo!()
             }
@@ -1629,9 +1624,8 @@ impl FillColorSupport for AnnotationTool {
             AnnotationTool::Arrow(tool) => tool.supports_set_fill_color(),
             AnnotationTool::Pencil(tool) => tool.supports_set_fill_color(),
             AnnotationTool::MarkerPen(tool) => tool.supports_set_fill_color(),
-            AnnotationTool::Mosaic => {
-                // tool.supports_set_fill_color()
-                todo!()
+            AnnotationTool::Mosaic(_) => {
+                false
             }
             AnnotationTool::Blur => {
                 // tool.supports_set_fill_color()
@@ -1676,7 +1670,7 @@ impl FillColorSupport for AnnotationTool {
             AnnotationTool::MarkerPen(tool) => {
                 tool.set_fill_color(color);
             }
-            AnnotationTool::Mosaic => {
+            AnnotationTool::Mosaic(_) => {
                 // tool.set_fill_color(color);
                 todo!()
             }
@@ -1719,8 +1713,8 @@ impl Widget for &mut AnnotationTool {
             AnnotationTool::Arrow(arrow_tool) => arrow_tool.ui(ui),
             AnnotationTool::Pencil(tool) => tool.ui(ui),
             AnnotationTool::MarkerPen(tool) => tool.ui(ui),
-            AnnotationTool::Mosaic => {
-                todo!("Mosaic")
+            AnnotationTool::Mosaic(tool) => {
+                tool.ui(ui)
             }
             AnnotationTool::Blur => {
                 todo!("Blur")

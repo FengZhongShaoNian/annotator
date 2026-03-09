@@ -920,6 +920,13 @@ impl<P: Pixel> LogicalBounds<P> {
             size: self.size.cast(),
         }
     }
+
+    pub fn to_physical<X: Pixel>(&self, scale_factor: f64) -> PhysicalBounds<X> {
+        assert!(validate_scale_factor(scale_factor));
+        let origin = self.origin.to_physical::<X>(scale_factor).cast();
+        let size = self.size.to_physical::<X>(scale_factor).cast();
+        PhysicalBounds::new(origin.x, origin.y, size.width, size.height)
+    }
 }
 
 /// 定义一个矩形区域

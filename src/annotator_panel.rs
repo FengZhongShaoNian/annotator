@@ -12,6 +12,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 use crate::annotator::free_line_based::{MarkerPenTool, PencilTool};
+use crate::annotator::image_based::MosaicTool;
 use crate::annotator::straight_line_based::{ArrowTool, StraightLineTool};
 
 pub fn create_annotator_panel(
@@ -55,6 +56,7 @@ pub fn create_annotator_panel(
                         Default::default(),
                     );
                     annotator_state.background_texture_handle = Some(texture_handle);
+                    annotator_state.background_image = image.clone();
 
                     let annotator_state_rc = Rc::new(RefCell::new(annotator_state));
                     let rectangle_tool = RectangleTool::new(Rc::downgrade(&annotator_state_rc));
@@ -63,6 +65,7 @@ pub fn create_annotator_panel(
                     let arrow_tool = ArrowTool::new(Rc::downgrade(&annotator_state_rc));
                     let pencil_tool = PencilTool::new(Rc::downgrade(&annotator_state_rc));
                     let marker_pen_tool = MarkerPenTool::new(Rc::downgrade(&annotator_state_rc));
+                    let mosaic_tool = MosaicTool::new(Rc::downgrade(&annotator_state_rc));
 
                     annotator_state_rc.borrow_mut().annotation_tools.insert(ToolName::Rectangle, AnnotationTool::Rectangle(rectangle_tool));
                     annotator_state_rc.borrow_mut().annotation_tools.insert(ToolName::Ellipse, AnnotationTool::Ellipse(ellipse_tool));
@@ -70,6 +73,7 @@ pub fn create_annotator_panel(
                     annotator_state_rc.borrow_mut().annotation_tools.insert(ToolName::Arrow, AnnotationTool::Arrow(arrow_tool));
                     annotator_state_rc.borrow_mut().annotation_tools.insert(ToolName::Pencil, AnnotationTool::Pencil(pencil_tool));
                     annotator_state_rc.borrow_mut().annotation_tools.insert(ToolName::MarkerPen, AnnotationTool::MarkerPen(marker_pen_tool));
+                    annotator_state_rc.borrow_mut().annotation_tools.insert(ToolName::Mosaic, AnnotationTool::Mosaic(mosaic_tool));
 
                     annotator_state_rc
                 });
