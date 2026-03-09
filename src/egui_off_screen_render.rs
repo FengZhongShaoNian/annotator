@@ -149,33 +149,34 @@ pub fn render_egui_to_image(
     // 需要对映射变量设置范围，以便我们能够解除缓冲区的映射
     {
         let buffer_slice = buffer.slice(..);
-
-        // 注意：我们必须在 await future 之前先创建映射，然后再调用 device.poll()。
-        // 否则，应用程序将停止响应。
         let (tx, rx) = oneshot::channel();
         buffer_slice.map_async(MapMode::Read, move |result| {
             tx.send(result).unwrap();
         });
-        device.poll(PollType::wait_indefinitely()).unwrap();
+        device.poll(PollType::Wait {submission_index: None, timeout: None}).unwrap(); // 注意：wgpu 0.20 中 PollType::wait_indefinitely() 已改为 Poll::Wait
 
         if let Ok(Ok(())) = rx.recv() {
-            {
-                let data = buffer_slice.get_mapped_range();
-
-                use image::{ImageBuffer, Rgba};
-                let image_buffer =
-                    ImageBuffer::<Rgba<u8>, _>::from_raw(texture_size.width, texture_size.height, data)
-                        .unwrap();
-
-                image_buffer.save("/home/one/Pictures/image.png").unwrap();
-            }
-
-
-            // 解除缓冲区映射
+            let data = buffer_slice.get_mapped_range();
+            let pixels_bgra = data.to_vec(); // 复制 BGRA 数据
+            drop(data);
             buffer.unmap();
 
+            // 转换为 RGBA（如果目标需要）
+            let mut pixels_rgba = Vec::with_capacity(pixels_bgra.len());
+            for chunk in pixels_bgra.chunks_exact(4) {
+                pixels_rgba.extend_from_slice(&[chunk[2], chunk[1], chunk[0], chunk[3]]);
+            }
+
+            let image_buffer = ImageBuffer::<Rgba<u8>, _>::from_raw(
+                texture_size.width,
+                texture_size.height,
+                pixels_rgba,
+            )
+                .unwrap();
+
+            image_buffer.save("/home/one/Pictures/image.png").unwrap();
         } else {
-            panic!("从 gpu 读取数据失败！");
+            panic!("从 GPU 读取数据失败！");
         }
     }
 }
