@@ -110,18 +110,18 @@ pub fn create_annotator_panel(
                             .require_ref_mut::<SharedAnnotatorState>()
                             .clone();
 
-                        if annotator_state.borrow().current_annotation_tool.is_some() {
-                            annotator_state.with_current_annotation_tool(|tool| {
-                                ui.add(tool);
-                            })
-                        }
-
                         annotator_state.borrow_mut()
                             .annotations_stack
                             .iter_mut()
                             .for_each(|annotation| {
                                 annotation.paint_with(ui.painter());
                             });
+
+                        if annotator_state.borrow().current_annotation_tool.is_some() {
+                            annotator_state.with_current_annotation_tool(|tool| {
+                                ui.add(tool);
+                            })
+                        }
 
                         // Area::new(Id::from("text_edit")).movable(true).current_pos(annotator_state.pos).show(ctx, |ui| {
                         //     let response = ui.add(TextEdit::multiline(&mut annotator_state.editing_text)
