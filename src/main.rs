@@ -1,3 +1,5 @@
+#![feature(oneshot_channel)]
+
 mod application;
 mod egui_input;
 mod gpu;
@@ -19,6 +21,7 @@ mod secondly_toolbar;
 mod serial;
 mod layout;
 mod annotator_panel;
+mod egui_off_screen_render;
 
 use crate::application::Application;
 use crate::dpi::{LogicalSize};
