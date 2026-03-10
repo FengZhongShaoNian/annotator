@@ -1,3 +1,4 @@
+use std::mem;
 use crate::dpi::LogicalSize;
 use crate::gpu::GpuContext;
 use egui::{pos2, vec2, FullOutput, RawInput, Rect};
@@ -10,6 +11,7 @@ use egui_wgpu::wgpu::{
 use egui_wgpu::RendererOptions;
 use image::{ImageBuffer, Rgba};
 use std::sync::oneshot;
+use std::thread::spawn;
 
 pub type BuildUI = Box<dyn FnOnce(RawInput, &mut egui::Context) -> FullOutput>;
 pub fn render_egui_to_image(
@@ -113,10 +115,14 @@ pub fn render_egui_to_image(
     // 提交命令
     queue.submit(Some(encoder.finish()));
 
+    // wgpu 需要使用 COPY_BYTES_PER_ROW_ALIGNMENT 对齐纹理 -> 缓冲区的复制
+    // 因此，我们需要同时保存 padded_bytes_per_row 和 unpadded_bytes_per_row
+    let pixel_size = size_of::<[u8;4]>() as u32;
     // 计算对齐后的 bytes_per_row
     let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
-    let unpadded_bytes_per_row = texture_size.width * 4;
-    let padded_bytes_per_row = (unpadded_bytes_per_row + align - 1) & !(align - 1);
+    let unpadded_bytes_per_row = texture_size.width * pixel_size;
+    let padding = (align - unpadded_bytes_per_row % align) % align;
+    let padded_bytes_per_row = unpadded_bytes_per_row + padding;
     let buffer_size = (padded_bytes_per_row * texture_size.height) as wgpu::BufferAddress;
 
     // 创建目标缓冲区，用于接收像素数据
@@ -153,15 +159,20 @@ pub fn render_egui_to_image(
         buffer_slice.map_async(MapMode::Read, move |result| {
             tx.send(result).unwrap();
         });
-        device.poll(PollType::Wait {submission_index: None, timeout: None}).unwrap(); // 注意：wgpu 0.20 中 PollType::wait_indefinitely() 已改为 Poll::Wait
+        device.poll(PollType::wait_indefinitely()).unwrap();
 
         if let Ok(Ok(())) = rx.recv() {
-            let data = buffer_slice.get_mapped_range();
+            let padded_data = buffer_slice.get_mapped_range();
+            let data = padded_data
+                .chunks(padded_bytes_per_row as _)
+                .map(|chunk| { &chunk[..unpadded_bytes_per_row as _]})
+                .flatten()
+                .map(|x| { *x })
+                .collect::<Vec<_>>();
             let pixels_bgra = data.to_vec(); // 复制 BGRA 数据
             drop(data);
-            buffer.unmap();
 
-            // 转换为 RGBA（如果目标需要）
+            // 转换为 RGBA
             let mut pixels_rgba = Vec::with_capacity(pixels_bgra.len());
             for chunk in pixels_bgra.chunks_exact(4) {
                 pixels_rgba.extend_from_slice(&[chunk[2], chunk[1], chunk[0], chunk[3]]);
