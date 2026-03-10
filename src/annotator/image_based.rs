@@ -2,7 +2,7 @@ use crate::annotator::{
     ActivationSupport, Annotation, AnnotationCommon, AnnotatorState, FillColorSupport, Paint,
     StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport,
 };
-use crate::dpi::{LogicalBounds, LogicalSize, PhysicalBounds, PhysicalSize};
+use crate::dpi::{LogicalBounds, PhysicalBounds, PhysicalSize};
 use crate::egui_off_screen_render::EguiOffScreenRender;
 use egui::load::SizedTexture;
 use egui::{
@@ -271,99 +271,6 @@ pub trait BackgroundImageProvider {
     ) -> Receiver<Arc<RgbaImage>>;
 }
 
-pub struct OriginalBackgroundImageProvider();
-
-impl BackgroundImageProvider for OriginalBackgroundImageProvider {
-    fn background_image(
-        &self,
-        annotator_state: &AnnotatorState,
-        _: f32,
-    ) -> Receiver<Arc<RgbaImage>> {
-        let image = annotator_state.background_image.clone();
-        let (sender, receiver) = oneshot::channel::<Arc<RgbaImage>>();
-        sender.send(image).unwrap();
-        receiver
-    }
-}
-
-pub struct BackgroundImageWithAnnotationsProvider {
-    renderer: Arc<EguiOffScreenRender>,
-}
-
-impl BackgroundImageWithAnnotationsProvider {
-    pub fn new(renderer: Arc<EguiOffScreenRender>) -> Self {
-        Self { renderer }
-    }
-}
-impl BackgroundImageProvider for BackgroundImageWithAnnotationsProvider {
-    fn background_image(
-        &self,
-        annotator_state: &AnnotatorState,
-        pixels_per_point: f32,
-    ) -> Receiver<Arc<RgbaImage>> {
-        let original_background_image = annotator_state.background_image.clone();
-        let annotations = annotator_state.annotations_stack.clone();
-
-        let physical_size = PhysicalSize::new(
-            original_background_image.width(),
-            original_background_image.height(),
-        );
-        let logical_size = physical_size.to_logical(pixels_per_point as f64);
-
-        self.renderer.render_egui_to_image(
-            logical_size,
-            pixels_per_point,
-            Box::new(move |input, context| {
-                let mut annotaions = annotations;
-                context.run(input, move |ctx| {
-                    egui::CentralPanel::default()
-                        .frame(Frame::new())
-                        .show(ctx, |ui| {
-                            // 创建 ColorImage
-                            // 注意：RgbaImage 的 bytes 应该是连续的 RGBA 数据
-                            let background_image = Arc::new(ColorImage::from_rgba_premultiplied(
-                                [
-                                    original_background_image.width() as usize,
-                                    original_background_image.height() as usize,
-                                ],
-                                original_background_image.as_raw(),
-                            ));
-
-                            // Load the texture only once.
-                            let texture_handle = ctx.load_texture(
-                                "background-image",
-                                egui::ImageData::Color(background_image),
-                                Default::default(),
-                            );
-
-                            let bg_image = Image::new(ImageSource::Texture(
-                                SizedTexture::from_handle(&texture_handle),
-                            ));
-
-                            let frame_size = PhysicalSize::new(
-                                original_background_image.width(),
-                                original_background_image.height(),
-                            )
-                            .to_logical(ctx.pixels_per_point() as f64);
-
-                            bg_image.paint_at(
-                                ui,
-                                Rect::from_min_size(
-                                    pos2(0., 0.),
-                                    vec2(frame_size.width, frame_size.height),
-                                ),
-                            );
-
-                            annotaions.iter_mut().for_each(|annotation| {
-                                annotation.paint_with(ui.painter());
-                            });
-                        });
-                })
-            }),
-        )
-    }
-}
-
 impl<S: Default + Clone> ImageBasedTool<S> {
     pub fn new(
         annotator_state: Weak<RefCell<AnnotatorState>>,
@@ -478,5 +385,98 @@ impl Widget for &mut MosaicTool {
             }
         }
         response
+    }
+}
+
+pub struct OriginalBackgroundImageProvider;
+
+impl BackgroundImageProvider for OriginalBackgroundImageProvider {
+    fn background_image(
+        &self,
+        annotator_state: &AnnotatorState,
+        _: f32,
+    ) -> Receiver<Arc<RgbaImage>> {
+        let image = annotator_state.background_image.clone();
+        let (sender, receiver) = oneshot::channel::<Arc<RgbaImage>>();
+        sender.send(image).unwrap();
+        receiver
+    }
+}
+
+pub struct BackgroundImageWithAnnotationsProvider {
+    renderer: Arc<EguiOffScreenRender>,
+}
+
+impl BackgroundImageWithAnnotationsProvider {
+    pub fn new(renderer: Arc<EguiOffScreenRender>) -> Self {
+        Self { renderer }
+    }
+}
+impl BackgroundImageProvider for BackgroundImageWithAnnotationsProvider {
+    fn background_image(
+        &self,
+        annotator_state: &AnnotatorState,
+        pixels_per_point: f32,
+    ) -> Receiver<Arc<RgbaImage>> {
+        let original_background_image = annotator_state.background_image.clone();
+        let annotations = annotator_state.annotations_stack.clone();
+
+        let physical_size = PhysicalSize::new(
+            original_background_image.width(),
+            original_background_image.height(),
+        );
+        let logical_size = physical_size.to_logical(pixels_per_point as f64);
+
+        self.renderer.render_egui_to_image(
+            logical_size,
+            pixels_per_point,
+            Box::new(move |input, context| {
+                let mut annotaions = annotations;
+                context.run(input, move |ctx| {
+                    egui::CentralPanel::default()
+                        .frame(Frame::new())
+                        .show(ctx, |ui| {
+                            // 创建 ColorImage
+                            // 注意：RgbaImage 的 bytes 应该是连续的 RGBA 数据
+                            let background_image = Arc::new(ColorImage::from_rgba_premultiplied(
+                                [
+                                    original_background_image.width() as usize,
+                                    original_background_image.height() as usize,
+                                ],
+                                original_background_image.as_raw(),
+                            ));
+
+                            // Load the texture only once.
+                            let texture_handle = ctx.load_texture(
+                                "background-image",
+                                egui::ImageData::Color(background_image),
+                                Default::default(),
+                            );
+
+                            let bg_image = Image::new(ImageSource::Texture(
+                                SizedTexture::from_handle(&texture_handle),
+                            ));
+
+                            let frame_size = PhysicalSize::new(
+                                original_background_image.width(),
+                                original_background_image.height(),
+                            )
+                            .to_logical(ctx.pixels_per_point() as f64);
+
+                            bg_image.paint_at(
+                                ui,
+                                Rect::from_min_size(
+                                    pos2(0., 0.),
+                                    vec2(frame_size.width, frame_size.height),
+                                ),
+                            );
+
+                            annotaions.iter_mut().for_each(|annotation| {
+                                annotation.paint_with(ui.painter());
+                            });
+                        });
+                })
+            }),
+        )
     }
 }
