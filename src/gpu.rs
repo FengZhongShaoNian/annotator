@@ -1,14 +1,15 @@
 use anyhow::Context;
 use egui_wgpu::wgpu;
 use egui_wgpu::wgpu::Instance;
+use std::sync::Arc;
 
 /// GpuContext 封装了 wgpu 相关的内容
 #[derive(Clone)]
 pub struct GpuContext {
-    pub instance: Instance,
-    pub adapter: wgpu::Adapter,
-    pub device: wgpu::Device,
-    pub queue: wgpu::Queue,
+    pub instance: Arc<Instance>,
+    pub adapter: Arc<wgpu::Adapter>,
+    pub device: Arc<wgpu::Device>,
+    pub queue: Arc<wgpu::Queue>,
 }
 
 impl GpuContext {
@@ -24,10 +25,10 @@ impl GpuContext {
             .context("Failed to request device")?;
 
         Ok(Self {
-            instance,
-            adapter,
-            device,
-            queue,
+            instance: Arc::new(instance),
+            adapter: Arc::new(adapter),
+            device: Arc::new(device),
+            queue: Arc::new(queue),
         })
     }
 }
