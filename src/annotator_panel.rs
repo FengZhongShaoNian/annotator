@@ -1,6 +1,7 @@
 use crate::annotator::free_line_based::{MarkerPenTool, PencilTool};
 use crate::annotator::image_based::{
-    BackgroundImageWithAnnotationsProvider, MosaicHandler, MosaicTool,
+    BackgroundImageWithAnnotationsProvider, BlurHandler, BlurTool, EraserTool, ExtractHandler,
+    MosaicHandler, MosaicTool, OriginalBackgroundImageProvider,
 };
 use crate::annotator::rectangle_based::{EllipseTool, RectangleTool};
 use crate::annotator::straight_line_based::{ArrowTool, StraightLineTool};
@@ -84,8 +85,20 @@ pub fn create_annotator_panel(
                     let marker_pen_tool = MarkerPenTool::new(Rc::downgrade(&annotator_state_rc));
                     let mosaic_tool = MosaicTool::new(
                         Rc::downgrade(&annotator_state_rc),
-                        Box::new(BackgroundImageWithAnnotationsProvider::new(renderer)),
+                        Box::new(BackgroundImageWithAnnotationsProvider::new(
+                            renderer.clone(),
+                        )),
                         Rc::new(MosaicHandler::new(10)),
+                    );
+                    let blur_tool = BlurTool::new(
+                        Rc::downgrade(&annotator_state_rc),
+                        Box::new(BackgroundImageWithAnnotationsProvider::new(renderer)),
+                        Rc::new(BlurHandler::default()),
+                    );
+                    let eraser_tool = EraserTool::new(
+                        Rc::downgrade(&annotator_state_rc),
+                        Box::new(OriginalBackgroundImageProvider::new()),
+                        Rc::new(ExtractHandler::new()),
                     );
 
                     annotator_state_rc.borrow_mut().annotation_tools.insert(
@@ -116,6 +129,14 @@ pub fn create_annotator_panel(
                         .borrow_mut()
                         .annotation_tools
                         .insert(ToolName::Mosaic, AnnotationTool::Mosaic(mosaic_tool));
+                    annotator_state_rc
+                        .borrow_mut()
+                        .annotation_tools
+                        .insert(ToolName::Blur, AnnotationTool::Blur(blur_tool));
+                    annotator_state_rc
+                        .borrow_mut()
+                        .annotation_tools
+                        .insert(ToolName::Eraser, AnnotationTool::Eraser(eraser_tool));
 
                     annotator_state_rc
                 });

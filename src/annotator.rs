@@ -15,7 +15,7 @@ use crate::annotator::free_line_based::{
     MarkerPenAnnotation, MarkerPenTool, PencilAnnotation, PencilTool,
 };
 use crate::annotator::image_based::{
-    BlurAnnotation, EraserAnnotation, MosaicAnnotation, MosaicTool,
+    BlurAnnotation, BlurTool, EraserAnnotation, EraserTool, MosaicAnnotation, MosaicTool,
 };
 use crate::annotator::rectangle_based::{
     EllipseAnnotation, EllipseTool, RectangleAnnotation, RectangleTool,
@@ -346,14 +346,8 @@ impl StrokeWidthSupport for Annotation {
             Annotation::Arrow(inner) => inner.stroke_width(),
             Annotation::Pencil(inner) => inner.stroke_width(),
             Annotation::MarkerPen(inner) => inner.stroke_width(),
-            Annotation::Mosaic(inner) => {
-                // inner.stroke_width()
-                todo!()
-            }
-            Annotation::Blur(inner) => {
-                // inner.stroke_width()
-                todo!()
-            }
+            Annotation::Mosaic(inner) => 0.,
+            Annotation::Blur(inner) => 0.,
             Annotation::Text(inner) => {
                 // inner.stroke_width()
                 todo!()
@@ -366,10 +360,7 @@ impl StrokeWidthSupport for Annotation {
                 // inner.stroke_width()
                 todo!()
             }
-            Annotation::Eraser(inner) => {
-                // inner.stroke_width()
-                todo!()
-            }
+            Annotation::Eraser(inner) => 0.,
         }
     }
 
@@ -381,14 +372,8 @@ impl StrokeWidthSupport for Annotation {
             Annotation::Arrow(inner) => inner.supports_set_stroke_width(),
             Annotation::Pencil(inner) => inner.supports_set_stroke_width(),
             Annotation::MarkerPen(inner) => inner.supports_set_stroke_width(),
-            Annotation::Mosaic(inner) => {
-                // inner.supports_set_stroke_width()
-                todo!()
-            }
-            Annotation::Blur(inner) => {
-                // inner.supports_set_stroke_width()
-                todo!()
-            }
+            Annotation::Mosaic(inner) => false,
+            Annotation::Blur(inner) => false,
             Annotation::Text(inner) => {
                 // inner.supports_set_stroke_width()
                 todo!()
@@ -401,10 +386,7 @@ impl StrokeWidthSupport for Annotation {
                 // inner.supports_set_stroke_width()
                 todo!()
             }
-            Annotation::Eraser(inner) => {
-                // inner.supports_set_stroke_width()
-                todo!()
-            }
+            Annotation::Eraser(inner) => false,
         }
     }
 
@@ -465,14 +447,8 @@ impl StrokeColorSupport for Annotation {
             Annotation::Arrow(inner) => inner.supports_get_stroke_color(),
             Annotation::Pencil(inner) => inner.supports_get_stroke_color(),
             Annotation::MarkerPen(inner) => inner.supports_get_stroke_color(),
-            Annotation::Mosaic(inner) => {
-                // inner.supports_get_stroke_color()
-                todo!()
-            }
-            Annotation::Blur(inner) => {
-                // inner.supports_get_stroke_color()
-                todo!()
-            }
+            Annotation::Mosaic(inner) => false,
+            Annotation::Blur(inner) => false,
             Annotation::Text(inner) => {
                 // inner.supports_get_stroke_color()
                 todo!()
@@ -485,10 +461,7 @@ impl StrokeColorSupport for Annotation {
                 // inner.supports_get_stroke_color()
                 todo!()
             }
-            Annotation::Eraser(inner) => {
-                // inner.supports_get_stroke_color()
-                todo!()
-            }
+            Annotation::Eraser(inner) => false,
         }
     }
 
@@ -535,14 +508,8 @@ impl StrokeColorSupport for Annotation {
             Annotation::Arrow(inner) => inner.supports_set_stroke_color(),
             Annotation::Pencil(inner) => inner.supports_set_stroke_color(),
             Annotation::MarkerPen(inner) => inner.supports_set_stroke_color(),
-            Annotation::Mosaic(inner) => {
-                // inner.supports_set_stroke_color()
-                todo!()
-            }
-            Annotation::Blur(inner) => {
-                // inner.supports_set_stroke_color()
-                todo!()
-            }
+            Annotation::Mosaic(inner) => false,
+            Annotation::Blur(inner) => false,
             Annotation::Text(inner) => {
                 // inner.supports_set_stroke_color()
                 todo!()
@@ -555,10 +522,7 @@ impl StrokeColorSupport for Annotation {
                 // inner.supports_set_stroke_color()
                 todo!()
             }
-            Annotation::Eraser(inner) => {
-                // inner.supports_set_stroke_color()
-                todo!()
-            }
+            Annotation::Eraser(inner) => false,
         }
     }
 
@@ -619,14 +583,8 @@ impl StrokeTypeSupport for Annotation {
             Annotation::Arrow(inner) => inner.supports_get_stroke_type(),
             Annotation::Pencil(inner) => inner.supports_get_stroke_type(),
             Annotation::MarkerPen(inner) => inner.supports_get_stroke_type(),
-            Annotation::Mosaic(inner) => {
-                // inner.supports_get_stroke_type()
-                todo!()
-            }
-            Annotation::Blur(inner) => {
-                // inner.supports_get_stroke_type()
-                todo!()
-            }
+            Annotation::Mosaic(inner) => false,
+            Annotation::Blur(inner) => false,
             Annotation::Text(inner) => {
                 // inner.supports_get_stroke_type()
                 todo!()
@@ -639,10 +597,7 @@ impl StrokeTypeSupport for Annotation {
                 // inner.supports_get_stroke_type()
                 todo!()
             }
-            Annotation::Eraser(inner) => {
-                // inner.supports_get_stroke_type()
-                todo!()
-            }
+            Annotation::Eraser(inner) => false,
         }
     }
 
@@ -689,14 +644,8 @@ impl StrokeTypeSupport for Annotation {
             Annotation::Arrow(inner) => inner.supports_set_stroke_type(),
             Annotation::Pencil(inner) => inner.supports_set_stroke_type(),
             Annotation::MarkerPen(inner) => inner.supports_set_stroke_type(),
-            Annotation::Mosaic(inner) => {
-                // inner.supports_set_stroke_type()
-                todo!()
-            }
-            Annotation::Blur(inner) => {
-                // inner.supports_set_stroke_type()
-                todo!()
-            }
+            Annotation::Mosaic(inner) => false,
+            Annotation::Blur(inner) => false,
             Annotation::Text(inner) => {
                 // inner.supports_set_stroke_type()
                 todo!()
@@ -709,10 +658,7 @@ impl StrokeTypeSupport for Annotation {
                 // inner.supports_set_stroke_type()
                 todo!()
             }
-            Annotation::Eraser(inner) => {
-                // inner.supports_set_stroke_type()
-                todo!()
-            }
+            Annotation::Eraser(inner) => false,
         }
     }
 
@@ -773,14 +719,8 @@ impl FillColorSupport for Annotation {
             Annotation::Arrow(inner) => inner.supports_get_fill_color(),
             Annotation::Pencil(inner) => inner.supports_get_fill_color(),
             Annotation::MarkerPen(inner) => inner.supports_get_fill_color(),
-            Annotation::Mosaic(inner) => {
-                // inner.supports_get_fill_color()
-                todo!()
-            }
-            Annotation::Blur(inner) => {
-                // inner.supports_get_fill_color()
-                todo!()
-            }
+            Annotation::Mosaic(inner) => false,
+            Annotation::Blur(inner) => false,
             Annotation::Text(inner) => {
                 // inner.supports_get_fill_color()
                 todo!()
@@ -793,10 +733,7 @@ impl FillColorSupport for Annotation {
                 // inner.supports_get_fill_color()
                 todo!()
             }
-            Annotation::Eraser(inner) => {
-                // inner.supports_get_fill_color()
-                todo!()
-            }
+            Annotation::Eraser(inner) => false,
         }
     }
 
@@ -843,14 +780,8 @@ impl FillColorSupport for Annotation {
             Annotation::Arrow(inner) => inner.supports_set_fill_color(),
             Annotation::Pencil(inner) => inner.supports_set_fill_color(),
             Annotation::MarkerPen(inner) => inner.supports_set_fill_color(),
-            Annotation::Mosaic(inner) => {
-                // inner.supports_set_fill_color()
-                todo!()
-            }
-            Annotation::Blur(inner) => {
-                // inner.supports_set_fill_color()
-                todo!()
-            }
+            Annotation::Mosaic(inner) => false,
+            Annotation::Blur(inner) => false,
             Annotation::Text(inner) => {
                 // inner.supports_set_fill_color()
                 todo!()
@@ -863,10 +794,7 @@ impl FillColorSupport for Annotation {
                 // inner.supports_set_fill_color()
                 todo!()
             }
-            Annotation::Eraser(inner) => {
-                // inner.supports_set_fill_color()
-                todo!()
-            }
+            Annotation::Eraser(inner) => false,
         }
     }
 
@@ -928,10 +856,7 @@ impl AnnotationCommon for Annotation {
             Annotation::Pencil(inner) => inner.activation(),
             Annotation::MarkerPen(inner) => inner.activation(),
             Annotation::Mosaic(inner) => inner.activation(),
-            Annotation::Blur(inner) => {
-                // inner.activation()
-                todo!()
-            }
+            Annotation::Blur(inner) => inner.activation(),
             Annotation::Text(inner) => {
                 // inner.activation()
                 todo!()
@@ -944,10 +869,7 @@ impl AnnotationCommon for Annotation {
                 // inner.activation()
                 todo!()
             }
-            Annotation::Eraser(inner) => {
-                // inner.activation()
-                todo!()
-            }
+            Annotation::Eraser(inner) => inner.activation(),
         }
     }
 
@@ -960,10 +882,7 @@ impl AnnotationCommon for Annotation {
             Annotation::Pencil(inner) => inner.activation_mut(),
             Annotation::MarkerPen(inner) => inner.activation_mut(),
             Annotation::Mosaic(inner) => inner.activation_mut(),
-            Annotation::Blur(inner) => {
-                // inner.activation_mut()
-                todo!()
-            }
+            Annotation::Blur(inner) => inner.activation_mut(),
             Annotation::Text(inner) => {
                 // inner.activation_mut()
                 todo!()
@@ -976,10 +895,7 @@ impl AnnotationCommon for Annotation {
                 // inner.activation_mut()
                 todo!()
             }
-            Annotation::Eraser(inner) => {
-                // inner.activation_mut()
-                todo!()
-            }
+            Annotation::Eraser(inner) => inner.activation_mut(),
         }
     }
 }
@@ -1066,7 +982,7 @@ pub enum AnnotationTool {
     Mosaic(MosaicTool),
 
     /// 模糊
-    Blur,
+    Blur(BlurTool),
 
     /// 文本
     Text,
@@ -1078,7 +994,7 @@ pub enum AnnotationTool {
     Watermark,
 
     /// 橡皮擦
-    Eraser,
+    Eraser(EraserTool),
 }
 
 impl AnnotationTool {
@@ -1091,11 +1007,11 @@ impl AnnotationTool {
             AnnotationTool::Pencil(_) => ToolName::Pencil,
             AnnotationTool::MarkerPen(_) => ToolName::MarkerPen,
             AnnotationTool::Mosaic(_) => ToolName::Mosaic,
-            AnnotationTool::Blur => ToolName::Blur,
+            AnnotationTool::Blur(_) => ToolName::Blur,
             AnnotationTool::Text => ToolName::Text,
             AnnotationTool::SerialNumber => ToolName::SerialNumber,
             AnnotationTool::Watermark => ToolName::Watermark,
-            AnnotationTool::Eraser => ToolName::Eraser,
+            AnnotationTool::Eraser(_) => ToolName::Eraser,
         }
     }
 }
@@ -1110,9 +1026,7 @@ impl StrokeWidthSupport for AnnotationTool {
             AnnotationTool::Pencil(tool) => tool.supports_get_stroke_width(),
             AnnotationTool::MarkerPen(tool) => tool.supports_get_stroke_width(),
             AnnotationTool::Mosaic(_tool) => false,
-            AnnotationTool::Blur => {
-                todo!()
-            }
+            AnnotationTool::Blur(_) => false,
             AnnotationTool::Text => {
                 todo!()
             }
@@ -1122,9 +1036,7 @@ impl StrokeWidthSupport for AnnotationTool {
             AnnotationTool::Watermark => {
                 todo!()
             }
-            AnnotationTool::Eraser => {
-                todo!()
-            }
+            AnnotationTool::Eraser(_) => false,
         }
     }
 
@@ -1137,7 +1049,7 @@ impl StrokeWidthSupport for AnnotationTool {
             AnnotationTool::Pencil(tool) => tool.stroke_width(),
             AnnotationTool::MarkerPen(tool) => tool.stroke_width(),
             AnnotationTool::Mosaic(_tool) => 0.,
-            AnnotationTool::Blur => {
+            AnnotationTool::Blur(_) => {
                 todo!()
             }
             AnnotationTool::Text => {
@@ -1149,7 +1061,7 @@ impl StrokeWidthSupport for AnnotationTool {
             AnnotationTool::Watermark => {
                 todo!()
             }
-            AnnotationTool::Eraser => {
+            AnnotationTool::Eraser(_) => {
                 todo!()
             }
         }
@@ -1164,9 +1076,7 @@ impl StrokeWidthSupport for AnnotationTool {
             AnnotationTool::Pencil(tool) => tool.supports_set_stroke_width(),
             AnnotationTool::MarkerPen(tool) => tool.supports_set_stroke_width(),
             AnnotationTool::Mosaic(_) => false,
-            AnnotationTool::Blur => {
-                todo!()
-            }
+            AnnotationTool::Blur(_) => false,
             AnnotationTool::Text => {
                 todo!()
             }
@@ -1176,9 +1086,7 @@ impl StrokeWidthSupport for AnnotationTool {
             AnnotationTool::Watermark => {
                 todo!()
             }
-            AnnotationTool::Eraser => {
-                todo!()
-            }
+            AnnotationTool::Eraser(_) => false,
         }
     }
 
@@ -1205,7 +1113,7 @@ impl StrokeWidthSupport for AnnotationTool {
             AnnotationTool::Mosaic(_) => {
                 todo!()
             }
-            AnnotationTool::Blur => {
+            AnnotationTool::Blur(_) => {
                 todo!()
             }
             AnnotationTool::Text => {
@@ -1217,7 +1125,7 @@ impl StrokeWidthSupport for AnnotationTool {
             AnnotationTool::Watermark => {
                 todo!()
             }
-            AnnotationTool::Eraser => {
+            AnnotationTool::Eraser(_) => {
                 todo!()
             }
         }
@@ -1234,9 +1142,7 @@ impl StrokeColorSupport for AnnotationTool {
             AnnotationTool::Pencil(tool) => tool.supports_get_stroke_color(),
             AnnotationTool::MarkerPen(tool) => tool.supports_get_stroke_color(),
             AnnotationTool::Mosaic(_) => false,
-            AnnotationTool::Blur => {
-                todo!()
-            }
+            AnnotationTool::Blur(_) => false,
             AnnotationTool::Text => {
                 todo!()
             }
@@ -1246,9 +1152,7 @@ impl StrokeColorSupport for AnnotationTool {
             AnnotationTool::Watermark => {
                 todo!()
             }
-            AnnotationTool::Eraser => {
-                todo!()
-            }
+            AnnotationTool::Eraser(_) => false,
         }
     }
 
@@ -1263,7 +1167,7 @@ impl StrokeColorSupport for AnnotationTool {
             AnnotationTool::Mosaic(_) => {
                 todo!()
             }
-            AnnotationTool::Blur => {
+            AnnotationTool::Blur(_) => {
                 todo!()
             }
             AnnotationTool::Text => {
@@ -1275,7 +1179,7 @@ impl StrokeColorSupport for AnnotationTool {
             AnnotationTool::Watermark => {
                 todo!()
             }
-            AnnotationTool::Eraser => {
+            AnnotationTool::Eraser(_) => {
                 todo!()
             }
         }
@@ -1290,9 +1194,7 @@ impl StrokeColorSupport for AnnotationTool {
             AnnotationTool::Pencil(tool) => tool.supports_set_stroke_color(),
             AnnotationTool::MarkerPen(tool) => tool.supports_set_stroke_color(),
             AnnotationTool::Mosaic(_) => false,
-            AnnotationTool::Blur => {
-                todo!()
-            }
+            AnnotationTool::Blur(_) => false,
             AnnotationTool::Text => {
                 todo!()
             }
@@ -1302,9 +1204,7 @@ impl StrokeColorSupport for AnnotationTool {
             AnnotationTool::Watermark => {
                 todo!()
             }
-            AnnotationTool::Eraser => {
-                todo!()
-            }
+            AnnotationTool::Eraser(_) => false,
         }
     }
 
@@ -1331,7 +1231,7 @@ impl StrokeColorSupport for AnnotationTool {
             AnnotationTool::Mosaic(_) => {
                 todo!()
             }
-            AnnotationTool::Blur => {
+            AnnotationTool::Blur(_) => {
                 todo!()
             }
             AnnotationTool::Text => {
@@ -1343,7 +1243,7 @@ impl StrokeColorSupport for AnnotationTool {
             AnnotationTool::Watermark => {
                 todo!()
             }
-            AnnotationTool::Eraser => {
+            AnnotationTool::Eraser(_) => {
                 todo!()
             }
         }
@@ -1360,7 +1260,7 @@ impl StrokeTypeSupport for AnnotationTool {
             AnnotationTool::Pencil(tool) => tool.supports_get_stroke_type(),
             AnnotationTool::MarkerPen(tool) => tool.supports_get_stroke_type(),
             AnnotationTool::Mosaic(_) => false,
-            AnnotationTool::Blur => {
+            AnnotationTool::Blur(_) => {
                 todo!()
             }
             AnnotationTool::Text => {
@@ -1372,7 +1272,7 @@ impl StrokeTypeSupport for AnnotationTool {
             AnnotationTool::Watermark => {
                 todo!()
             }
-            AnnotationTool::Eraser => {
+            AnnotationTool::Eraser(_) => {
                 todo!()
             }
         }
@@ -1389,7 +1289,7 @@ impl StrokeTypeSupport for AnnotationTool {
             AnnotationTool::Mosaic(_) => {
                 todo!()
             }
-            AnnotationTool::Blur => {
+            AnnotationTool::Blur(_) => {
                 todo!()
             }
             AnnotationTool::Text => {
@@ -1401,7 +1301,7 @@ impl StrokeTypeSupport for AnnotationTool {
             AnnotationTool::Watermark => {
                 todo!()
             }
-            AnnotationTool::Eraser => {
+            AnnotationTool::Eraser(_) => {
                 todo!()
             }
         }
@@ -1416,9 +1316,7 @@ impl StrokeTypeSupport for AnnotationTool {
             AnnotationTool::Pencil(tool) => tool.supports_set_stroke_type(),
             AnnotationTool::MarkerPen(tool) => tool.supports_set_stroke_type(),
             AnnotationTool::Mosaic(_) => false,
-            AnnotationTool::Blur => {
-                todo!()
-            }
+            AnnotationTool::Blur(_) => false,
             AnnotationTool::Text => {
                 todo!()
             }
@@ -1428,9 +1326,7 @@ impl StrokeTypeSupport for AnnotationTool {
             AnnotationTool::Watermark => {
                 todo!()
             }
-            AnnotationTool::Eraser => {
-                todo!()
-            }
+            AnnotationTool::Eraser(_) => false,
         }
     }
 
@@ -1457,7 +1353,7 @@ impl StrokeTypeSupport for AnnotationTool {
             AnnotationTool::Mosaic(_) => {
                 todo!()
             }
-            AnnotationTool::Blur => {
+            AnnotationTool::Blur(_) => {
                 todo!()
             }
             AnnotationTool::Text => {
@@ -1469,7 +1365,7 @@ impl StrokeTypeSupport for AnnotationTool {
             AnnotationTool::Watermark => {
                 todo!()
             }
-            AnnotationTool::Eraser => {
+            AnnotationTool::Eraser(_) => {
                 todo!()
             }
         }
@@ -1486,10 +1382,7 @@ impl FillColorSupport for AnnotationTool {
             AnnotationTool::Pencil(tool) => tool.supports_get_fill_color(),
             AnnotationTool::MarkerPen(tool) => tool.supports_get_fill_color(),
             AnnotationTool::Mosaic(_) => false,
-            AnnotationTool::Blur => {
-                // tool.supports_get_fill_color()
-                todo!()
-            }
+            AnnotationTool::Blur(_) => false,
             AnnotationTool::Text => {
                 // tool.supports_get_fill_color()
                 todo!()
@@ -1502,10 +1395,7 @@ impl FillColorSupport for AnnotationTool {
                 // tool.supports_get_fill_color()
                 todo!()
             }
-            AnnotationTool::Eraser => {
-                // tool.supports_get_fill_color()
-                todo!()
-            }
+            AnnotationTool::Eraser(_) => false,
         }
     }
 
@@ -1521,7 +1411,7 @@ impl FillColorSupport for AnnotationTool {
                 // tool.fill_color()
                 todo!()
             }
-            AnnotationTool::Blur => {
+            AnnotationTool::Blur(_) => {
                 // tool.fill_color()
                 todo!()
             }
@@ -1537,7 +1427,7 @@ impl FillColorSupport for AnnotationTool {
                 // tool.fill_color()
                 todo!()
             }
-            AnnotationTool::Eraser => {
+            AnnotationTool::Eraser(_) => {
                 // tool.fill_color()
                 todo!()
             }
@@ -1553,10 +1443,7 @@ impl FillColorSupport for AnnotationTool {
             AnnotationTool::Pencil(tool) => tool.supports_set_fill_color(),
             AnnotationTool::MarkerPen(tool) => tool.supports_set_fill_color(),
             AnnotationTool::Mosaic(_) => false,
-            AnnotationTool::Blur => {
-                // tool.supports_set_fill_color()
-                todo!()
-            }
+            AnnotationTool::Blur(_) => false,
             AnnotationTool::Text => {
                 // tool.supports_set_fill_color()
                 todo!()
@@ -1569,10 +1456,7 @@ impl FillColorSupport for AnnotationTool {
                 // tool.supports_set_fill_color()
                 todo!()
             }
-            AnnotationTool::Eraser => {
-                // tool.supports_set_fill_color()
-                todo!()
-            }
+            AnnotationTool::Eraser(_) => false,
         }
     }
 
@@ -1600,7 +1484,7 @@ impl FillColorSupport for AnnotationTool {
                 // tool.set_fill_color(color);
                 todo!()
             }
-            AnnotationTool::Blur => {
+            AnnotationTool::Blur(_) => {
                 // tool.set_fill_color(color);
                 todo!()
             }
@@ -1616,7 +1500,7 @@ impl FillColorSupport for AnnotationTool {
                 // tool.set_fill_color(color);
                 todo!()
             }
-            AnnotationTool::Eraser => {
+            AnnotationTool::Eraser(_) => {
                 // tool.set_fill_color(color);
                 todo!()
             }
@@ -1640,9 +1524,7 @@ impl Widget for &mut AnnotationTool {
             AnnotationTool::Pencil(tool) => tool.ui(ui),
             AnnotationTool::MarkerPen(tool) => tool.ui(ui),
             AnnotationTool::Mosaic(tool) => tool.ui(ui),
-            AnnotationTool::Blur => {
-                todo!("Blur")
-            }
+            AnnotationTool::Blur(tool) => tool.ui(ui),
             AnnotationTool::Text => {
                 todo!("Text")
             }
@@ -1652,9 +1534,7 @@ impl Widget for &mut AnnotationTool {
             AnnotationTool::Watermark => {
                 todo!("Watermark")
             }
-            AnnotationTool::Eraser => {
-                todo!("Eraser")
-            }
+            AnnotationTool::Eraser(tool) => tool.ui(ui),
         }
     }
 }

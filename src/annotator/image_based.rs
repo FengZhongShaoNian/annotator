@@ -518,6 +518,12 @@ impl_widget_for!(MosaicTool=>MosaicAnnotation, BlurTool=>BlurAnnotation, EraserT
 
 pub struct OriginalBackgroundImageProvider;
 
+impl OriginalBackgroundImageProvider {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
 impl BackgroundImageProvider for OriginalBackgroundImageProvider {
     fn background_image(
         &self,
