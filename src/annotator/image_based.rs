@@ -136,6 +136,30 @@ impl ImageHandler for BlurHandler {
 }
 
 #[derive(Clone)]
+pub struct ExtractHandler {}
+impl ExtractHandler {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+impl ImageHandler for ExtractHandler {
+    fn handle(
+        &self,
+        image: &RgbaImage,
+        bounds: PhysicalBounds<u32>,
+    ) -> Result<RgbaImage, ImageError> {
+        // 转换为 RgbImage 以便直接修改像素
+        let x = max(bounds.origin.x, 0);
+        let y = max(bounds.origin.y, 0);
+        let width = min(bounds.size.width, image.width());
+        let height = min(bounds.size.height, image.height());
+
+        let sub_image = image.view(x, y, width, height).to_image();
+        Ok(sub_image)
+    }
+}
+
+#[derive(Clone)]
 pub struct ImageBasedAnnotation<T: Default + Clone, H: ImageHandler> {
     _style: T,
     rect: Rect,
@@ -304,8 +328,12 @@ pub struct MosaicStyle {}
 #[derive(Default, Clone)]
 pub struct BlurStyle {}
 
+#[derive(Default, Clone)]
+pub struct EraserStyle {}
+
 pub type MosaicAnnotation = ImageBasedAnnotation<MosaicStyle, MosaicHandler>;
 pub type BlurAnnotation = ImageBasedAnnotation<BlurStyle, BlurHandler>;
+pub type EraserAnnotation = ImageBasedAnnotation<EraserStyle, ExtractHandler>;
 
 #[derive(Default)]
 pub struct ImageBasedToolState<S>
@@ -353,6 +381,8 @@ impl<S: Default + Clone, H: ImageHandler> ImageBasedTool<S, H> {
 }
 
 pub type MosaicTool = ImageBasedTool<MosaicStyle, MosaicHandler>;
+pub type BlurTool = ImageBasedTool<BlurStyle, BlurHandler>;
+pub type EraserTool = ImageBasedTool<EraserStyle, ExtractHandler>;
 
 impl Into<Annotation> for MosaicAnnotation {
     fn into(self) -> Annotation {
@@ -360,7 +390,23 @@ impl Into<Annotation> for MosaicAnnotation {
     }
 }
 
-impl Widget for &mut MosaicTool {
+impl Into<Annotation> for BlurAnnotation {
+    fn into(self) -> Annotation {
+        Annotation::Blur(self)
+    }
+}
+
+impl Into<Annotation> for EraserAnnotation {
+    fn into(self) -> Annotation {
+        Annotation::Eraser(self)
+    }
+}
+
+macro_rules! impl_widget_for {
+    ($($tool:ty=>$annotation:ty),*) => {
+        $(
+
+impl Widget for &mut $tool {
     fn ui(self, ui: &mut Ui) -> Response {
         let sense_area = Rect::from_min_size(Pos2::ZERO, ui.available_size());
         let response = ui.allocate_rect(sense_area, Sense::click_and_drag());
@@ -390,7 +436,7 @@ impl Widget for &mut MosaicTool {
             let rect = Rect::from_two_pos(drag_started_pos, pointer_pos);
             if let Some(background_image) = self.background_image.clone() {
                 let mut annotation =
-                    MosaicAnnotation::new(rect, background_image, self.image_handler.clone());
+                    <$annotation>::new(rect, background_image, self.image_handler.clone());
                 annotation.paint_with(ui.painter());
             } else {
                 let background_image_receiver = self.background_image_receiver.take();
@@ -399,7 +445,7 @@ impl Widget for &mut MosaicTool {
                     match background_image {
                         Ok(background_image) => {
                             self.background_image = Some(background_image.clone());
-                            let mut annotation = MosaicAnnotation::new(
+                            let mut annotation = <$annotation>::new(
                                 rect,
                                 background_image,
                                 self.image_handler.clone(),
@@ -424,7 +470,7 @@ impl Widget for &mut MosaicTool {
 
             if let Some(background_image) = self.background_image.clone() {
                 let annotation =
-                    MosaicAnnotation::new(rect, background_image, self.image_handler.clone());
+                    <$annotation>::new(rect, background_image, self.image_handler.clone());
                 self.annotator_state
                     .upgrade()
                     .unwrap()
@@ -438,7 +484,7 @@ impl Widget for &mut MosaicTool {
                     match background_image {
                         Ok(background_image) => {
                             self.background_image = Some(background_image.clone());
-                            let annotation = MosaicAnnotation::new(
+                            let annotation = <$annotation>::new(
                                 rect,
                                 background_image,
                                 self.image_handler.clone(),
@@ -463,6 +509,12 @@ impl Widget for &mut MosaicTool {
         response
     }
 }
+
+        )*
+    }
+}
+
+impl_widget_for!(MosaicTool=>MosaicAnnotation, BlurTool=>BlurAnnotation, EraserTool=>EraserAnnotation);
 
 pub struct OriginalBackgroundImageProvider;
 

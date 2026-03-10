@@ -11,12 +11,12 @@ pub(crate) mod svg_button;
 pub mod text;
 pub mod watermark;
 
-use crate::annotator::blur::BlurState;
-use crate::annotator::eraser::EraserState;
 use crate::annotator::free_line_based::{
     MarkerPenAnnotation, MarkerPenTool, PencilAnnotation, PencilTool,
 };
-use crate::annotator::image_based::{MosaicAnnotation, MosaicTool};
+use crate::annotator::image_based::{
+    BlurAnnotation, EraserAnnotation, MosaicAnnotation, MosaicTool,
+};
 use crate::annotator::rectangle_based::{
     EllipseAnnotation, EllipseTool, RectangleAnnotation, RectangleTool,
 };
@@ -267,7 +267,7 @@ pub enum Annotation {
     Mosaic(MosaicAnnotation),
 
     /// 模糊
-    Blur(BlurState),
+    Blur(BlurAnnotation),
 
     /// 文本
     Text(TextState),
@@ -279,7 +279,7 @@ pub enum Annotation {
     Watermark(WaterMarkState),
 
     /// 橡皮擦
-    Eraser(EraserState),
+    Eraser(EraserAnnotation),
 }
 
 impl Annotation {
