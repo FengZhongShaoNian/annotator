@@ -9,10 +9,11 @@ use crate::view::View;
 use crate::window::AppWindow;
 use egui::{Context, FullOutput, RawInput};
 use image::RgbaImage;
+use log::info;
 use sctk::shell::WaylandSurface;
 use std::cmp::max;
+use std::rc::Rc;
 use std::sync::Arc;
-use log::info;
 
 pub fn build_annotator(
     input: RawInput,
@@ -52,7 +53,9 @@ pub fn build_annotator(
 
         let secondly_toolbar_position: LogicalPosition<i32> = LogicalPosition::new(
             (annotator_panel_required_size.width - secondly_toolbar_size.width) as i32,
-            (primary_toolbar_position.y + primary_toolbar_size.height as i32 + secondly_toolbar_margin_top),
+            (primary_toolbar_position.y
+                + primary_toolbar_size.height as i32
+                + secondly_toolbar_margin_top),
         );
 
         create_primary_toolbar(
@@ -115,10 +118,14 @@ pub fn build_annotator(
             .commands
             .push_back(Command::ResizeView(current_view.id(), required_window_size));
         info!("required_window_size: {:?}", required_window_size);
-        
+
         // 鼠标穿透
         let qh = &app.global_state.queue_handle;
-        let empty_region = app.global_state.compositor_state.wl_compositor().create_region(qh, ());
+        let empty_region = app
+            .global_state
+            .compositor_state
+            .wl_compositor()
+            .create_region(qh, ());
         window.xdg_window().set_input_region(Some(&empty_region));
     }
     egui_ctx.run(input, move |_ctx| {})

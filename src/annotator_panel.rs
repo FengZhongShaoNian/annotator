@@ -1,7 +1,13 @@
+use crate::annotator::free_line_based::{MarkerPenTool, PencilTool};
+use crate::annotator::image_based::{BackgroundImageWithAnnotationsProvider, MosaicTool};
 use crate::annotator::rectangle_based::{EllipseTool, RectangleTool};
-use crate::annotator::{AnnotationTool, AnnotatorState, Paint, SharedAnnotatorState, SharedAnnotatorStateUtil, ToolName};
+use crate::annotator::straight_line_based::{ArrowTool, StraightLineTool};
+use crate::annotator::{
+    AnnotationTool, AnnotatorState, Paint, SharedAnnotatorState, SharedAnnotatorStateUtil, ToolName,
+};
 use crate::application::Application;
 use crate::dpi::{LogicalPosition, PhysicalSize};
+use crate::egui_off_screen_render::EguiOffScreenRender;
 use crate::global::{ReadGlobalMut, ReadOrInsertGlobal};
 use crate::view::ViewId;
 use crate::window::AppWindow;
@@ -11,9 +17,6 @@ use image::RgbaImage;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
-use crate::annotator::free_line_based::{MarkerPenTool, PencilTool};
-use crate::annotator::image_based::MosaicTool;
-use crate::annotator::straight_line_based::{ArrowTool, StraightLineTool};
 
 pub fn create_annotator_panel(
     view_id: ViewId,
@@ -24,8 +27,7 @@ pub fn create_annotator_panel(
     let global_state = &app.global_state;
 
     let scale_factor = window.scale_factor().unwrap();
-    let panel_size = PhysicalSize::new(image.width(), image.height())
-        .to_logical(scale_factor);
+    let panel_size = PhysicalSize::new(image.width(), image.height()).to_logical(scale_factor);
 
     let logical_position = LogicalPosition::new(0, 0);
 
@@ -42,7 +44,6 @@ pub fn create_annotator_panel(
                 .window_context
                 .globals_by_type
                 .get_global_or_insert_with(|| {
-                    let mut annotator_state = AnnotatorState::default();
                     // 创建 ColorImage
                     // 注意：RgbaImage 的 bytes 应该是连续的 RGBA 数据
                     let background_image = Arc::new(ColorImage::from_rgba_premultiplied(
@@ -55,28 +56,63 @@ pub fn create_annotator_panel(
                         egui::ImageData::Color(background_image),
                         Default::default(),
                     );
-                    annotator_state.background_texture_handle = Some(texture_handle);
-                    annotator_state.background_image = image.clone();
-                    
-                    let gpu_context = app.global_state.gpu.take().unwrap();
-                    app.global_state.gpu = RefCell::new(Some(gpu_context.clone()));
+
+                    let renderer = Arc::new(EguiOffScreenRender::new(
+                        app.global_state.gpu.borrow().as_ref().unwrap(),
+                    ));
+
+                    let annotator_state = AnnotatorState {
+                        hide_primary_toolbar: false,
+                        background_image: image.clone(),
+                        background_texture_handle: Some(texture_handle),
+                        renderer: renderer.clone(),
+                        annotation_tools: Default::default(),
+                        annotations_stack: vec![],
+                        redo_stack: vec![],
+                        current_annotation_tool: None,
+                    };
 
                     let annotator_state_rc = Rc::new(RefCell::new(annotator_state));
                     let rectangle_tool = RectangleTool::new(Rc::downgrade(&annotator_state_rc));
                     let ellipse_tool = EllipseTool::new(Rc::downgrade(&annotator_state_rc));
-                    let straight_line_tool = StraightLineTool::new(Rc::downgrade(&annotator_state_rc));
+                    let straight_line_tool =
+                        StraightLineTool::new(Rc::downgrade(&annotator_state_rc));
                     let arrow_tool = ArrowTool::new(Rc::downgrade(&annotator_state_rc));
                     let pencil_tool = PencilTool::new(Rc::downgrade(&annotator_state_rc));
                     let marker_pen_tool = MarkerPenTool::new(Rc::downgrade(&annotator_state_rc));
-                    let mosaic_tool = MosaicTool::new(Rc::downgrade(&annotator_state_rc), gpu_context);
+                    let mosaic_tool = MosaicTool::new(
+                        Rc::downgrade(&annotator_state_rc),
+                        Box::new(BackgroundImageWithAnnotationsProvider::new(renderer)),
+                    );
 
-                    annotator_state_rc.borrow_mut().annotation_tools.insert(ToolName::Rectangle, AnnotationTool::Rectangle(rectangle_tool));
-                    annotator_state_rc.borrow_mut().annotation_tools.insert(ToolName::Ellipse, AnnotationTool::Ellipse(ellipse_tool));
-                    annotator_state_rc.borrow_mut().annotation_tools.insert(ToolName::StraightLine, AnnotationTool::StraightLine(straight_line_tool));
-                    annotator_state_rc.borrow_mut().annotation_tools.insert(ToolName::Arrow, AnnotationTool::Arrow(arrow_tool));
-                    annotator_state_rc.borrow_mut().annotation_tools.insert(ToolName::Pencil, AnnotationTool::Pencil(pencil_tool));
-                    annotator_state_rc.borrow_mut().annotation_tools.insert(ToolName::MarkerPen, AnnotationTool::MarkerPen(marker_pen_tool));
-                    annotator_state_rc.borrow_mut().annotation_tools.insert(ToolName::Mosaic, AnnotationTool::Mosaic(mosaic_tool));
+                    annotator_state_rc.borrow_mut().annotation_tools.insert(
+                        ToolName::Rectangle,
+                        AnnotationTool::Rectangle(rectangle_tool),
+                    );
+                    annotator_state_rc
+                        .borrow_mut()
+                        .annotation_tools
+                        .insert(ToolName::Ellipse, AnnotationTool::Ellipse(ellipse_tool));
+                    annotator_state_rc.borrow_mut().annotation_tools.insert(
+                        ToolName::StraightLine,
+                        AnnotationTool::StraightLine(straight_line_tool),
+                    );
+                    annotator_state_rc
+                        .borrow_mut()
+                        .annotation_tools
+                        .insert(ToolName::Arrow, AnnotationTool::Arrow(arrow_tool));
+                    annotator_state_rc
+                        .borrow_mut()
+                        .annotation_tools
+                        .insert(ToolName::Pencil, AnnotationTool::Pencil(pencil_tool));
+                    annotator_state_rc.borrow_mut().annotation_tools.insert(
+                        ToolName::MarkerPen,
+                        AnnotationTool::MarkerPen(marker_pen_tool),
+                    );
+                    annotator_state_rc
+                        .borrow_mut()
+                        .annotation_tools
+                        .insert(ToolName::Mosaic, AnnotationTool::Mosaic(mosaic_tool));
 
                     annotator_state_rc
                 });
@@ -113,7 +149,8 @@ pub fn create_annotator_panel(
                             .require_ref_mut::<SharedAnnotatorState>()
                             .clone();
 
-                        annotator_state.borrow_mut()
+                        annotator_state
+                            .borrow_mut()
                             .annotations_stack
                             .iter_mut()
                             .for_each(|annotation| {
@@ -135,8 +172,6 @@ pub fn create_annotator_panel(
                         // });
                         //
                         // ui.painter().clip_rect()
-
-
                     });
             })
         }),

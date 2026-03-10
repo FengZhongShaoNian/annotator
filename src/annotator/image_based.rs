@@ -1,19 +1,30 @@
-use crate::annotator::{ActivationSupport, Annotation, AnnotationCommon, AnnotatorState, FillColorSupport, Paint, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport};
+use crate::annotator::{
+    ActivationSupport, Annotation, AnnotationCommon, AnnotatorState, FillColorSupport, Paint,
+    StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport,
+};
 use crate::dpi::{LogicalBounds, LogicalSize, PhysicalBounds, PhysicalSize};
-use egui::{pos2, vec2, Color32, ColorImage, CursorIcon, Frame, Image, ImageSource, Painter, Pos2, Rect, Response, Sense, TextureHandle, Ui, Widget};
+use crate::egui_off_screen_render::EguiOffScreenRender;
+use egui::load::SizedTexture;
+use egui::{
+    pos2, vec2, Color32, ColorImage, CursorIcon, Frame, Image, ImageSource, Painter, Pos2,
+    Rect, Response, Sense, TextureHandle, Ui, Widget,
+};
 use image::GenericImageView;
 use image::{Rgba, RgbaImage};
+use log::{error, warn};
 use std::cell::RefCell;
 use std::cmp::{max, min};
 use std::default::Default;
-use std::rc::{Rc, Weak};
+use std::rc::Weak;
 use std::sync::atomic::AtomicUsize;
-use std::sync::Arc;
-use egui::load::SizedTexture;
-use crate::egui_off_screen_render::render_egui_to_image;
-use crate::gpu::GpuContext;
+use std::sync::oneshot::Receiver;
+use std::sync::{oneshot, Arc};
 
-fn mosaic(image: &RgbaImage, bounds: PhysicalBounds<u32>, block_size: u32) -> Result<RgbaImage, image::ImageError> {
+fn mosaic(
+    image: &RgbaImage,
+    bounds: PhysicalBounds<u32>,
+    block_size: u32,
+) -> Result<RgbaImage, image::ImageError> {
     // 转换为 RgbImage 以便直接修改像素
     let x = max(bounds.origin.x, 0);
     let y = max(bounds.origin.y, 0);
@@ -68,13 +79,13 @@ fn mosaic(image: &RgbaImage, bounds: PhysicalBounds<u32>, block_size: u32) -> Re
 pub struct ImageBasedAnnotation<T: Default + Clone> {
     _style: T,
     rect: Rect,
-    source_image: Rc<RgbaImage>,
+    source_image: Arc<RgbaImage>,
     mosaic_texture_handle: Option<TextureHandle>,
-    activation: ActivationSupport
+    activation: ActivationSupport,
 }
 
 impl<T: Clone + Default> ImageBasedAnnotation<T> {
-    pub fn new(rect: Rect, background_image: Rc<RgbaImage>) -> Self {
+    pub fn new(rect: Rect, background_image: Arc<RgbaImage>) -> Self {
         Self {
             _style: Default::default(),
             rect,
@@ -90,7 +101,12 @@ static TEXTURE_COUNTER: AtomicUsize = AtomicUsize::new(0);
 impl<T: Clone + Default> Paint for ImageBasedAnnotation<T> {
     fn paint_with(&mut self, painter: &Painter) {
         let scale_factor = painter.ctx().pixels_per_point();
-        let logical_bounds = LogicalBounds::new(self.rect.min.x, self.rect.min.y, self.rect.width(), self.rect.height());
+        let logical_bounds = LogicalBounds::new(
+            self.rect.min.x,
+            self.rect.min.y,
+            self.rect.width(),
+            self.rect.height(),
+        );
         let physical_bounds: PhysicalBounds<u32> = logical_bounds.to_physical(scale_factor as f64);
 
         let block_size = 10;
@@ -101,21 +117,37 @@ impl<T: Clone + Default> Paint for ImageBasedAnnotation<T> {
 
         if let Some(texture_handle) = self.mosaic_texture_handle.clone() {
             let texture_id = texture_handle.id();
-            painter.image(texture_id, self.rect, Rect::from_two_pos(pos2(0., 0.), pos2(1., 1.)), Color32::WHITE);
-        }else {
+            painter.image(
+                texture_id,
+                self.rect,
+                Rect::from_two_pos(pos2(0., 0.), pos2(1., 1.)),
+                Color32::WHITE,
+            );
+        } else {
             if let Ok(mosaic_image) = mosaic(&*self.source_image, physical_bounds, 10) {
                 let color_image = Arc::new(ColorImage::from_rgba_premultiplied(
-                    [mosaic_image.width() as usize, mosaic_image.height() as usize],
+                    [
+                        mosaic_image.width() as usize,
+                        mosaic_image.height() as usize,
+                    ],
                     mosaic_image.as_raw(),
                 ));
                 let texture_handle = painter.ctx().load_texture(
-                    format!("mosaic-{}", TEXTURE_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst)),
+                    format!(
+                        "mosaic-{}",
+                        TEXTURE_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+                    ),
                     egui::ImageData::Color(color_image),
                     Default::default(),
                 );
                 self.mosaic_texture_handle = Some(texture_handle.clone());
                 let texture_id = texture_handle.id();
-                painter.image(texture_id, self.rect, Rect::from_two_pos(pos2(0., 0.), pos2(1., 1.)), Color32::WHITE);
+                painter.image(
+                    texture_id,
+                    self.rect,
+                    Rect::from_two_pos(pos2(0., 0.), pos2(1., 1.)),
+                    Color32::WHITE,
+                );
             }
         }
     }
@@ -220,23 +252,129 @@ where
     /// 样式
     style: S,
     /// 拖动的起点
-    drag_start_pos: Option<Pos2>
+    drag_start_pos: Option<Pos2>,
 }
 
 pub struct ImageBasedTool<S: Default + Clone> {
     annotator_state: Weak<RefCell<AnnotatorState>>,
     tool_state: ImageBasedToolState<S>,
-    gpu_context: GpuContext,
-    source_image: Option<Rc<RgbaImage>>
+    background_image_provider: Box<dyn BackgroundImageProvider>,
+    background_image_receiver: Option<Receiver<Arc<RgbaImage>>>,
+    background_image: Option<Arc<RgbaImage>>,
+}
+
+pub trait BackgroundImageProvider {
+    fn background_image(
+        &self,
+        annotator_state: &AnnotatorState,
+        pixels_per_point: f32,
+    ) -> Receiver<Arc<RgbaImage>>;
+}
+
+pub struct OriginalBackgroundImageProvider();
+
+impl BackgroundImageProvider for OriginalBackgroundImageProvider {
+    fn background_image(
+        &self,
+        annotator_state: &AnnotatorState,
+        _: f32,
+    ) -> Receiver<Arc<RgbaImage>> {
+        let image = annotator_state.background_image.clone();
+        let (sender, receiver) = oneshot::channel::<Arc<RgbaImage>>();
+        sender.send(image).unwrap();
+        receiver
+    }
+}
+
+pub struct BackgroundImageWithAnnotationsProvider {
+    renderer: Arc<EguiOffScreenRender>,
+}
+
+impl BackgroundImageWithAnnotationsProvider {
+    pub fn new(renderer: Arc<EguiOffScreenRender>) -> Self {
+        Self { renderer }
+    }
+}
+impl BackgroundImageProvider for BackgroundImageWithAnnotationsProvider {
+    fn background_image(
+        &self,
+        annotator_state: &AnnotatorState,
+        pixels_per_point: f32,
+    ) -> Receiver<Arc<RgbaImage>> {
+        let original_background_image = annotator_state.background_image.clone();
+        let annotations = annotator_state.annotations_stack.clone();
+
+        let physical_size = PhysicalSize::new(
+            original_background_image.width(),
+            original_background_image.height(),
+        );
+        let logical_size = physical_size.to_logical(pixels_per_point as f64);
+
+        self.renderer.render_egui_to_image(
+            logical_size,
+            pixels_per_point,
+            Box::new(move |input, context| {
+                let mut annotaions = annotations;
+                context.run(input, move |ctx| {
+                    egui::CentralPanel::default()
+                        .frame(Frame::new())
+                        .show(ctx, |ui| {
+                            // 创建 ColorImage
+                            // 注意：RgbaImage 的 bytes 应该是连续的 RGBA 数据
+                            let background_image = Arc::new(ColorImage::from_rgba_premultiplied(
+                                [
+                                    original_background_image.width() as usize,
+                                    original_background_image.height() as usize,
+                                ],
+                                original_background_image.as_raw(),
+                            ));
+
+                            // Load the texture only once.
+                            let texture_handle = ctx.load_texture(
+                                "background-image",
+                                egui::ImageData::Color(background_image),
+                                Default::default(),
+                            );
+
+                            let bg_image = Image::new(ImageSource::Texture(
+                                SizedTexture::from_handle(&texture_handle),
+                            ));
+
+                            let frame_size = PhysicalSize::new(
+                                original_background_image.width(),
+                                original_background_image.height(),
+                            )
+                            .to_logical(ctx.pixels_per_point() as f64);
+
+                            bg_image.paint_at(
+                                ui,
+                                Rect::from_min_size(
+                                    pos2(0., 0.),
+                                    vec2(frame_size.width, frame_size.height),
+                                ),
+                            );
+
+                            annotaions.iter_mut().for_each(|annotation| {
+                                annotation.paint_with(ui.painter());
+                            });
+                        });
+                })
+            }),
+        )
+    }
 }
 
 impl<S: Default + Clone> ImageBasedTool<S> {
-    pub fn new(annotator_state: Weak<RefCell<AnnotatorState>>, gpu_context: GpuContext) -> Self {
+    pub fn new(
+        annotator_state: Weak<RefCell<AnnotatorState>>,
+        background_image_provider: Box<dyn BackgroundImageProvider>,
+    ) -> Self {
         Self {
             annotator_state,
             tool_state: Default::default(),
-            gpu_context,
-            source_image: None
+            background_image_provider,
+            background_image_receiver: None,
+            background_image: None,
         }
     }
 }
@@ -264,75 +402,80 @@ impl Widget for &mut MosaicTool {
             let drag_started_pos = ui.ctx().input(|i| i.pointer.press_origin()).unwrap();
             self.tool_state.drag_start_pos = Some(drag_started_pos);
 
-            let virtual_screen_size = LogicalSize::new(sense_area.width(), sense_area.height()).cast();
             let annotator_state = self.annotator_state.upgrade().unwrap();
-            let image = annotator_state.borrow().background_image.clone();
-            let annotations = annotator_state.borrow().annotations_stack.clone();
-            let image = render_egui_to_image(&self.gpu_context, virtual_screen_size, ui.ctx().pixels_per_point(), Box::new(move |input,context|{
-                let mut annotaions = annotations;
-                context.run(input, move |ctx| {
-                    egui::CentralPanel::default()
-                        .frame(Frame::new())
-                        .show(ctx, |ui| {
-
-                            // 创建 ColorImage
-                            // 注意：RgbaImage 的 bytes 应该是连续的 RGBA 数据
-                            let background_image = Arc::new(ColorImage::from_rgba_premultiplied(
-                                [image.width() as usize, image.height() as usize],
-                                image.as_raw(),
-                            ));
-                            // Load the texture only once.
-                            let texture_handle = ctx.load_texture(
-                                "background-image",
-                                egui::ImageData::Color(background_image),
-                                Default::default(),
-                            );
-
-                            let bg_image = Image::new(ImageSource::Texture(SizedTexture::from_handle(
-                                &texture_handle,
-                            )));
-
-                            let frame_size = PhysicalSize::new(image.width(), image.height())
-                                .to_logical(ctx.pixels_per_point() as f64);
-
-                            bg_image.paint_at(
-                                ui,
-                                Rect::from_min_size(
-                                    pos2(0., 0.),
-                                    vec2(frame_size.width, frame_size.height),
-                                ),
-                            );
-
-                            annotaions
-                                .iter_mut()
-                                .for_each(|annotation| {
-                                    annotation.paint_with(ui.painter());
-                                });
-                        });
-                })
-            }));
-            self.source_image = Some(Rc::new(image));
+            let pixels_per_point = ui.ctx().pixels_per_point();
+            self.background_image_receiver = Some(
+                self.background_image_provider
+                    .background_image(&*annotator_state.borrow(), pixels_per_point),
+            );
+            self.background_image = None;
         }
 
         if response.dragged() {
             // 拖动中
             let drag_started_pos = self.tool_state.drag_start_pos.unwrap();
             let rect = Rect::from_two_pos(drag_started_pos, pointer_pos);
-            let mut annotation = MosaicAnnotation::new(rect, self.source_image.as_ref().unwrap().clone());
-            annotation.paint_with(ui.painter());
+            if let Some(background_image) = self.background_image.clone() {
+                let mut annotation = MosaicAnnotation::new(rect, background_image);
+                annotation.paint_with(ui.painter());
+            } else {
+                let background_image_receiver = self.background_image_receiver.take();
+                if let Some(background_image_receiver) = background_image_receiver {
+                    let background_image = background_image_receiver.try_recv();
+                    match background_image {
+                        Ok(background_image) => {
+                            self.background_image = Some(background_image.clone());
+                            let mut annotation = MosaicAnnotation::new(rect, background_image);
+                            annotation.paint_with(ui.painter());
+                        }
+                        Err(oneshot::TryRecvError::Empty(rx)) => {
+                            self.background_image_receiver = Some(rx);
+                        }
+                        Err(oneshot::TryRecvError::Disconnected) => {
+                            error!("Failed to receive background image");
+                        }
+                    }
+                }
+            }
         }
 
         if response.drag_stopped() {
             // 拖动结束
             let drag_started_pos = self.tool_state.drag_start_pos.unwrap();
             let rect = Rect::from_two_pos(drag_started_pos, pointer_pos);
-            let annotation = MosaicAnnotation::new(rect, self.source_image.as_ref().unwrap().clone());
-            self.annotator_state
-                .upgrade()
-                .unwrap()
-                .borrow_mut()
-                .annotations_stack
-                .push(annotation.into());
+
+            if let Some(background_image) = self.background_image.clone() {
+                let annotation = MosaicAnnotation::new(rect, background_image);
+                self.annotator_state
+                    .upgrade()
+                    .unwrap()
+                    .borrow_mut()
+                    .annotations_stack
+                    .push(annotation.into());
+            } else {
+                let background_image_receiver = self.background_image_receiver.take();
+                if let Some(background_image_receiver) = background_image_receiver {
+                    let background_image = background_image_receiver.try_recv();
+                    match background_image {
+                        Ok(background_image) => {
+                            self.background_image = Some(background_image.clone());
+                            let annotation = MosaicAnnotation::new(rect, background_image);
+                            self.annotator_state
+                                .upgrade()
+                                .unwrap()
+                                .borrow_mut()
+                                .annotations_stack
+                                .push(annotation.into());
+                        }
+                        Err(oneshot::TryRecvError::Empty(rx)) => {
+                            self.background_image_receiver = Some(rx);
+                        }
+                        Err(oneshot::TryRecvError::Disconnected) => {
+                            error!("Failed to receive background image");
+                        }
+                    }
+                }
+            }
         }
         response
     }
