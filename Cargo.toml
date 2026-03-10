@@ -25,3 +25,4 @@ raw-window-handle = "0.6.2"
 rustc-hash = "2.1.1"
 egui_extras = {version = "0.33.3", features = ["svg"]}
 indexmap = "2.13.0"
+imageproc = "0.26.1"

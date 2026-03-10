@@ -1,5 +1,7 @@
 use crate::annotator::free_line_based::{MarkerPenTool, PencilTool};
-use crate::annotator::image_based::{BackgroundImageWithAnnotationsProvider, MosaicTool};
+use crate::annotator::image_based::{
+    BackgroundImageWithAnnotationsProvider, MosaicHandler, MosaicTool,
+};
 use crate::annotator::rectangle_based::{EllipseTool, RectangleTool};
 use crate::annotator::straight_line_based::{ArrowTool, StraightLineTool};
 use crate::annotator::{
@@ -83,6 +85,7 @@ pub fn create_annotator_panel(
                     let mosaic_tool = MosaicTool::new(
                         Rc::downgrade(&annotator_state_rc),
                         Box::new(BackgroundImageWithAnnotationsProvider::new(renderer)),
+                        Rc::new(MosaicHandler::new(10)),
                     );
 
                     annotator_state_rc.borrow_mut().annotation_tools.insert(

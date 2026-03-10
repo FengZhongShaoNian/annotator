@@ -9,96 +9,158 @@ use egui::{
     pos2, vec2, Color32, ColorImage, CursorIcon, Frame, Image, ImageSource, Painter, Pos2,
     Rect, Response, Sense, TextureHandle, Ui, Widget,
 };
-use image::GenericImageView;
+use image::{GenericImageView, ImageError};
 use image::{Rgba, RgbaImage};
+use imageproc::filter::gaussian_blur_f32;
 use log::{error, warn};
 use std::cell::RefCell;
 use std::cmp::{max, min};
 use std::default::Default;
-use std::rc::Weak;
+use std::rc::{Rc, Weak};
 use std::sync::atomic::AtomicUsize;
 use std::sync::oneshot::Receiver;
 use std::sync::{oneshot, Arc};
 
-fn mosaic(
-    image: &RgbaImage,
-    bounds: PhysicalBounds<u32>,
-    block_size: u32,
-) -> Result<RgbaImage, image::ImageError> {
-    // 转换为 RgbImage 以便直接修改像素
-    let x = max(bounds.origin.x, 0);
-    let y = max(bounds.origin.y, 0);
-    let width = min(bounds.size.width, image.width());
-    let height = min(bounds.size.height, image.height());
-
-    let sub_image = image.view(x, y, width, height);
-    let mut result = RgbaImage::new(width, height);
-
-    // 遍历每个块
-    for y in (0..height).step_by(block_size as usize) {
-        for x in (0..width).step_by(block_size as usize) {
-            // 确定当前块的实际边界（防止超出图像边缘）
-            let block_width = block_size.min(width - x);
-            let block_height = block_size.min(height - y);
-
-            // 计算块内所有像素的 RGB 总和
-            let (mut r_sum, mut g_sum, mut b_sum, mut a_sum) = (0u64, 0u64, 0u64, 0u64);
-            let mut count = 0;
-
-            for dy in 0..block_height {
-                for dx in 0..block_width {
-                    let pixel = sub_image.get_pixel(x + dx, y + dy);
-                    r_sum += pixel[0] as u64;
-                    g_sum += pixel[1] as u64;
-                    b_sum += pixel[2] as u64;
-                    a_sum += pixel[3] as u64;
-                    count += 1;
-                }
-            }
-
-            // 计算平均颜色
-            let avg_r = (r_sum / count) as u8;
-            let avg_g = (g_sum / count) as u8;
-            let avg_b = (b_sum / count) as u8;
-            let avg_a = (a_sum / count) as u8;
-            let avg_color = Rgba([avg_r, avg_g, avg_b, avg_a]);
-
-            // 用平均颜色填充整个块
-            for dy in 0..block_height {
-                for dx in 0..block_width {
-                    result.put_pixel(x + dx, y + dy, avg_color);
-                }
-            }
-        }
-    }
-
-    Ok(result)
+pub trait ImageHandler {
+    fn handle(
+        &self,
+        image: &RgbaImage,
+        bounds: PhysicalBounds<u32>,
+    ) -> Result<RgbaImage, image::ImageError>;
 }
 
 #[derive(Clone)]
-pub struct ImageBasedAnnotation<T: Default + Clone> {
+pub struct MosaicHandler {
+    block_size: u32,
+}
+
+impl MosaicHandler {
+    pub fn new(block_size: u32) -> Self {
+        Self { block_size }
+    }
+}
+
+impl ImageHandler for MosaicHandler {
+    fn handle(
+        &self,
+        image: &RgbaImage,
+        bounds: PhysicalBounds<u32>,
+    ) -> Result<RgbaImage, ImageError> {
+        // 转换为 RgbImage 以便直接修改像素
+        let x = max(bounds.origin.x, 0);
+        let y = max(bounds.origin.y, 0);
+        let width = min(bounds.size.width, image.width());
+        let height = min(bounds.size.height, image.height());
+        let block_size = self.block_size;
+
+        let sub_image = image.view(x, y, width, height);
+        let mut result = RgbaImage::new(width, height);
+
+        // 遍历每个块
+        for y in (0..height).step_by(block_size as usize) {
+            for x in (0..width).step_by(block_size as usize) {
+                // 确定当前块的实际边界（防止超出图像边缘）
+                let block_width = block_size.min(width - x);
+                let block_height = block_size.min(height - y);
+
+                // 计算块内所有像素的 RGB 总和
+                let (mut r_sum, mut g_sum, mut b_sum, mut a_sum) = (0u64, 0u64, 0u64, 0u64);
+                let mut count = 0;
+
+                for dy in 0..block_height {
+                    for dx in 0..block_width {
+                        let pixel = sub_image.get_pixel(x + dx, y + dy);
+                        r_sum += pixel[0] as u64;
+                        g_sum += pixel[1] as u64;
+                        b_sum += pixel[2] as u64;
+                        a_sum += pixel[3] as u64;
+                        count += 1;
+                    }
+                }
+
+                // 计算平均颜色
+                let avg_r = (r_sum / count) as u8;
+                let avg_g = (g_sum / count) as u8;
+                let avg_b = (b_sum / count) as u8;
+                let avg_a = (a_sum / count) as u8;
+                let avg_color = Rgba([avg_r, avg_g, avg_b, avg_a]);
+
+                // 用平均颜色填充整个块
+                for dy in 0..block_height {
+                    for dx in 0..block_width {
+                        result.put_pixel(x + dx, y + dy, avg_color);
+                    }
+                }
+            }
+        }
+
+        Ok(result)
+    }
+}
+
+#[derive(Clone)]
+pub struct BlurHandler {
+    /// 标准差 sigma，值越大越模糊
+    sigma: f32,
+}
+
+impl BlurHandler {
+    pub fn new(sigma: f32) -> Self {
+        Self { sigma }
+    }
+}
+
+impl Default for BlurHandler {
+    fn default() -> Self {
+        BlurHandler::new(3.0)
+    }
+}
+
+impl ImageHandler for BlurHandler {
+    fn handle(
+        &self,
+        image: &RgbaImage,
+        bounds: PhysicalBounds<u32>,
+    ) -> Result<RgbaImage, ImageError> {
+        // 转换为 RgbImage 以便直接修改像素
+        let x = max(bounds.origin.x, 0);
+        let y = max(bounds.origin.y, 0);
+        let width = min(bounds.size.width, image.width());
+        let height = min(bounds.size.height, image.height());
+
+        let sub_image = image.view(x, y, width, height).to_image();
+
+        let blurred = gaussian_blur_f32(&sub_image, self.sigma);
+        Ok(blurred)
+    }
+}
+
+#[derive(Clone)]
+pub struct ImageBasedAnnotation<T: Default + Clone, H: ImageHandler> {
     _style: T,
     rect: Rect,
     source_image: Arc<RgbaImage>,
-    mosaic_texture_handle: Option<TextureHandle>,
+    texture_handle: Option<TextureHandle>,
     activation: ActivationSupport,
+    image_handler: Rc<H>,
 }
 
-impl<T: Clone + Default> ImageBasedAnnotation<T> {
-    pub fn new(rect: Rect, background_image: Arc<RgbaImage>) -> Self {
+impl<T: Clone + Default, H: ImageHandler> ImageBasedAnnotation<T, H> {
+    pub fn new(rect: Rect, background_image: Arc<RgbaImage>, image_handler: Rc<H>) -> Self {
         Self {
             _style: Default::default(),
             rect,
             source_image: background_image,
-            mosaic_texture_handle: None,
+            texture_handle: None,
             activation: ActivationSupport::NotSupported,
+            image_handler,
         }
     }
 }
 
 static TEXTURE_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
-impl<T: Clone + Default> Paint for ImageBasedAnnotation<T> {
+impl<T: Clone + Default, H: ImageHandler> Paint for ImageBasedAnnotation<T, H> {
     fn paint_with(&mut self, painter: &Painter) {
         let scale_factor = painter.ctx().pixels_per_point();
         let logical_bounds = LogicalBounds::new(
@@ -115,7 +177,7 @@ impl<T: Clone + Default> Paint for ImageBasedAnnotation<T> {
             return;
         }
 
-        if let Some(texture_handle) = self.mosaic_texture_handle.clone() {
+        if let Some(texture_handle) = self.texture_handle.clone() {
             let texture_id = texture_handle.id();
             painter.image(
                 texture_id,
@@ -124,7 +186,8 @@ impl<T: Clone + Default> Paint for ImageBasedAnnotation<T> {
                 Color32::WHITE,
             );
         } else {
-            if let Ok(mosaic_image) = mosaic(&*self.source_image, physical_bounds, 10) {
+            let image_handler = self.image_handler.clone();
+            if let Ok(mosaic_image) = image_handler.handle(&*self.source_image, physical_bounds) {
                 let color_image = Arc::new(ColorImage::from_rgba_premultiplied(
                     [
                         mosaic_image.width() as usize,
@@ -140,7 +203,7 @@ impl<T: Clone + Default> Paint for ImageBasedAnnotation<T> {
                     egui::ImageData::Color(color_image),
                     Default::default(),
                 );
-                self.mosaic_texture_handle = Some(texture_handle.clone());
+                self.texture_handle = Some(texture_handle.clone());
                 let texture_id = texture_handle.id();
                 painter.image(
                     texture_id,
@@ -153,7 +216,7 @@ impl<T: Clone + Default> Paint for ImageBasedAnnotation<T> {
     }
 }
 
-impl<T: Clone + Default> StrokeWidthSupport for ImageBasedAnnotation<T> {
+impl<T: Clone + Default, H: ImageHandler> StrokeWidthSupport for ImageBasedAnnotation<T, H> {
     fn supports_get_stroke_width(&self) -> bool {
         false
     }
@@ -171,7 +234,7 @@ impl<T: Clone + Default> StrokeWidthSupport for ImageBasedAnnotation<T> {
     }
 }
 
-impl<T: Clone + Default> StrokeColorSupport for ImageBasedAnnotation<T> {
+impl<T: Clone + Default, H: ImageHandler> StrokeColorSupport for ImageBasedAnnotation<T, H> {
     fn supports_get_stroke_color(&self) -> bool {
         false
     }
@@ -189,7 +252,7 @@ impl<T: Clone + Default> StrokeColorSupport for ImageBasedAnnotation<T> {
     }
 }
 
-impl<T: Clone + Default> StrokeTypeSupport for ImageBasedAnnotation<T> {
+impl<T: Clone + Default, H: ImageHandler> StrokeTypeSupport for ImageBasedAnnotation<T, H> {
     fn supports_get_stroke_type(&self) -> bool {
         false
     }
@@ -207,7 +270,7 @@ impl<T: Clone + Default> StrokeTypeSupport for ImageBasedAnnotation<T> {
     }
 }
 
-impl<T: Clone + Default> FillColorSupport for ImageBasedAnnotation<T> {
+impl<T: Clone + Default, H: ImageHandler> FillColorSupport for ImageBasedAnnotation<T, H> {
     fn supports_get_fill_color(&self) -> bool {
         false
     }
@@ -225,7 +288,7 @@ impl<T: Clone + Default> FillColorSupport for ImageBasedAnnotation<T> {
     }
 }
 
-impl<T: Clone + Default> AnnotationCommon for ImageBasedAnnotation<T> {
+impl<T: Clone + Default, H: ImageHandler> AnnotationCommon for ImageBasedAnnotation<T, H> {
     fn activation(&self) -> &ActivationSupport {
         &self.activation
     }
@@ -241,8 +304,8 @@ pub struct MosaicStyle {}
 #[derive(Default, Clone)]
 pub struct BlurStyle {}
 
-pub type MosaicAnnotation = ImageBasedAnnotation<MosaicStyle>;
-pub type BlurAnnotation = ImageBasedAnnotation<BlurStyle>;
+pub type MosaicAnnotation = ImageBasedAnnotation<MosaicStyle, MosaicHandler>;
+pub type BlurAnnotation = ImageBasedAnnotation<BlurStyle, BlurHandler>;
 
 #[derive(Default)]
 pub struct ImageBasedToolState<S>
@@ -255,12 +318,13 @@ where
     drag_start_pos: Option<Pos2>,
 }
 
-pub struct ImageBasedTool<S: Default + Clone> {
+pub struct ImageBasedTool<S: Default + Clone, H: ImageHandler> {
     annotator_state: Weak<RefCell<AnnotatorState>>,
     tool_state: ImageBasedToolState<S>,
     background_image_provider: Box<dyn BackgroundImageProvider>,
     background_image_receiver: Option<Receiver<Arc<RgbaImage>>>,
     background_image: Option<Arc<RgbaImage>>,
+    image_handler: Rc<H>,
 }
 
 pub trait BackgroundImageProvider {
@@ -271,10 +335,11 @@ pub trait BackgroundImageProvider {
     ) -> Receiver<Arc<RgbaImage>>;
 }
 
-impl<S: Default + Clone> ImageBasedTool<S> {
+impl<S: Default + Clone, H: ImageHandler> ImageBasedTool<S, H> {
     pub fn new(
         annotator_state: Weak<RefCell<AnnotatorState>>,
         background_image_provider: Box<dyn BackgroundImageProvider>,
+        image_handler: Rc<H>,
     ) -> Self {
         Self {
             annotator_state,
@@ -282,11 +347,12 @@ impl<S: Default + Clone> ImageBasedTool<S> {
             background_image_provider,
             background_image_receiver: None,
             background_image: None,
+            image_handler,
         }
     }
 }
 
-pub type MosaicTool = ImageBasedTool<MosaicStyle>;
+pub type MosaicTool = ImageBasedTool<MosaicStyle, MosaicHandler>;
 
 impl Into<Annotation> for MosaicAnnotation {
     fn into(self) -> Annotation {
@@ -323,7 +389,8 @@ impl Widget for &mut MosaicTool {
             let drag_started_pos = self.tool_state.drag_start_pos.unwrap();
             let rect = Rect::from_two_pos(drag_started_pos, pointer_pos);
             if let Some(background_image) = self.background_image.clone() {
-                let mut annotation = MosaicAnnotation::new(rect, background_image);
+                let mut annotation =
+                    MosaicAnnotation::new(rect, background_image, self.image_handler.clone());
                 annotation.paint_with(ui.painter());
             } else {
                 let background_image_receiver = self.background_image_receiver.take();
@@ -332,7 +399,11 @@ impl Widget for &mut MosaicTool {
                     match background_image {
                         Ok(background_image) => {
                             self.background_image = Some(background_image.clone());
-                            let mut annotation = MosaicAnnotation::new(rect, background_image);
+                            let mut annotation = MosaicAnnotation::new(
+                                rect,
+                                background_image,
+                                self.image_handler.clone(),
+                            );
                             annotation.paint_with(ui.painter());
                         }
                         Err(oneshot::TryRecvError::Empty(rx)) => {
@@ -352,7 +423,8 @@ impl Widget for &mut MosaicTool {
             let rect = Rect::from_two_pos(drag_started_pos, pointer_pos);
 
             if let Some(background_image) = self.background_image.clone() {
-                let annotation = MosaicAnnotation::new(rect, background_image);
+                let annotation =
+                    MosaicAnnotation::new(rect, background_image, self.image_handler.clone());
                 self.annotator_state
                     .upgrade()
                     .unwrap()
@@ -366,7 +438,11 @@ impl Widget for &mut MosaicTool {
                     match background_image {
                         Ok(background_image) => {
                             self.background_image = Some(background_image.clone());
-                            let annotation = MosaicAnnotation::new(rect, background_image);
+                            let annotation = MosaicAnnotation::new(
+                                rect,
+                                background_image,
+                                self.image_handler.clone(),
+                            );
                             self.annotator_state
                                 .upgrade()
                                 .unwrap()
