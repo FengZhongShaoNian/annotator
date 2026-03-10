@@ -1,6 +1,6 @@
 use crate::annotator::{ActivationSupport, Annotation, AnnotationCommon, AnnotatorState, FillColorSupport, Paint, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport};
-use crate::dpi::{LogicalBounds, LogicalSize, PhysicalBounds};
-use egui::{pos2, Color32, ColorImage, CursorIcon, Frame, Image, ImageSource, Painter, Pos2, Rect, Response, Sense, TextureHandle, Ui, Widget};
+use crate::dpi::{LogicalBounds, LogicalSize, PhysicalBounds, PhysicalSize};
+use egui::{pos2, vec2, Color32, ColorImage, CursorIcon, Frame, Image, ImageSource, Painter, Pos2, Rect, Response, Sense, TextureHandle, Ui, Widget};
 use image::GenericImageView;
 use image::{Rgba, RgbaImage};
 use std::cell::RefCell;
@@ -68,17 +68,17 @@ fn mosaic(image: &RgbaImage, bounds: PhysicalBounds<u32>, block_size: u32) -> Re
 pub struct ImageBasedAnnotation<T: Default + Clone> {
     _style: T,
     rect: Rect,
-    background_image: Arc<RgbaImage>,
+    source_image: Rc<RgbaImage>,
     mosaic_texture_handle: Option<TextureHandle>,
     activation: ActivationSupport
 }
 
 impl<T: Clone + Default> ImageBasedAnnotation<T> {
-    pub fn new(rect: Rect, background_image: Arc<RgbaImage>) -> Self {
+    pub fn new(rect: Rect, background_image: Rc<RgbaImage>) -> Self {
         Self {
             _style: Default::default(),
             rect,
-            background_image,
+            source_image: background_image,
             mosaic_texture_handle: None,
             activation: ActivationSupport::NotSupported,
         }
@@ -103,7 +103,7 @@ impl<T: Clone + Default> Paint for ImageBasedAnnotation<T> {
             let texture_id = texture_handle.id();
             painter.image(texture_id, self.rect, Rect::from_two_pos(pos2(0., 0.), pos2(1., 1.)), Color32::WHITE);
         }else {
-            if let Ok(mosaic_image) = mosaic(&*self.background_image, physical_bounds, 10) {
+            if let Ok(mosaic_image) = mosaic(&*self.source_image, physical_bounds, 10) {
                 let color_image = Arc::new(ColorImage::from_rgba_premultiplied(
                     [mosaic_image.width() as usize, mosaic_image.height() as usize],
                     mosaic_image.as_raw(),
@@ -226,7 +226,8 @@ where
 pub struct ImageBasedTool<S: Default + Clone> {
     annotator_state: Weak<RefCell<AnnotatorState>>,
     tool_state: ImageBasedToolState<S>,
-    gpu_context: GpuContext
+    gpu_context: GpuContext,
+    source_image: Option<Rc<RgbaImage>>
 }
 
 impl<S: Default + Clone> ImageBasedTool<S> {
@@ -234,7 +235,8 @@ impl<S: Default + Clone> ImageBasedTool<S> {
         Self {
             annotator_state,
             tool_state: Default::default(),
-            gpu_context
+            gpu_context,
+            source_image: None
         }
     }
 }
@@ -264,7 +266,7 @@ impl Widget for &mut MosaicTool {
 
             let virtual_screen_size = LogicalSize::new(sense_area.width(), sense_area.height()).cast();
             let annotator_state = self.annotator_state.upgrade().unwrap();
-            let texture_handle = Rc::new(annotator_state.borrow().background_texture_handle.clone().unwrap());
+            let image = annotator_state.borrow().background_image.clone();
             let annotations = annotator_state.borrow().annotations_stack.clone();
             let image = render_egui_to_image(&self.gpu_context, virtual_screen_size, ui.ctx().pixels_per_point(), Box::new(move |input,context|{
                 let mut annotaions = annotations;
@@ -272,10 +274,34 @@ impl Widget for &mut MosaicTool {
                     egui::CentralPanel::default()
                         .frame(Frame::new())
                         .show(ctx, |ui| {
-                            // let bg_image = Image::new(ImageSource::Texture(SizedTexture::from_handle(
-                            //     &texture_handle.clone(),
-                            // )));
-                            // bg_image.paint_at(ui, Rect::from_min_size(pos2(0., 0.), ui.available_size()));
+
+                            // 创建 ColorImage
+                            // 注意：RgbaImage 的 bytes 应该是连续的 RGBA 数据
+                            let background_image = Arc::new(ColorImage::from_rgba_premultiplied(
+                                [image.width() as usize, image.height() as usize],
+                                image.as_raw(),
+                            ));
+                            // Load the texture only once.
+                            let texture_handle = ctx.load_texture(
+                                "background-image",
+                                egui::ImageData::Color(background_image),
+                                Default::default(),
+                            );
+
+                            let bg_image = Image::new(ImageSource::Texture(SizedTexture::from_handle(
+                                &texture_handle,
+                            )));
+
+                            let frame_size = PhysicalSize::new(image.width(), image.height())
+                                .to_logical(ctx.pixels_per_point() as f64);
+
+                            bg_image.paint_at(
+                                ui,
+                                Rect::from_min_size(
+                                    pos2(0., 0.),
+                                    vec2(frame_size.width, frame_size.height),
+                                ),
+                            );
 
                             annotaions
                                 .iter_mut()
@@ -285,16 +311,14 @@ impl Widget for &mut MosaicTool {
                         });
                 })
             }));
-            // image.save("/home/one/Pictures/saved-image.png").unwrap();
+            self.source_image = Some(Rc::new(image));
         }
 
         if response.dragged() {
             // 拖动中
             let drag_started_pos = self.tool_state.drag_start_pos.unwrap();
             let rect = Rect::from_two_pos(drag_started_pos, pointer_pos);
-            let annotator_state = self.annotator_state.upgrade().unwrap();
-            let background_image = annotator_state.borrow().background_image.clone();
-            let mut annotation = MosaicAnnotation::new(rect, background_image);
+            let mut annotation = MosaicAnnotation::new(rect, self.source_image.as_ref().unwrap().clone());
             annotation.paint_with(ui.painter());
         }
 
@@ -302,9 +326,7 @@ impl Widget for &mut MosaicTool {
             // 拖动结束
             let drag_started_pos = self.tool_state.drag_start_pos.unwrap();
             let rect = Rect::from_two_pos(drag_started_pos, pointer_pos);
-            let annotator_state = self.annotator_state.upgrade().unwrap();
-            let background_image = annotator_state.borrow().background_image.clone();
-            let annotation = MosaicAnnotation::new(rect, background_image);
+            let annotation = MosaicAnnotation::new(rect, self.source_image.as_ref().unwrap().clone());
             self.annotator_state
                 .upgrade()
                 .unwrap()

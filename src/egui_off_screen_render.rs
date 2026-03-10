@@ -9,7 +9,7 @@ use egui_wgpu::wgpu::{
     TextureDimension, TextureFormat, TextureUsages,
 };
 use egui_wgpu::RendererOptions;
-use image::{ImageBuffer, Rgba};
+use image::{ImageBuffer, Rgba, RgbaImage};
 use std::sync::oneshot;
 use std::thread::spawn;
 
@@ -19,7 +19,7 @@ pub fn render_egui_to_image(
     virtual_screen_size: LogicalSize<u32>,
     pixels_per_point: f32,
     build_ui: BuildUI,
-) /*-> ImageBuffer<Rgba<u8>, BufferView>*/ {
+) -> RgbaImage {
     let device = gpu_context.device.clone();
     let physical_size = virtual_screen_size.to_physical(pixels_per_point as f64);
     let texture_size = Extent3d {
@@ -178,14 +178,14 @@ pub fn render_egui_to_image(
                 pixels_rgba.extend_from_slice(&[chunk[2], chunk[1], chunk[0], chunk[3]]);
             }
 
-            let image_buffer = ImageBuffer::<Rgba<u8>, _>::from_raw(
+            let rgba_image = ImageBuffer::<Rgba<u8>, _>::from_raw(
                 texture_size.width,
                 texture_size.height,
                 pixels_rgba,
             )
                 .unwrap();
 
-            image_buffer.save("/home/one/Pictures/image.png").unwrap();
+            rgba_image
         } else {
             panic!("从 GPU 读取数据失败！");
         }
