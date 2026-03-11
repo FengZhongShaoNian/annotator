@@ -1,8 +1,6 @@
 use crate::annotator::cursor::{Circle, Crosshair};
-use crate::annotator::rectangle_based::{EllipseTool, HitTarget, HitTest, RectangleTool};
-use crate::annotator::{ActivationState, ActivationSupport, Annotation, AnnotationStyle, AnnotationToolCommon, WheelHandler, AnnotatorState, DEFAULT_SIZE_FOR_SMALL_RECT, FillColorSupport, PainterExt, SharedAnnotatorState, SmallRect, StackTopAccessor, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport, dash_len_for_dashed_line, gap_len_for_dashed_line, radius_for_dotted_line, spacing_for_dotted_line, Paint, AnnotationActivationSupport};
-use crate::{impl_stack_top_access_for, impl_stroke_width_handler_for};
-use egui::{Color32, CursorIcon, Pos2, Rect, Response, Sense, Shape, Stroke, Ui, Widget, vec2, pos2, Painter};
+use crate::annotator::{ActivationSupport, Annotation, AnnotationActivationSupport, AnnotationStyle, AnnotationToolCommon, AnnotatorState, FillColorSupport, SharedAnnotatorState, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport, WheelHandler};
+use egui::{pos2, Color32, CursorIcon, Pos2, Rect, Response, Sense, Stroke, Ui, Widget};
 use std::cell::RefCell;
 use std::rc::Weak;
 
@@ -335,11 +333,11 @@ impl Into<Annotation> for MarkerPenAnnotation {
     }
 }
 
-impl<S> Paint for FreeLineBasedAnnotation<S>
+impl<S> Widget for &mut FreeLineBasedAnnotation<S>
 where
     S: AnnotationStyle, 
 {
-    fn paint_with(&mut self, painter: &Painter) {
+    fn ui(self, ui: &mut Ui) -> Response {
         let mut left = None;
         let mut top = None;
         let mut right = None;
@@ -377,8 +375,11 @@ where
                 bottom = Some(point.y);
             }
         }
-
+        let rect = Rect::from_two_pos(pos2(left.unwrap(), top.unwrap()), pos2(right.unwrap(), bottom.unwrap()));
+        let response = ui.allocate_rect(rect, Sense::hover());
+        let painter = ui.painter();
         painter.line(self.points.clone(), Stroke::new(self.style.stroke_width(), self.style.stroke_color()));
+        response
     }
 }
 
@@ -632,7 +633,7 @@ impl Widget for &mut $tool  {
             // 拖动中
             if let Some(annotation) = self.tool_state.current_annotation.as_mut() {
                 annotation.points.push(pointer_pos);
-                annotation.paint_with(ui.painter());
+                ui.add(annotation);
             }
         }
 

@@ -1,5 +1,5 @@
 use crate::annotator::cursor::Crosshair;
-use crate::annotator::{ActivationState, ActivationSupport, Annotation, AnnotationActivationSupport, AnnotationStyle, AnnotationToolCommon, AnnotatorState, FillColorSupport, Paint, PainterExt, SharedAnnotatorState, StackTopAccessor, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport, WheelHandler};
+use crate::annotator::{ActivationState, ActivationSupport, Annotation, AnnotationActivationSupport, AnnotationStyle, AnnotationToolCommon, AnnotatorState, FillColorSupport, PainterExt, SharedAnnotatorState, StackTopAccessor, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport, WheelHandler};
 use crate::{impl_stack_top_access_for, impl_stroke_width_handler_for};
 use egui::epaint::EllipseShape;
 use egui::{pos2, vec2, Color32, CursorIcon, Painter, Pos2, Rect, Response, Sense, Stroke, StrokeKind, Ui, Widget};
@@ -339,8 +339,10 @@ impl Into<Annotation> for EllipseAnnotation {
     }
 }
 
-impl Paint for RectangleAnnotation {
-    fn paint_with(&mut self, painter: &Painter) {
+impl Widget for &mut RectangleAnnotation {
+    fn ui(self, ui: &mut Ui) -> Response {
+        let response = ui.allocate_rect(self.rect, Sense::hover());
+        let painter = ui.painter();
         if let Some(fill_color) = self.style.fill_color {
             painter.rectangle(
                 &self.rect,
@@ -362,11 +364,15 @@ impl Paint for RectangleAnnotation {
         if self.activation.is_active() {
             painter.small_rects(&self.rect);
         }
+
+        response
     }
 }
 
-impl Paint for EllipseAnnotation {
-    fn paint_with(&mut self, painter: &Painter) {
+impl Widget for &mut EllipseAnnotation {
+    fn ui(self, ui: &mut Ui) -> Response {
+        let response = ui.allocate_rect(self.rect, Sense::hover());
+        let painter = ui.painter();
         let fill = if let Some(fill_color) = self.style.fill_color {
             fill_color
         } else {
@@ -386,6 +392,7 @@ impl Paint for EllipseAnnotation {
             // 绘制虚线矩形框以及外框上的各个角以及边上的小矩形
             painter.small_rects(&self.rect);
         }
+        response
     }
 }
 
@@ -780,14 +787,14 @@ macro_rules! impl_widget_for {
                                 annotation.rect = Rect::from_two_pos(drag_started_pos, pointer_pos);
                             }
                         }
-                        annotation.paint_with(ui.painter());
+                        ui.add(annotation);
                     } else {
                         let drag_started_pos = ui.ctx().input(|i| i.pointer.press_origin()).unwrap();
                         let rect = Rect::from_two_pos(drag_started_pos, pointer_pos);
                         let mut annotation = <$annotation>::new(rect, self.tool_state.style, ActivationSupport::Supported(ActivationState::new(true)));
                         self.tool_state.current_annotation = Some(annotation.clone());
                         self.tool_state.drag_action = DragAction::None;
-                        annotation.paint_with(ui.painter());
+                        ui.add(&mut annotation);
                     }
                 }
 

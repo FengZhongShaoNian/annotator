@@ -1,10 +1,10 @@
-use crate::annotator::{ActivationSupport, Annotation, AnnotationActivationSupport, AnnotatorState, FillColorSupport, Paint, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport};
+use crate::annotator::{ActivationSupport, Annotation, AnnotationActivationSupport, AnnotatorState, FillColorSupport, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport};
 use crate::dpi::{LogicalBounds, PhysicalBounds, PhysicalSize};
 use crate::egui_off_screen_render::EguiOffScreenRender;
 use crate::{declare_not_support_fill_color, declare_not_support_stroke_color, declare_not_support_stroke_type, declare_not_support_stroke_width};
 use egui::load::SizedTexture;
 use egui::{
-    pos2, vec2, Color32, ColorImage, CursorIcon, Frame, Image, ImageSource, Painter, Pos2,
+    pos2, vec2, Color32, ColorImage, CursorIcon, Frame, Image, ImageSource, Pos2,
     Rect, Response, Sense, TextureHandle, Ui, Widget,
 };
 use image::{GenericImageView, ImageError};
@@ -182,23 +182,26 @@ impl<T: Clone + Default, H: ImageHandler> ImageBasedAnnotation<T, H> {
 
 static TEXTURE_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
-impl<T: Clone + Default, H: ImageHandler> Paint for ImageBasedAnnotation<T, H> {
-    fn paint_with(&mut self, painter: &Painter) {
-        let scale_factor = painter.ctx().pixels_per_point();
+impl<T: Clone + Default, H: ImageHandler> Widget for &mut ImageBasedAnnotation<T, H> {
+    fn ui(self, ui: &mut Ui) -> Response {
+        let response = ui.allocate_rect(self.rect, Sense::hover());
+        let scale_factor = ui.ctx().pixels_per_point();
         let logical_bounds = LogicalBounds::new(
             self.rect.min.x,
             self.rect.min.y,
             self.rect.width(),
             self.rect.height(),
         );
+        
         let physical_bounds: PhysicalBounds<u32> = logical_bounds.to_physical(scale_factor as f64);
 
         let block_size = 10;
 
         if physical_bounds.size.width < block_size || physical_bounds.size.height < block_size {
-            return;
+            return response;
         }
-
+        
+        let painter = ui.painter();
         if let Some(texture_handle) = self.texture_handle.clone() {
             let texture_id = texture_handle.id();
             painter.image(
@@ -235,6 +238,7 @@ impl<T: Clone + Default, H: ImageHandler> Paint for ImageBasedAnnotation<T, H> {
                 );
             }
         }
+        response
     }
 }
 
@@ -373,7 +377,7 @@ impl Widget for &mut $tool {
             if let Some(background_image) = self.background_image.clone() {
                 let mut annotation =
                     <$annotation>::new(rect, background_image, self.image_handler.clone());
-                annotation.paint_with(ui.painter());
+                ui.add(&mut annotation);
             } else {
                 let background_image_receiver = self.background_image_receiver.take();
                 if let Some(background_image_receiver) = background_image_receiver {
@@ -386,7 +390,7 @@ impl Widget for &mut $tool {
                                 background_image,
                                 self.image_handler.clone(),
                             );
-                            annotation.paint_with(ui.painter());
+                            ui.add(&mut annotation);
                         }
                         Err(oneshot::TryRecvError::Empty(rx)) => {
                             self.background_image_receiver = Some(rx);
@@ -542,7 +546,7 @@ impl BackgroundImageProvider for BackgroundImageWithAnnotationsProvider {
                             );
 
                             annotaions.iter_mut().for_each(|annotation| {
-                                annotation.paint_with(ui.painter());
+                                ui.add(annotation);
                             });
                         });
                 })

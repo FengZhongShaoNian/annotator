@@ -1,4 +1,4 @@
-use crate::annotator::{AnnotatorState, Paint};
+use crate::annotator::{AnnotatorState};
 use crate::annotator::{
     FillColorSupport, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport,
 };
@@ -87,8 +87,8 @@ impl TextAnnotation {
     }
 }
 
-impl Paint for TextAnnotation {
-    fn paint_with(&mut self, painter: &Painter) {
+impl Widget for &mut TextAnnotation {
+    fn ui(self, ui: &mut Ui) -> Response {
         todo!()
     }
 }

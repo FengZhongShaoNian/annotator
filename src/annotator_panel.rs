@@ -5,8 +5,9 @@ use crate::annotator::image_based::{
 };
 use crate::annotator::rectangle_based::{EllipseTool, RectangleTool};
 use crate::annotator::straight_line_based::{ArrowTool, StraightLineTool};
+use crate::annotator::text::TextTool;
 use crate::annotator::{
-    AnnotationTool, AnnotatorState, Paint, SharedAnnotatorState, SharedAnnotatorStateUtil, ToolName,
+    AnnotationTool, AnnotatorState, SharedAnnotatorState, SharedAnnotatorStateUtil, ToolName,
 };
 use crate::application::Application;
 use crate::dpi::{LogicalPosition, PhysicalSize};
@@ -15,12 +16,11 @@ use crate::global::{ReadGlobalMut, ReadOrInsertGlobal};
 use crate::view::ViewId;
 use crate::window::AppWindow;
 use egui::load::SizedTexture;
-use egui::{pos2, vec2, ColorImage, Frame, Image, ImageSource, Rect};
+use egui::{Area, ColorImage, Frame, Image, ImageSource, Rect, pos2, vec2};
 use image::RgbaImage;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
-use crate::annotator::text::TextTool;
 
 pub fn create_annotator_panel(
     view_id: ViewId,
@@ -184,13 +184,17 @@ pub fn create_annotator_panel(
                             .annotations_stack
                             .iter_mut()
                             .for_each(|annotation| {
-                                annotation.paint_with(ui.painter());
+                                ui.add(annotation);
                             });
 
                         if annotator_state.borrow().current_annotation_tool.is_some() {
-                            annotator_state.with_current_annotation_tool(|tool| {
-                                ui.add(tool);
-                            })
+                            Area::new("annotation_tool_area".into())
+                                .fixed_pos(pos2(0., 0.))
+                                .show(ctx, |ui| {
+                                annotator_state.with_current_annotation_tool(|tool| {
+                                    ui.add(tool);
+                                })
+                            });
                         }
                     });
             })

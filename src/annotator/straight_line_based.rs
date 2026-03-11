@@ -1,6 +1,6 @@
 use crate::annotator::cursor::Crosshair;
 use crate::annotator::rectangle_based::{EllipseTool, HitTarget, HitTest, RectangleTool};
-use crate::annotator::{ActivationState, ActivationSupport, Annotation, AnnotationStyle, AnnotationToolCommon, WheelHandler, AnnotatorState, DEFAULT_SIZE_FOR_SMALL_RECT, FillColorSupport, PainterExt, SharedAnnotatorState, SmallRect, StackTopAccessor, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport, dash_len_for_dashed_line, gap_len_for_dashed_line, radius_for_dotted_line, spacing_for_dotted_line, Paint, AnnotationActivationSupport};
+use crate::annotator::{ActivationState, ActivationSupport, Annotation, AnnotationStyle, AnnotationToolCommon, WheelHandler, AnnotatorState, DEFAULT_SIZE_FOR_SMALL_RECT, FillColorSupport, PainterExt, SharedAnnotatorState, SmallRect, StackTopAccessor, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport, dash_len_for_dashed_line, gap_len_for_dashed_line, radius_for_dotted_line, spacing_for_dotted_line, AnnotationActivationSupport};
 use crate::{impl_stack_top_access_for, impl_stroke_width_handler_for};
 use egui::{Color32, CursorIcon, Pos2, Rect, Response, Sense, Shape, Stroke, Ui, Widget, vec2, Painter};
 use std::cell::RefCell;
@@ -362,8 +362,11 @@ impl Into<Annotation> for ArrowAnnotation {
     }
 }
 
-impl Paint for StraightLineAnnotation {
-    fn paint_with(&mut self, painter: &Painter) {
+impl Widget for &mut StraightLineAnnotation {
+    fn ui(self, ui: &mut Ui) -> Response {
+        let rect = Rect::from_two_pos(self.start_position, self.end_position);
+        let response = ui.allocate_rect(rect, Sense::hover());
+        let painter = ui.painter();
         match self.stroke_type() {
             StrokeType::SolidLine => {
                 painter.line_segment([self.start_position, self.end_position], self.style.stroke);
@@ -396,11 +399,15 @@ impl Paint for StraightLineAnnotation {
             painter.small_rect(&self.start_position);
             painter.small_rect(&self.end_position);
         }
+        response
     }
 }
 
-impl Paint for ArrowAnnotation {
-    fn paint_with(&mut self, painter: &Painter) {
+impl Widget for &mut ArrowAnnotation {
+    fn ui(self, ui: &mut Ui) -> Response {
+        let rect = Rect::from_two_pos(self.start_position, self.end_position);
+        let response = ui.allocate_rect(rect, Sense::hover());
+        let painter = ui.painter();
         painter.simple_arrow(
             self.start_position,
             vec2(
@@ -410,11 +417,12 @@ impl Paint for ArrowAnnotation {
             self.style.stroke,
         );
 
-        
+
         if self.activation().is_active() {
             painter.small_rect(&self.start_position);
             painter.small_rect(&self.end_position);
         }
+        response
     }
 }
 
@@ -799,7 +807,7 @@ impl Widget for &mut $tool {
                         annotation.end_position = pointer_pos;
                     }
                 }
-                annotation.paint_with(ui.painter());
+                ui.add(annotation);
             } else {
                 let drag_started_pos = ui.ctx().input(|i| i.pointer.press_origin()).unwrap();
                 let mut annotation = <$annotation>::new(
@@ -810,7 +818,7 @@ impl Widget for &mut $tool {
                 );
                 self.tool_state.current_annotation = Some(annotation.clone());
                 self.tool_state.drag_action = DragAction::None;
-                annotation.paint_with(ui.painter());
+                ui.add(&mut annotation);
             }
         }
 

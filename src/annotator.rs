@@ -271,10 +271,6 @@ pub trait AnnotationStyle:
 {
 }
 
-pub trait Paint {
-    fn paint_with(&mut self, painter: &Painter);
-}
-
 pub trait AnnotationActivationSupport {
     fn activation(&self) -> &ActivationSupport;
     fn activation_mut(&mut self) -> &mut ActivationSupport;
@@ -466,8 +462,8 @@ impl FillColorSupport for Annotation {
 }
 
 #[delegate_impl]
-impl Paint for Annotation {
-    fn paint_with(&mut self, painter: &Painter);
+impl Widget for &mut Annotation {
+    fn ui(self, ui: &mut Ui) -> Response;
 }
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
