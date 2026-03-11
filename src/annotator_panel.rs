@@ -20,6 +20,7 @@ use image::RgbaImage;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
+use crate::annotator::text::TextTool;
 
 pub fn create_annotator_panel(
     view_id: ViewId,
@@ -100,6 +101,7 @@ pub fn create_annotator_panel(
                         Box::new(OriginalBackgroundImageProvider::new()),
                         Rc::new(ExtractHandler::new()),
                     );
+                    let text_tool = TextTool::new(Rc::downgrade(&annotator_state_rc));
 
                     annotator_state_rc.borrow_mut().annotation_tools.insert(
                         ToolName::Rectangle,
@@ -137,6 +139,10 @@ pub fn create_annotator_panel(
                         .borrow_mut()
                         .annotation_tools
                         .insert(ToolName::Eraser, AnnotationTool::Eraser(eraser_tool));
+                    annotator_state_rc
+                        .borrow_mut()
+                        .annotation_tools
+                        .insert(ToolName::Text, AnnotationTool::Text(text_tool));
 
                     annotator_state_rc
                 });
@@ -186,16 +192,6 @@ pub fn create_annotator_panel(
                                 ui.add(tool);
                             })
                         }
-
-                        // Area::new(Id::from("text_edit")).movable(true).current_pos(annotator_state.pos).show(ctx, |ui| {
-                        //     let response = ui.add(TextEdit::multiline(&mut annotator_state.editing_text)
-                        //         .background_color(Color32::TRANSPARENT));
-                        //     let vec = response.drag_motion();
-                        //     annotator_state.pos.x += vec.x;
-                        //     annotator_state.pos.y += vec.y;
-                        // });
-                        //
-                        // ui.painter().clip_rect()
                     });
             })
         }),

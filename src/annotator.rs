@@ -35,6 +35,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 use delegate::delegate;
+use crate::annotator::text::TextTool;
 
 /// 线条类型（实线、虚线、点线）
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
@@ -535,8 +536,8 @@ pub enum AnnotationTool {
     /// 模糊
     Blur(BlurTool),
 
-    // /// 文本
-    // Text,
+    /// 文本
+    Text(TextTool),
     //
     // /// 序号
     // SerialNumber,
@@ -558,9 +559,9 @@ impl AnnotationTool {
             AnnotationTool::MarkerPen(_) => ToolName::MarkerPen,
             AnnotationTool::Mosaic(_) => ToolName::Mosaic,
             AnnotationTool::Blur(_) => ToolName::Blur,
-            // AnnotationTool::Text => ToolName::Text,
-            // AnnotationTool::SerialNumber => ToolName::SerialNumber,
-            // AnnotationTool::Watermark => ToolName::Watermark,
+            AnnotationTool::Text(_) => ToolName::Text,
+            // AnnotationTool::SerialNumber(_) => ToolName::SerialNumber,
+            // AnnotationTool::Watermark(_) => ToolName::Watermark,
             AnnotationTool::Eraser(_) => ToolName::Eraser,
         }
     }
@@ -607,29 +608,9 @@ impl AnnotationToolCommon for AnnotationTool {
     }
 }
 
+#[delegate_impl]
 impl Widget for &mut AnnotationTool {
-    fn ui(self, ui: &mut Ui) -> Response {
-        match self {
-            AnnotationTool::Rectangle(rectangle_tool) => rectangle_tool.ui(ui),
-            AnnotationTool::Ellipse(ellipse_tool) => ellipse_tool.ui(ui),
-            AnnotationTool::StraightLine(straight_line_tool) => straight_line_tool.ui(ui),
-            AnnotationTool::Arrow(arrow_tool) => arrow_tool.ui(ui),
-            AnnotationTool::Pencil(tool) => tool.ui(ui),
-            AnnotationTool::MarkerPen(tool) => tool.ui(ui),
-            AnnotationTool::Mosaic(tool) => tool.ui(ui),
-            AnnotationTool::Blur(tool) => tool.ui(ui),
-            // AnnotationTool::Text => {
-            //     todo!("Text")
-            // }
-            // AnnotationTool::SerialNumber => {
-            //     todo!("Serial Number")
-            // }
-            // AnnotationTool::Watermark => {
-            //     todo!("Watermark")
-            // }
-            AnnotationTool::Eraser(tool) => tool.ui(ui),
-        }
-    }
+    fn ui(self, ui: &mut Ui) -> Response;
 }
 
 /// 当前标注状态
