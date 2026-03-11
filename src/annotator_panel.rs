@@ -162,14 +162,16 @@ pub fn create_annotator_panel(
                             &texture_handle,
                         )));
 
-                        let frame_size = PhysicalSize::new(image_width, image_height)
+                        let logical_size = PhysicalSize::new(image_width, image_height)
                             .to_logical(ctx.pixels_per_point() as f64);
+
+                        let panel_size = vec2(logical_size.width, logical_size.height);
 
                         bg_image.paint_at(
                             ui,
                             Rect::from_min_size(
                                 pos2(0., 0.),
-                                vec2(frame_size.width, frame_size.height),
+                                panel_size,
                             ),
                         );
 
@@ -190,6 +192,7 @@ pub fn create_annotator_panel(
                         if annotator_state.borrow().current_annotation_tool.is_some() {
                             Area::new("annotation_tool_area".into())
                                 .fixed_pos(pos2(0., 0.))
+                                .default_size(panel_size)
                                 .show(ctx, |ui| {
                                 annotator_state.with_current_annotation_tool(|tool| {
                                     ui.add(tool);

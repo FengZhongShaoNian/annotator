@@ -1,11 +1,17 @@
-use crate::annotator::{ActivationSupport, Annotation, AnnotationActivationSupport, AnnotatorState, FillColorSupport, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport};
+use crate::annotator::{
+    ActivationSupport, Annotation, AnnotationActivationSupport, AnnotatorState, FillColorSupport,
+    StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport,
+};
 use crate::dpi::{LogicalBounds, PhysicalBounds, PhysicalSize};
 use crate::egui_off_screen_render::EguiOffScreenRender;
-use crate::{declare_not_support_fill_color, declare_not_support_stroke_color, declare_not_support_stroke_type, declare_not_support_stroke_width};
+use crate::{
+    declare_not_support_fill_color, declare_not_support_stroke_color,
+    declare_not_support_stroke_type, declare_not_support_stroke_width,
+};
 use egui::load::SizedTexture;
 use egui::{
-    pos2, vec2, Color32, ColorImage, CursorIcon, Frame, Image, ImageSource, Pos2,
-    Rect, Response, Sense, TextureHandle, Ui, Widget,
+    Color32, ColorImage, CursorIcon, Frame, Image, ImageSource, Pos2, Rect, Response, Sense,
+    TextureHandle, Ui, Widget, pos2, vec2,
 };
 use image::{GenericImageView, ImageError};
 use image::{Rgba, RgbaImage};
@@ -17,7 +23,7 @@ use std::default::Default;
 use std::rc::{Rc, Weak};
 use std::sync::atomic::AtomicUsize;
 use std::sync::oneshot::Receiver;
-use std::sync::{oneshot, Arc};
+use std::sync::{Arc, oneshot};
 
 pub trait ImageHandler {
     fn handle(
@@ -182,6 +188,33 @@ impl<T: Clone + Default, H: ImageHandler> ImageBasedAnnotation<T, H> {
 
 static TEXTURE_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
+fn try_correct_bounds(
+    original_bounds: PhysicalBounds<u32>,
+    valid_bounds: PhysicalBounds<u32>,
+) -> Result<PhysicalBounds<u32>, String> {
+    let mut left_x = original_bounds.origin.x;
+    let mut top_y = original_bounds.origin.y;
+    let mut right_x = original_bounds.origin.x + original_bounds.size.width;
+    let mut bottom_y = original_bounds.origin.y + original_bounds.size.height;
+    if original_bounds.size.width <= 0 || original_bounds.size.height <= 0 {
+        return Err(String::from("Invalid bounds"));
+    }
+    if left_x < valid_bounds.origin.x {
+        left_x = original_bounds.origin.x;
+    }
+    if top_y < valid_bounds.origin.y {
+        top_y = original_bounds.origin.y;
+    }
+    if right_x > valid_bounds.origin.x + valid_bounds.size.width {
+        right_x = valid_bounds.origin.x + valid_bounds.size.width;
+    }
+    if bottom_y > valid_bounds.origin.y + valid_bounds.size.height {
+        bottom_y = valid_bounds.origin.y + valid_bounds.size.height;
+    }
+    let result_bounds = PhysicalBounds::new(left_x, top_y, right_x - left_x, bottom_y - top_y);
+    Ok(result_bounds)
+}
+
 impl<T: Clone + Default, H: ImageHandler> Widget for &mut ImageBasedAnnotation<T, H> {
     fn ui(self, ui: &mut Ui) -> Response {
         let response = ui.allocate_rect(self.rect, Sense::hover());
@@ -192,7 +225,6 @@ impl<T: Clone + Default, H: ImageHandler> Widget for &mut ImageBasedAnnotation<T
             self.rect.width(),
             self.rect.height(),
         );
-        
         let physical_bounds: PhysicalBounds<u32> = logical_bounds.to_physical(scale_factor as f64);
 
         let block_size = 10;
@@ -200,7 +232,14 @@ impl<T: Clone + Default, H: ImageHandler> Widget for &mut ImageBasedAnnotation<T
         if physical_bounds.size.width < block_size || physical_bounds.size.height < block_size {
             return response;
         }
-        
+
+        let Ok(physical_bounds) = try_correct_bounds(
+            physical_bounds,
+            PhysicalBounds::new(0, 0, self.source_image.width(), self.source_image.height()),
+        ) else {
+            return response;
+        };
+
         let painter = ui.painter();
         if let Some(texture_handle) = self.texture_handle.clone() {
             let texture_id = texture_handle.id();
@@ -242,7 +281,9 @@ impl<T: Clone + Default, H: ImageHandler> Widget for &mut ImageBasedAnnotation<T
     }
 }
 
-impl<T: Clone + Default, H: ImageHandler> AnnotationActivationSupport for ImageBasedAnnotation<T, H> {
+impl<T: Clone + Default, H: ImageHandler> AnnotationActivationSupport
+    for ImageBasedAnnotation<T, H>
+{
     fn activation(&self) -> &ActivationSupport {
         &self.activation
     }
