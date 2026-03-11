@@ -1,9 +1,7 @@
-use crate::annotator::{
-    ActivationSupport, Annotation, AnnotationCommon, AnnotatorState, FillColorSupport, Paint,
-    StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport,
-};
+use crate::annotator::{ActivationSupport, Annotation, AnnotationActivationSupport, AnnotatorState, FillColorSupport, Paint, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport};
 use crate::dpi::{LogicalBounds, PhysicalBounds, PhysicalSize};
 use crate::egui_off_screen_render::EguiOffScreenRender;
+use crate::{declare_not_support_fill_color, declare_not_support_stroke_color, declare_not_support_stroke_type, declare_not_support_stroke_width};
 use egui::load::SizedTexture;
 use egui::{
     pos2, vec2, Color32, ColorImage, CursorIcon, Frame, Image, ImageSource, Painter, Pos2,
@@ -240,79 +238,7 @@ impl<T: Clone + Default, H: ImageHandler> Paint for ImageBasedAnnotation<T, H> {
     }
 }
 
-impl<T: Clone + Default, H: ImageHandler> StrokeWidthSupport for ImageBasedAnnotation<T, H> {
-    fn supports_get_stroke_width(&self) -> bool {
-        false
-    }
-
-    fn stroke_width(&self) -> f32 {
-        unimplemented!()
-    }
-
-    fn supports_set_stroke_width(&self) -> bool {
-        false
-    }
-
-    fn set_stroke_width(&mut self, _stroke_width: f32) {
-        unimplemented!()
-    }
-}
-
-impl<T: Clone + Default, H: ImageHandler> StrokeColorSupport for ImageBasedAnnotation<T, H> {
-    fn supports_get_stroke_color(&self) -> bool {
-        false
-    }
-
-    fn stroke_color(&self) -> Color32 {
-        unimplemented!()
-    }
-
-    fn supports_set_stroke_color(&self) -> bool {
-        false
-    }
-
-    fn set_stroke_color(&mut self, _color: Color32) {
-        unimplemented!()
-    }
-}
-
-impl<T: Clone + Default, H: ImageHandler> StrokeTypeSupport for ImageBasedAnnotation<T, H> {
-    fn supports_get_stroke_type(&self) -> bool {
-        false
-    }
-
-    fn stroke_type(&self) -> StrokeType {
-        unimplemented!()
-    }
-
-    fn supports_set_stroke_type(&self) -> bool {
-        false
-    }
-
-    fn set_stroke_type(&mut self, _stroke_type: StrokeType) {
-        unimplemented!()
-    }
-}
-
-impl<T: Clone + Default, H: ImageHandler> FillColorSupport for ImageBasedAnnotation<T, H> {
-    fn supports_get_fill_color(&self) -> bool {
-        false
-    }
-
-    fn fill_color(&self) -> Option<Color32> {
-        None
-    }
-
-    fn supports_set_fill_color(&self) -> bool {
-        false
-    }
-
-    fn set_fill_color(&mut self, _color: Color32) {
-        unimplemented!()
-    }
-}
-
-impl<T: Clone + Default, H: ImageHandler> AnnotationCommon for ImageBasedAnnotation<T, H> {
+impl<T: Clone + Default, H: ImageHandler> AnnotationActivationSupport for ImageBasedAnnotation<T, H> {
     fn activation(&self) -> &ActivationSupport {
         &self.activation
     }
@@ -334,6 +260,11 @@ pub struct EraserStyle {}
 pub type MosaicAnnotation = ImageBasedAnnotation<MosaicStyle, MosaicHandler>;
 pub type BlurAnnotation = ImageBasedAnnotation<BlurStyle, BlurHandler>;
 pub type EraserAnnotation = ImageBasedAnnotation<EraserStyle, ExtractHandler>;
+
+declare_not_support_stroke_width!(MosaicAnnotation, BlurAnnotation, EraserAnnotation);
+declare_not_support_stroke_color!(MosaicAnnotation, BlurAnnotation, EraserAnnotation);
+declare_not_support_stroke_type!(MosaicAnnotation, BlurAnnotation, EraserAnnotation);
+declare_not_support_fill_color!(MosaicAnnotation, BlurAnnotation, EraserAnnotation);
 
 #[derive(Default)]
 pub struct ImageBasedToolState<S>
@@ -383,6 +314,11 @@ impl<S: Default + Clone, H: ImageHandler> ImageBasedTool<S, H> {
 pub type MosaicTool = ImageBasedTool<MosaicStyle, MosaicHandler>;
 pub type BlurTool = ImageBasedTool<BlurStyle, BlurHandler>;
 pub type EraserTool = ImageBasedTool<EraserStyle, ExtractHandler>;
+
+declare_not_support_stroke_width!(MosaicTool, BlurTool, EraserTool);
+declare_not_support_stroke_color!(MosaicTool, BlurTool, EraserTool);
+declare_not_support_stroke_type!(MosaicTool, BlurTool, EraserTool);
+declare_not_support_fill_color!(MosaicTool, BlurTool, EraserTool);
 
 impl Into<Annotation> for MosaicAnnotation {
     fn into(self) -> Annotation {

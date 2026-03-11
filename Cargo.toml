@@ -26,3 +26,5 @@ rustc-hash = "2.1.1"
 egui_extras = {version = "0.33.3", features = ["svg"]}
 indexmap = "2.13.0"
 imageproc = "0.26.1"
+spire_enum = "1.0.0"
+delegate = "0.13.5"

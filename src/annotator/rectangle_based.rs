@@ -1,5 +1,5 @@
 use crate::annotator::cursor::Crosshair;
-use crate::annotator::{ActivationState, ActivationSupport, Annotation, AnnotationCommon, AnnotationStyle, AnnotationToolCommon, AnnotatorState, FillColorSupport, Paint, PainterExt, SharedAnnotatorState, StackTopAccessor, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport, WheelHandler};
+use crate::annotator::{ActivationState, ActivationSupport, Annotation, AnnotationActivationSupport, AnnotationStyle, AnnotationToolCommon, AnnotatorState, FillColorSupport, Paint, PainterExt, SharedAnnotatorState, StackTopAccessor, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport, WheelHandler};
 use crate::{impl_stack_top_access_for, impl_stroke_width_handler_for};
 use egui::epaint::EllipseShape;
 use egui::{pos2, vec2, Color32, CursorIcon, Painter, Pos2, Rect, Response, Sense, Stroke, StrokeKind, Ui, Widget};
@@ -311,7 +311,7 @@ where
     }
 }
 
-impl<S> AnnotationCommon for RectangleBasedAnnotation<S>
+impl<S> AnnotationActivationSupport for RectangleBasedAnnotation<S>
 where
     S: AnnotationStyle,
 {

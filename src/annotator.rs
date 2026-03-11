@@ -1,7 +1,5 @@
-pub mod blur;
 mod cursor;
 pub mod drop_down_box;
-pub mod eraser;
 pub mod free_line_based;
 pub mod image_based;
 pub mod rectangle_based;
@@ -20,24 +18,23 @@ use crate::annotator::image_based::{
 use crate::annotator::rectangle_based::{
     EllipseAnnotation, EllipseTool, RectangleAnnotation, RectangleTool,
 };
-use crate::annotator::serial_number::SerialNumberState;
 use crate::annotator::straight_line_based::{
     ArrowAnnotation, ArrowTool, StraightLineAnnotation, StraightLineTool,
 };
-use crate::annotator::text::TextState;
-use crate::annotator::watermark::WaterMarkState;
 use crate::egui_off_screen_render::EguiOffScreenRender;
 use crate::global::Global;
 use crate::view::ViewId;
 use egui::ahash::HashMap;
 use egui::{
-    pos2, Color32, Id, Painter, Pos2, Rect, Response, Shape, Stroke, StrokeKind, TextureHandle, Ui,
-    Vec2, Widget,
+    Color32, Id, Painter, Pos2, Rect, Response, Shape, Stroke, StrokeKind, TextureHandle, Ui, Vec2,
+    Widget, pos2,
 };
 use image::RgbaImage;
+use spire_enum::prelude::{delegate_impl, delegated_enum};
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
+use delegate::delegate;
 
 /// 线条类型（实线、虚线、点线）
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
@@ -98,6 +95,120 @@ pub trait FillColorSupport {
     fn supports_set_fill_color(&self) -> bool;
     /// 设置填充颜色
     fn set_fill_color(&mut self, color: Color32);
+}
+
+#[macro_export]
+macro_rules! declare_not_support_stroke_width {
+    ($($type_name:ty),*) => {
+        $(
+
+            impl StrokeWidthSupport for $type_name {
+                /// 是否支持获取线条宽度
+                fn supports_get_stroke_width(&self) -> bool {
+                    false
+                }
+
+                /// 获取线条宽度
+                fn stroke_width(&self) -> f32 {
+                    unimplemented!()
+                }
+
+                /// 是否支持设置线条宽度
+                fn supports_set_stroke_width(&self) -> bool {
+                    false
+                }
+                /// 设置线条宽度
+                fn set_stroke_width(&mut self, _stroke_width: f32) {
+                    unimplemented!()
+                }
+            }
+
+        )*
+    }
+}
+
+#[macro_export]
+macro_rules! declare_not_support_stroke_color {
+    ($($type_name:ty),*) => {
+        $(
+
+            impl StrokeColorSupport for $type_name {
+                /// 是否支持获取线条颜色
+                fn supports_get_stroke_color(&self) -> bool{
+                    false
+                }
+                /// 获取线条颜色
+                fn stroke_color(&self) -> Color32 {
+                    unimplemented!()
+                }
+                /// 是否支持设置线条颜色
+                fn supports_set_stroke_color(&self) -> bool{
+                    false
+                }
+                /// 设置线条颜色
+                fn set_stroke_color(&mut self, _color: Color32){
+                    unimplemented!()
+                }
+            }
+
+        )*
+    }
+}
+
+#[macro_export]
+macro_rules! declare_not_support_stroke_type {
+    ($($type_name:ty),*) => {
+        $(
+
+            impl StrokeTypeSupport for $type_name {
+                /// 是否支持获取线条类型
+                fn supports_get_stroke_type(&self) -> bool{
+                    false
+                }
+                /// 线条类型
+                fn stroke_type(&self) -> StrokeType{
+                    unimplemented!()
+                }
+                /// 是否支持设置线条类型
+                fn supports_set_stroke_type(&self) -> bool{
+                    false
+                }
+                /// 设置线条类型
+                fn set_stroke_type(&mut self, _stroke_type: StrokeType){
+                    unimplemented!()
+                }
+            }
+
+        )*
+    }
+}
+
+#[macro_export]
+macro_rules! declare_not_support_fill_color {
+    ($($type_name:ty),*) => {
+        $(
+
+            impl FillColorSupport for $type_name {
+                /// 是否支持获取填充颜色
+                fn supports_get_fill_color(&self) -> bool{
+                    false
+                }
+                /// 填充颜色
+                fn fill_color(&self) -> Option<Color32>{
+                    unimplemented!()
+                }
+                /// 是否支持设置填充颜色
+                fn supports_set_fill_color(&self) -> bool{
+                    false
+                }
+                /// 设置填充颜色
+                fn set_fill_color(&mut self, _color: Color32){
+                    unimplemented!()
+                }
+            }
+
+        )*
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -163,9 +274,7 @@ pub trait Paint {
     fn paint_with(&mut self, painter: &Painter);
 }
 
-pub trait AnnotationCommon:
-    StrokeWidthSupport + StrokeColorSupport + StrokeTypeSupport + FillColorSupport
-{
+pub trait AnnotationActivationSupport {
     fn activation(&self) -> &ActivationSupport;
     fn activation_mut(&mut self) -> &mut ActivationSupport;
 }
@@ -244,6 +353,7 @@ macro_rules! impl_stroke_width_handler_for {
 }
 
 #[derive(Clone)]
+#[delegated_enum]
 pub enum Annotation {
     /// 矩形
     Rectangle(RectangleAnnotation),
@@ -270,19 +380,20 @@ pub enum Annotation {
     Blur(BlurAnnotation),
 
     /// 文本
-    Text(TextState),
+    // Text(TextState),
 
     /// 序号
-    SerialNumber(SerialNumberState),
+    // SerialNumber(SerialNumberState),
 
     /// 水印
-    Watermark(WaterMarkState),
+    // Watermark(WaterMarkState),
 
     /// 橡皮擦
     Eraser(EraserAnnotation),
 }
 
 impl Annotation {
+    /// 检测当前标注是否是由指定工具创建的
     pub fn was_created_by(&mut self, tool: &AnnotationTool) -> bool {
         let tool_name = tool.tool_name();
         match self {
@@ -294,629 +405,68 @@ impl Annotation {
             Annotation::MarkerPen(_) => tool_name == ToolName::MarkerPen,
             Annotation::Mosaic(_) => tool_name == ToolName::Mosaic,
             Annotation::Blur(_) => tool_name == ToolName::Blur,
-            Annotation::Text(_) => tool_name == ToolName::Text,
-            Annotation::SerialNumber(_) => tool_name == ToolName::SerialNumber,
-            Annotation::Watermark(_) => tool_name == ToolName::Watermark,
+            // Annotation::Text(_) => tool_name == ToolName::Text,
+            // Annotation::SerialNumber(_) => tool_name == ToolName::SerialNumber,
+            // Annotation::Watermark(_) => tool_name == ToolName::Watermark,
             Annotation::Eraser(_) => tool_name == ToolName::Eraser,
         }
     }
+
+    delegate! {
+        to match self {
+            Annotation::Rectangle(inner) => inner,
+            Annotation::Ellipse(inner) => inner,
+            Annotation::StraightLine(inner) => inner,
+            Annotation::Arrow(inner) => inner,
+            Annotation::Pencil(inner) => inner,
+            Annotation::MarkerPen(inner) => inner,
+            Annotation::Mosaic(inner) => inner,
+            Annotation::Blur(inner) => inner,
+            // Annotation::Text(inner) => inner,
+            // Annotation::SerialNumber(inner) => inner,
+            // Annotation::Watermark(inner) => inner,
+            Annotation::Eraser(inner) => inner,
+        } {
+            pub fn activation(&self) -> &ActivationSupport;
+            pub fn activation_mut(&mut self) -> &mut ActivationSupport;
+        }
+    }
 }
 
+#[delegate_impl]
 impl StrokeWidthSupport for Annotation {
-    fn supports_get_stroke_width(&self) -> bool {
-        match self {
-            Annotation::Rectangle(inner) => inner.supports_get_stroke_width(),
-            Annotation::Ellipse(inner) => inner.supports_get_stroke_width(),
-            Annotation::StraightLine(inner) => inner.supports_get_stroke_width(),
-            Annotation::Arrow(inner) => inner.supports_get_stroke_width(),
-            Annotation::Pencil(inner) => inner.supports_get_stroke_width(),
-            Annotation::MarkerPen(inner) => inner.supports_get_stroke_width(),
-            Annotation::Mosaic(inner) => {
-                // inner.supports_get_stroke_width()
-                todo!()
-            }
-            Annotation::Blur(inner) => {
-                // inner.supports_get_stroke_width()
-                todo!()
-            }
-            Annotation::Text(inner) => {
-                // inner.supports_get_stroke_width()
-                todo!()
-            }
-            Annotation::SerialNumber(inner) => {
-                // inner.supports_get_stroke_width()
-                todo!()
-            }
-            Annotation::Watermark(inner) => {
-                // inner.supports_get_stroke_width()
-                todo!()
-            }
-            Annotation::Eraser(inner) => {
-                // inner.supports_get_stroke_width()
-                todo!()
-            }
-        }
-    }
-
-    fn stroke_width(&self) -> f32 {
-        match self {
-            Annotation::Rectangle(inner) => inner.stroke_width(),
-            Annotation::Ellipse(inner) => inner.stroke_width(),
-            Annotation::StraightLine(inner) => inner.stroke_width(),
-            Annotation::Arrow(inner) => inner.stroke_width(),
-            Annotation::Pencil(inner) => inner.stroke_width(),
-            Annotation::MarkerPen(inner) => inner.stroke_width(),
-            Annotation::Mosaic(inner) => 0.,
-            Annotation::Blur(inner) => 0.,
-            Annotation::Text(inner) => {
-                // inner.stroke_width()
-                todo!()
-            }
-            Annotation::SerialNumber(inner) => {
-                // inner.stroke_width()
-                todo!()
-            }
-            Annotation::Watermark(inner) => {
-                // inner.stroke_width()
-                todo!()
-            }
-            Annotation::Eraser(inner) => 0.,
-        }
-    }
-
-    fn supports_set_stroke_width(&self) -> bool {
-        match self {
-            Annotation::Rectangle(inner) => inner.supports_set_stroke_width(),
-            Annotation::Ellipse(inner) => inner.supports_set_stroke_width(),
-            Annotation::StraightLine(inner) => inner.supports_set_stroke_width(),
-            Annotation::Arrow(inner) => inner.supports_set_stroke_width(),
-            Annotation::Pencil(inner) => inner.supports_set_stroke_width(),
-            Annotation::MarkerPen(inner) => inner.supports_set_stroke_width(),
-            Annotation::Mosaic(inner) => false,
-            Annotation::Blur(inner) => false,
-            Annotation::Text(inner) => {
-                // inner.supports_set_stroke_width()
-                todo!()
-            }
-            Annotation::SerialNumber(inner) => {
-                // inner.supports_set_stroke_width()
-                todo!()
-            }
-            Annotation::Watermark(inner) => {
-                // inner.supports_set_stroke_width()
-                todo!()
-            }
-            Annotation::Eraser(inner) => false,
-        }
-    }
-
-    fn set_stroke_width(&mut self, stroke_width: f32) {
-        match self {
-            Annotation::Rectangle(inner) => {
-                inner.set_stroke_width(stroke_width);
-            }
-            Annotation::Ellipse(inner) => {
-                inner.set_stroke_width(stroke_width);
-            }
-            Annotation::StraightLine(inner) => {
-                inner.set_stroke_width(stroke_width);
-            }
-            Annotation::Arrow(inner) => {
-                inner.set_stroke_width(stroke_width);
-            }
-            Annotation::Pencil(inner) => {
-                inner.set_stroke_width(stroke_width);
-            }
-            Annotation::MarkerPen(inner) => {
-                inner.set_stroke_width(stroke_width);
-            }
-            Annotation::Mosaic(inner) => {
-                // inner.set_stroke_width(stroke_width);
-                todo!()
-            }
-            Annotation::Blur(inner) => {
-                // inner.set_stroke_width(stroke_width);
-                todo!()
-            }
-            Annotation::Text(inner) => {
-                // inner.set_stroke_width(stroke_width);
-                todo!()
-            }
-            Annotation::SerialNumber(inner) => {
-                // inner.set_stroke_width(stroke_width);
-                todo!()
-            }
-            Annotation::Watermark(inner) => {
-                // inner.set_stroke_width(stroke_width);
-                todo!()
-            }
-            Annotation::Eraser(inner) => {
-                // inner.set_stroke_width(stroke_width);
-                todo!()
-            }
-        }
-    }
+    fn supports_get_stroke_width(&self) -> bool;
+    fn stroke_width(&self) -> f32;
+    fn supports_set_stroke_width(&self) -> bool;
+    fn set_stroke_width(&mut self, stroke_width: f32);
 }
 
+#[delegate_impl]
 impl StrokeColorSupport for Annotation {
-    fn supports_get_stroke_color(&self) -> bool {
-        match self {
-            Annotation::Rectangle(inner) => inner.supports_get_stroke_color(),
-            Annotation::Ellipse(inner) => inner.supports_get_stroke_color(),
-            Annotation::StraightLine(inner) => inner.supports_get_stroke_color(),
-            Annotation::Arrow(inner) => inner.supports_get_stroke_color(),
-            Annotation::Pencil(inner) => inner.supports_get_stroke_color(),
-            Annotation::MarkerPen(inner) => inner.supports_get_stroke_color(),
-            Annotation::Mosaic(inner) => false,
-            Annotation::Blur(inner) => false,
-            Annotation::Text(inner) => {
-                // inner.supports_get_stroke_color()
-                todo!()
-            }
-            Annotation::SerialNumber(inner) => {
-                // inner.supports_get_stroke_color()
-                todo!()
-            }
-            Annotation::Watermark(inner) => {
-                // inner.supports_get_stroke_color()
-                todo!()
-            }
-            Annotation::Eraser(inner) => false,
-        }
-    }
-
-    fn stroke_color(&self) -> Color32 {
-        match self {
-            Annotation::Rectangle(inner) => inner.stroke_color(),
-            Annotation::Ellipse(inner) => inner.stroke_color(),
-            Annotation::StraightLine(inner) => inner.stroke_color(),
-            Annotation::Arrow(inner) => inner.stroke_color(),
-            Annotation::Pencil(inner) => inner.stroke_color(),
-            Annotation::MarkerPen(inner) => inner.stroke_color(),
-            Annotation::Mosaic(inner) => {
-                // inner.stroke_color()
-                todo!()
-            }
-            Annotation::Blur(inner) => {
-                // inner.stroke_color()
-                todo!()
-            }
-            Annotation::Text(inner) => {
-                // inner.stroke_color()
-                todo!()
-            }
-            Annotation::SerialNumber(inner) => {
-                // inner.stroke_color()
-                todo!()
-            }
-            Annotation::Watermark(inner) => {
-                // inner.stroke_color()
-                todo!()
-            }
-            Annotation::Eraser(inner) => {
-                // inner.stroke_color()
-                todo!()
-            }
-        }
-    }
-
-    fn supports_set_stroke_color(&self) -> bool {
-        match self {
-            Annotation::Rectangle(inner) => inner.supports_set_stroke_color(),
-            Annotation::Ellipse(inner) => inner.supports_set_stroke_color(),
-            Annotation::StraightLine(inner) => inner.supports_set_stroke_color(),
-            Annotation::Arrow(inner) => inner.supports_set_stroke_color(),
-            Annotation::Pencil(inner) => inner.supports_set_stroke_color(),
-            Annotation::MarkerPen(inner) => inner.supports_set_stroke_color(),
-            Annotation::Mosaic(inner) => false,
-            Annotation::Blur(inner) => false,
-            Annotation::Text(inner) => {
-                // inner.supports_set_stroke_color()
-                todo!()
-            }
-            Annotation::SerialNumber(inner) => {
-                // inner.supports_set_stroke_color()
-                todo!()
-            }
-            Annotation::Watermark(inner) => {
-                // inner.supports_set_stroke_color()
-                todo!()
-            }
-            Annotation::Eraser(inner) => false,
-        }
-    }
-
-    fn set_stroke_color(&mut self, color: Color32) {
-        match self {
-            Annotation::Rectangle(inner) => {
-                inner.set_stroke_color(color);
-            }
-            Annotation::Ellipse(inner) => {
-                inner.set_stroke_color(color);
-            }
-            Annotation::StraightLine(inner) => {
-                inner.set_stroke_color(color);
-            }
-            Annotation::Arrow(inner) => {
-                inner.set_stroke_color(color);
-            }
-            Annotation::Pencil(inner) => {
-                inner.set_stroke_color(color);
-            }
-            Annotation::MarkerPen(inner) => {
-                inner.set_stroke_color(color);
-            }
-            Annotation::Mosaic(inner) => {
-                // inner.set_stroke_color(color);
-                todo!()
-            }
-            Annotation::Blur(inner) => {
-                // inner.set_stroke_color(color);
-                todo!()
-            }
-            Annotation::Text(inner) => {
-                // inner.set_stroke_color(color);
-                todo!()
-            }
-            Annotation::SerialNumber(inner) => {
-                // inner.set_stroke_color(color);
-                todo!()
-            }
-            Annotation::Watermark(inner) => {
-                // inner.set_stroke_color(color);
-                todo!()
-            }
-            Annotation::Eraser(inner) => {
-                // inner.set_stroke_color(color);
-                todo!()
-            }
-        }
-    }
+    fn supports_get_stroke_color(&self) -> bool;
+    fn stroke_color(&self) -> Color32;
+    fn supports_set_stroke_color(&self) -> bool;
+    fn set_stroke_color(&mut self, color: Color32);
 }
-
+#[delegate_impl]
 impl StrokeTypeSupport for Annotation {
-    fn supports_get_stroke_type(&self) -> bool {
-        match self {
-            Annotation::Rectangle(inner) => inner.supports_get_stroke_type(),
-            Annotation::Ellipse(inner) => inner.supports_get_stroke_type(),
-            Annotation::StraightLine(inner) => inner.supports_get_stroke_type(),
-            Annotation::Arrow(inner) => inner.supports_get_stroke_type(),
-            Annotation::Pencil(inner) => inner.supports_get_stroke_type(),
-            Annotation::MarkerPen(inner) => inner.supports_get_stroke_type(),
-            Annotation::Mosaic(inner) => false,
-            Annotation::Blur(inner) => false,
-            Annotation::Text(inner) => {
-                // inner.supports_get_stroke_type()
-                todo!()
-            }
-            Annotation::SerialNumber(inner) => {
-                // inner.supports_get_stroke_type()
-                todo!()
-            }
-            Annotation::Watermark(inner) => {
-                // inner.supports_get_stroke_type()
-                todo!()
-            }
-            Annotation::Eraser(inner) => false,
-        }
-    }
-
-    fn stroke_type(&self) -> StrokeType {
-        match self {
-            Annotation::Rectangle(inner) => inner.stroke_type(),
-            Annotation::Ellipse(inner) => inner.stroke_type(),
-            Annotation::StraightLine(inner) => inner.stroke_type(),
-            Annotation::Arrow(inner) => inner.stroke_type(),
-            Annotation::Pencil(inner) => inner.stroke_type(),
-            Annotation::MarkerPen(inner) => inner.stroke_type(),
-            Annotation::Mosaic(inner) => {
-                // inner.stroke_type()
-                todo!()
-            }
-            Annotation::Blur(inner) => {
-                // inner.stroke_type()
-                todo!()
-            }
-            Annotation::Text(inner) => {
-                // inner.stroke_type()
-                todo!()
-            }
-            Annotation::SerialNumber(inner) => {
-                // inner.stroke_type()
-                todo!()
-            }
-            Annotation::Watermark(inner) => {
-                // inner.stroke_type()
-                todo!()
-            }
-            Annotation::Eraser(inner) => {
-                // inner.stroke_type()
-                todo!()
-            }
-        }
-    }
-
-    fn supports_set_stroke_type(&self) -> bool {
-        match self {
-            Annotation::Rectangle(inner) => inner.supports_set_stroke_type(),
-            Annotation::Ellipse(inner) => inner.supports_set_stroke_type(),
-            Annotation::StraightLine(inner) => inner.supports_set_stroke_type(),
-            Annotation::Arrow(inner) => inner.supports_set_stroke_type(),
-            Annotation::Pencil(inner) => inner.supports_set_stroke_type(),
-            Annotation::MarkerPen(inner) => inner.supports_set_stroke_type(),
-            Annotation::Mosaic(inner) => false,
-            Annotation::Blur(inner) => false,
-            Annotation::Text(inner) => {
-                // inner.supports_set_stroke_type()
-                todo!()
-            }
-            Annotation::SerialNumber(inner) => {
-                // inner.supports_set_stroke_type()
-                todo!()
-            }
-            Annotation::Watermark(inner) => {
-                // inner.supports_set_stroke_type()
-                todo!()
-            }
-            Annotation::Eraser(inner) => false,
-        }
-    }
-
-    fn set_stroke_type(&mut self, stroke_type: StrokeType) {
-        match self {
-            Annotation::Rectangle(inner) => {
-                inner.set_stroke_type(stroke_type);
-            }
-            Annotation::Ellipse(inner) => {
-                inner.set_stroke_type(stroke_type);
-            }
-            Annotation::StraightLine(inner) => {
-                inner.set_stroke_type(stroke_type);
-            }
-            Annotation::Arrow(inner) => {
-                inner.set_stroke_type(stroke_type);
-            }
-            Annotation::Pencil(inner) => {
-                inner.set_stroke_type(stroke_type);
-            }
-            Annotation::MarkerPen(inner) => {
-                inner.set_stroke_type(stroke_type);
-            }
-            Annotation::Mosaic(inner) => {
-                // inner.set_stroke_type(stroke_type);
-                todo!()
-            }
-            Annotation::Blur(inner) => {
-                // inner.set_stroke_type(stroke_type);
-                todo!()
-            }
-            Annotation::Text(inner) => {
-                // inner.set_stroke_type(stroke_type);
-                todo!()
-            }
-            Annotation::SerialNumber(inner) => {
-                // inner.set_stroke_type(stroke_type);
-                todo!()
-            }
-            Annotation::Watermark(inner) => {
-                // inner.set_stroke_type(stroke_type);
-                todo!()
-            }
-            Annotation::Eraser(inner) => {
-                // inner.set_stroke_type(stroke_type);
-                todo!()
-            }
-        }
-    }
+    fn supports_get_stroke_type(&self) -> bool;
+    fn stroke_type(&self) -> StrokeType;
+    fn supports_set_stroke_type(&self) -> bool;
+    fn set_stroke_type(&mut self, stroke_type: StrokeType);
 }
 
+#[delegate_impl]
 impl FillColorSupport for Annotation {
-    fn supports_get_fill_color(&self) -> bool {
-        match self {
-            Annotation::Rectangle(inner) => inner.supports_get_fill_color(),
-            Annotation::Ellipse(inner) => inner.supports_get_fill_color(),
-            Annotation::StraightLine(inner) => inner.supports_get_fill_color(),
-            Annotation::Arrow(inner) => inner.supports_get_fill_color(),
-            Annotation::Pencil(inner) => inner.supports_get_fill_color(),
-            Annotation::MarkerPen(inner) => inner.supports_get_fill_color(),
-            Annotation::Mosaic(inner) => false,
-            Annotation::Blur(inner) => false,
-            Annotation::Text(inner) => {
-                // inner.supports_get_fill_color()
-                todo!()
-            }
-            Annotation::SerialNumber(inner) => {
-                // inner.supports_get_fill_color()
-                todo!()
-            }
-            Annotation::Watermark(inner) => {
-                // inner.supports_get_fill_color()
-                todo!()
-            }
-            Annotation::Eraser(inner) => false,
-        }
-    }
-
-    fn fill_color(&self) -> Option<Color32> {
-        match self {
-            Annotation::Rectangle(inner) => inner.fill_color(),
-            Annotation::Ellipse(inner) => inner.fill_color(),
-            Annotation::StraightLine(inner) => inner.fill_color(),
-            Annotation::Arrow(inner) => inner.fill_color(),
-            Annotation::Pencil(inner) => inner.fill_color(),
-            Annotation::MarkerPen(inner) => inner.fill_color(),
-            Annotation::Mosaic(inner) => {
-                // inner.fill_color()
-                todo!()
-            }
-            Annotation::Blur(inner) => {
-                // inner.fill_color()
-                todo!()
-            }
-            Annotation::Text(inner) => {
-                // inner.fill_color()
-                todo!()
-            }
-            Annotation::SerialNumber(inner) => {
-                // inner.fill_color()
-                todo!()
-            }
-            Annotation::Watermark(inner) => {
-                // inner.fill_color()
-                todo!()
-            }
-            Annotation::Eraser(inner) => {
-                // inner.fill_color()
-                todo!()
-            }
-        }
-    }
-
-    fn supports_set_fill_color(&self) -> bool {
-        match self {
-            Annotation::Rectangle(inner) => inner.supports_set_fill_color(),
-            Annotation::Ellipse(inner) => inner.supports_set_fill_color(),
-            Annotation::StraightLine(inner) => inner.supports_set_fill_color(),
-            Annotation::Arrow(inner) => inner.supports_set_fill_color(),
-            Annotation::Pencil(inner) => inner.supports_set_fill_color(),
-            Annotation::MarkerPen(inner) => inner.supports_set_fill_color(),
-            Annotation::Mosaic(inner) => false,
-            Annotation::Blur(inner) => false,
-            Annotation::Text(inner) => {
-                // inner.supports_set_fill_color()
-                todo!()
-            }
-            Annotation::SerialNumber(inner) => {
-                // inner.supports_set_fill_color()
-                todo!()
-            }
-            Annotation::Watermark(inner) => {
-                // inner.supports_set_fill_color()
-                todo!()
-            }
-            Annotation::Eraser(inner) => false,
-        }
-    }
-
-    fn set_fill_color(&mut self, color: Color32) {
-        match self {
-            Annotation::Rectangle(inner) => {
-                inner.set_fill_color(color);
-            }
-            Annotation::Ellipse(inner) => {
-                inner.set_fill_color(color);
-            }
-            Annotation::StraightLine(inner) => {
-                inner.set_fill_color(color);
-            }
-            Annotation::Arrow(inner) => {
-                inner.set_fill_color(color);
-            }
-            Annotation::Pencil(inner) => {
-                inner.set_fill_color(color);
-            }
-            Annotation::MarkerPen(inner) => {
-                inner.set_fill_color(color);
-            }
-            Annotation::Mosaic(inner) => {
-                // inner.set_fill_color(color);
-                todo!()
-            }
-            Annotation::Blur(inner) => {
-                // inner.set_fill_color(color);
-                todo!()
-            }
-            Annotation::Text(inner) => {
-                // inner.set_fill_color(color);
-                todo!()
-            }
-            Annotation::SerialNumber(inner) => {
-                // inner.set_fill_color(color);
-                todo!()
-            }
-            Annotation::Watermark(inner) => {
-                // inner.set_fill_color(color);
-                todo!()
-            }
-            Annotation::Eraser(inner) => {
-                // inner.set_fill_color(color);
-                todo!()
-            }
-        }
-    }
+    fn supports_get_fill_color(&self) -> bool;
+    fn fill_color(&self) -> Option<Color32>;
+    fn supports_set_fill_color(&self) -> bool;
+    fn set_fill_color(&mut self, color: Color32);
 }
 
-impl AnnotationCommon for Annotation {
-    fn activation(&self) -> &ActivationSupport {
-        match self {
-            Annotation::Rectangle(inner) => inner.activation(),
-            Annotation::Ellipse(inner) => inner.activation(),
-            Annotation::StraightLine(inner) => inner.activation(),
-            Annotation::Arrow(inner) => inner.activation(),
-            Annotation::Pencil(inner) => inner.activation(),
-            Annotation::MarkerPen(inner) => inner.activation(),
-            Annotation::Mosaic(inner) => inner.activation(),
-            Annotation::Blur(inner) => inner.activation(),
-            Annotation::Text(inner) => {
-                // inner.activation()
-                todo!()
-            }
-            Annotation::SerialNumber(inner) => {
-                // inner.activation()
-                todo!()
-            }
-            Annotation::Watermark(inner) => {
-                // inner.activation()
-                todo!()
-            }
-            Annotation::Eraser(inner) => inner.activation(),
-        }
-    }
-
-    fn activation_mut(&mut self) -> &mut ActivationSupport {
-        match self {
-            Annotation::Rectangle(inner) => inner.activation_mut(),
-            Annotation::Ellipse(inner) => inner.activation_mut(),
-            Annotation::StraightLine(inner) => inner.activation_mut(),
-            Annotation::Arrow(inner) => inner.activation_mut(),
-            Annotation::Pencil(inner) => inner.activation_mut(),
-            Annotation::MarkerPen(inner) => inner.activation_mut(),
-            Annotation::Mosaic(inner) => inner.activation_mut(),
-            Annotation::Blur(inner) => inner.activation_mut(),
-            Annotation::Text(inner) => {
-                // inner.activation_mut()
-                todo!()
-            }
-            Annotation::SerialNumber(inner) => {
-                // inner.activation_mut()
-                todo!()
-            }
-            Annotation::Watermark(inner) => {
-                // inner.activation_mut()
-                todo!()
-            }
-            Annotation::Eraser(inner) => inner.activation_mut(),
-        }
-    }
-}
-
+#[delegate_impl]
 impl Paint for Annotation {
-    fn paint_with(&mut self, painter: &Painter) {
-        match self {
-            Annotation::Rectangle(annotation) => annotation.paint_with(painter),
-            Annotation::Ellipse(annotation) => annotation.paint_with(painter),
-            Annotation::StraightLine(annotation) => annotation.paint_with(painter),
-            Annotation::Arrow(annotation) => annotation.paint_with(painter),
-            Annotation::Pencil(annotation) => annotation.paint_with(painter),
-            Annotation::MarkerPen(annotation) => annotation.paint_with(painter),
-            Annotation::Mosaic(annotation) => annotation.paint_with(painter),
-            Annotation::Blur(annotation) => annotation.paint_with(painter),
-            Annotation::Text(annotation) => annotation.paint_with(painter),
-            Annotation::SerialNumber(annotation) => annotation.paint_with(painter),
-            Annotation::Watermark(annotation) => annotation.paint_with(painter),
-            Annotation::Eraser(annotation) => annotation.paint_with(painter),
-        }
-    }
+    fn paint_with(&mut self, painter: &Painter);
 }
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
@@ -959,6 +509,7 @@ pub enum ToolName {
 }
 
 /// 标注工具的类型
+#[delegated_enum]
 pub enum AnnotationTool {
     /// 矩形
     Rectangle(RectangleTool),
@@ -984,15 +535,14 @@ pub enum AnnotationTool {
     /// 模糊
     Blur(BlurTool),
 
-    /// 文本
-    Text,
-
-    /// 序号
-    SerialNumber,
-
-    /// 水印
-    Watermark,
-
+    // /// 文本
+    // Text,
+    //
+    // /// 序号
+    // SerialNumber,
+    //
+    // /// 水印
+    // Watermark,
     /// 橡皮擦
     Eraser(EraserTool),
 }
@@ -1008,504 +558,47 @@ impl AnnotationTool {
             AnnotationTool::MarkerPen(_) => ToolName::MarkerPen,
             AnnotationTool::Mosaic(_) => ToolName::Mosaic,
             AnnotationTool::Blur(_) => ToolName::Blur,
-            AnnotationTool::Text => ToolName::Text,
-            AnnotationTool::SerialNumber => ToolName::SerialNumber,
-            AnnotationTool::Watermark => ToolName::Watermark,
+            // AnnotationTool::Text => ToolName::Text,
+            // AnnotationTool::SerialNumber => ToolName::SerialNumber,
+            // AnnotationTool::Watermark => ToolName::Watermark,
             AnnotationTool::Eraser(_) => ToolName::Eraser,
         }
     }
 }
 
+#[delegate_impl]
 impl StrokeWidthSupport for AnnotationTool {
-    fn supports_get_stroke_width(&self) -> bool {
-        match self {
-            AnnotationTool::Rectangle(tool) => tool.supports_get_stroke_width(),
-            AnnotationTool::Ellipse(tool) => tool.supports_get_stroke_width(),
-            AnnotationTool::StraightLine(tool) => tool.supports_get_stroke_width(),
-            AnnotationTool::Arrow(tool) => tool.supports_get_stroke_width(),
-            AnnotationTool::Pencil(tool) => tool.supports_get_stroke_width(),
-            AnnotationTool::MarkerPen(tool) => tool.supports_get_stroke_width(),
-            AnnotationTool::Mosaic(_tool) => false,
-            AnnotationTool::Blur(_) => false,
-            AnnotationTool::Text => {
-                todo!()
-            }
-            AnnotationTool::SerialNumber => {
-                todo!()
-            }
-            AnnotationTool::Watermark => {
-                todo!()
-            }
-            AnnotationTool::Eraser(_) => false,
-        }
-    }
-
-    fn stroke_width(&self) -> f32 {
-        match self {
-            AnnotationTool::Rectangle(tool) => tool.stroke_width(),
-            AnnotationTool::Ellipse(tool) => tool.stroke_width(),
-            AnnotationTool::StraightLine(tool) => tool.stroke_width(),
-            AnnotationTool::Arrow(tool) => tool.stroke_width(),
-            AnnotationTool::Pencil(tool) => tool.stroke_width(),
-            AnnotationTool::MarkerPen(tool) => tool.stroke_width(),
-            AnnotationTool::Mosaic(_tool) => 0.,
-            AnnotationTool::Blur(_) => {
-                todo!()
-            }
-            AnnotationTool::Text => {
-                todo!()
-            }
-            AnnotationTool::SerialNumber => {
-                todo!()
-            }
-            AnnotationTool::Watermark => {
-                todo!()
-            }
-            AnnotationTool::Eraser(_) => {
-                todo!()
-            }
-        }
-    }
-
-    fn supports_set_stroke_width(&self) -> bool {
-        match self {
-            AnnotationTool::Rectangle(tool) => tool.supports_set_stroke_width(),
-            AnnotationTool::Ellipse(tool) => tool.supports_set_stroke_width(),
-            AnnotationTool::StraightLine(tool) => tool.supports_set_stroke_width(),
-            AnnotationTool::Arrow(tool) => tool.supports_set_stroke_width(),
-            AnnotationTool::Pencil(tool) => tool.supports_set_stroke_width(),
-            AnnotationTool::MarkerPen(tool) => tool.supports_set_stroke_width(),
-            AnnotationTool::Mosaic(_) => false,
-            AnnotationTool::Blur(_) => false,
-            AnnotationTool::Text => {
-                todo!()
-            }
-            AnnotationTool::SerialNumber => {
-                todo!()
-            }
-            AnnotationTool::Watermark => {
-                todo!()
-            }
-            AnnotationTool::Eraser(_) => false,
-        }
-    }
-
-    fn set_stroke_width(&mut self, stroke_width: f32) {
-        match self {
-            AnnotationTool::Rectangle(tool) => {
-                tool.set_stroke_width(stroke_width);
-            }
-            AnnotationTool::Ellipse(tool) => {
-                tool.set_stroke_width(stroke_width);
-            }
-            AnnotationTool::StraightLine(tool) => {
-                tool.set_stroke_width(stroke_width);
-            }
-            AnnotationTool::Arrow(tool) => {
-                tool.set_stroke_width(stroke_width);
-            }
-            AnnotationTool::Pencil(tool) => {
-                tool.set_stroke_width(stroke_width);
-            }
-            AnnotationTool::MarkerPen(tool) => {
-                tool.set_stroke_width(stroke_width);
-            }
-            AnnotationTool::Mosaic(_) => {
-                todo!()
-            }
-            AnnotationTool::Blur(_) => {
-                todo!()
-            }
-            AnnotationTool::Text => {
-                todo!()
-            }
-            AnnotationTool::SerialNumber => {
-                todo!()
-            }
-            AnnotationTool::Watermark => {
-                todo!()
-            }
-            AnnotationTool::Eraser(_) => {
-                todo!()
-            }
-        }
-    }
+    fn supports_get_stroke_width(&self) -> bool;
+    fn stroke_width(&self) -> f32;
+    fn supports_set_stroke_width(&self) -> bool;
+    fn set_stroke_width(&mut self, stroke_width: f32);
 }
 
+#[delegate_impl]
 impl StrokeColorSupport for AnnotationTool {
-    fn supports_get_stroke_color(&self) -> bool {
-        match self {
-            AnnotationTool::Rectangle(tool) => tool.supports_get_stroke_color(),
-            AnnotationTool::Ellipse(tool) => tool.supports_get_stroke_color(),
-            AnnotationTool::StraightLine(tool) => tool.supports_get_stroke_color(),
-            AnnotationTool::Arrow(tool) => tool.supports_get_stroke_color(),
-            AnnotationTool::Pencil(tool) => tool.supports_get_stroke_color(),
-            AnnotationTool::MarkerPen(tool) => tool.supports_get_stroke_color(),
-            AnnotationTool::Mosaic(_) => false,
-            AnnotationTool::Blur(_) => false,
-            AnnotationTool::Text => {
-                todo!()
-            }
-            AnnotationTool::SerialNumber => {
-                todo!()
-            }
-            AnnotationTool::Watermark => {
-                todo!()
-            }
-            AnnotationTool::Eraser(_) => false,
-        }
-    }
-
-    fn stroke_color(&self) -> Color32 {
-        match self {
-            AnnotationTool::Rectangle(tool) => tool.stroke_color(),
-            AnnotationTool::Ellipse(tool) => tool.stroke_color(),
-            AnnotationTool::StraightLine(tool) => tool.stroke_color(),
-            AnnotationTool::Arrow(tool) => tool.stroke_color(),
-            AnnotationTool::Pencil(tool) => tool.stroke_color(),
-            AnnotationTool::MarkerPen(tool) => tool.stroke_color(),
-            AnnotationTool::Mosaic(_) => {
-                todo!()
-            }
-            AnnotationTool::Blur(_) => {
-                todo!()
-            }
-            AnnotationTool::Text => {
-                todo!()
-            }
-            AnnotationTool::SerialNumber => {
-                todo!()
-            }
-            AnnotationTool::Watermark => {
-                todo!()
-            }
-            AnnotationTool::Eraser(_) => {
-                todo!()
-            }
-        }
-    }
-
-    fn supports_set_stroke_color(&self) -> bool {
-        match self {
-            AnnotationTool::Rectangle(tool) => tool.supports_set_stroke_color(),
-            AnnotationTool::Ellipse(tool) => tool.supports_set_stroke_color(),
-            AnnotationTool::StraightLine(tool) => tool.supports_set_stroke_color(),
-            AnnotationTool::Arrow(tool) => tool.supports_set_stroke_color(),
-            AnnotationTool::Pencil(tool) => tool.supports_set_stroke_color(),
-            AnnotationTool::MarkerPen(tool) => tool.supports_set_stroke_color(),
-            AnnotationTool::Mosaic(_) => false,
-            AnnotationTool::Blur(_) => false,
-            AnnotationTool::Text => {
-                todo!()
-            }
-            AnnotationTool::SerialNumber => {
-                todo!()
-            }
-            AnnotationTool::Watermark => {
-                todo!()
-            }
-            AnnotationTool::Eraser(_) => false,
-        }
-    }
-
-    fn set_stroke_color(&mut self, color: Color32) {
-        match self {
-            AnnotationTool::Rectangle(tool) => {
-                tool.set_stroke_color(color);
-            }
-            AnnotationTool::Ellipse(tool) => {
-                tool.set_stroke_color(color);
-            }
-            AnnotationTool::StraightLine(tool) => {
-                tool.set_stroke_color(color);
-            }
-            AnnotationTool::Arrow(tool) => {
-                tool.set_stroke_color(color);
-            }
-            AnnotationTool::Pencil(tool) => {
-                tool.set_stroke_color(color);
-            }
-            AnnotationTool::MarkerPen(tool) => {
-                tool.set_stroke_color(color);
-            }
-            AnnotationTool::Mosaic(_) => {
-                todo!()
-            }
-            AnnotationTool::Blur(_) => {
-                todo!()
-            }
-            AnnotationTool::Text => {
-                todo!()
-            }
-            AnnotationTool::SerialNumber => {
-                todo!()
-            }
-            AnnotationTool::Watermark => {
-                todo!()
-            }
-            AnnotationTool::Eraser(_) => {
-                todo!()
-            }
-        }
-    }
+    fn supports_get_stroke_color(&self) -> bool;
+    fn stroke_color(&self) -> Color32;
+    fn supports_set_stroke_color(&self) -> bool;
+    fn set_stroke_color(&mut self, color: Color32);
 }
 
+#[delegate_impl]
 impl StrokeTypeSupport for AnnotationTool {
-    fn supports_get_stroke_type(&self) -> bool {
-        match self {
-            AnnotationTool::Rectangle(tool) => tool.supports_get_stroke_type(),
-            AnnotationTool::Ellipse(tool) => tool.supports_get_stroke_type(),
-            AnnotationTool::StraightLine(tool) => tool.supports_get_stroke_type(),
-            AnnotationTool::Arrow(tool) => tool.supports_get_stroke_type(),
-            AnnotationTool::Pencil(tool) => tool.supports_get_stroke_type(),
-            AnnotationTool::MarkerPen(tool) => tool.supports_get_stroke_type(),
-            AnnotationTool::Mosaic(_) => false,
-            AnnotationTool::Blur(_) => {
-                todo!()
-            }
-            AnnotationTool::Text => {
-                todo!()
-            }
-            AnnotationTool::SerialNumber => {
-                todo!()
-            }
-            AnnotationTool::Watermark => {
-                todo!()
-            }
-            AnnotationTool::Eraser(_) => {
-                todo!()
-            }
-        }
-    }
-
-    fn stroke_type(&self) -> StrokeType {
-        match self {
-            AnnotationTool::Rectangle(tool) => tool.stroke_type(),
-            AnnotationTool::Ellipse(tool) => tool.stroke_type(),
-            AnnotationTool::StraightLine(tool) => tool.stroke_type(),
-            AnnotationTool::Arrow(tool) => tool.stroke_type(),
-            AnnotationTool::Pencil(tool) => tool.stroke_type(),
-            AnnotationTool::MarkerPen(tool) => tool.stroke_type(),
-            AnnotationTool::Mosaic(_) => {
-                todo!()
-            }
-            AnnotationTool::Blur(_) => {
-                todo!()
-            }
-            AnnotationTool::Text => {
-                todo!()
-            }
-            AnnotationTool::SerialNumber => {
-                todo!()
-            }
-            AnnotationTool::Watermark => {
-                todo!()
-            }
-            AnnotationTool::Eraser(_) => {
-                todo!()
-            }
-        }
-    }
-
-    fn supports_set_stroke_type(&self) -> bool {
-        match self {
-            AnnotationTool::Rectangle(tool) => tool.supports_set_stroke_type(),
-            AnnotationTool::Ellipse(tool) => tool.supports_set_stroke_type(),
-            AnnotationTool::StraightLine(tool) => tool.supports_set_stroke_type(),
-            AnnotationTool::Arrow(tool) => tool.supports_set_stroke_type(),
-            AnnotationTool::Pencil(tool) => tool.supports_set_stroke_type(),
-            AnnotationTool::MarkerPen(tool) => tool.supports_set_stroke_type(),
-            AnnotationTool::Mosaic(_) => false,
-            AnnotationTool::Blur(_) => false,
-            AnnotationTool::Text => {
-                todo!()
-            }
-            AnnotationTool::SerialNumber => {
-                todo!()
-            }
-            AnnotationTool::Watermark => {
-                todo!()
-            }
-            AnnotationTool::Eraser(_) => false,
-        }
-    }
-
-    fn set_stroke_type(&mut self, stroke_type: StrokeType) {
-        match self {
-            AnnotationTool::Rectangle(tool) => {
-                tool.set_stroke_type(stroke_type);
-            }
-            AnnotationTool::Ellipse(tool) => {
-                tool.set_stroke_type(stroke_type);
-            }
-            AnnotationTool::StraightLine(tool) => {
-                tool.set_stroke_type(stroke_type);
-            }
-            AnnotationTool::Arrow(tool) => {
-                tool.set_stroke_type(stroke_type);
-            }
-            AnnotationTool::Pencil(tool) => {
-                tool.set_stroke_type(stroke_type);
-            }
-            AnnotationTool::MarkerPen(tool) => {
-                tool.set_stroke_type(stroke_type);
-            }
-            AnnotationTool::Mosaic(_) => {
-                todo!()
-            }
-            AnnotationTool::Blur(_) => {
-                todo!()
-            }
-            AnnotationTool::Text => {
-                todo!()
-            }
-            AnnotationTool::SerialNumber => {
-                todo!()
-            }
-            AnnotationTool::Watermark => {
-                todo!()
-            }
-            AnnotationTool::Eraser(_) => {
-                todo!()
-            }
-        }
-    }
+    fn supports_get_stroke_type(&self) -> bool;
+    fn stroke_type(&self) -> StrokeType;
+    fn supports_set_stroke_type(&self) -> bool;
+    fn set_stroke_type(&mut self, stroke_type: StrokeType);
 }
 
+#[delegate_impl]
 impl FillColorSupport for AnnotationTool {
-    fn supports_get_fill_color(&self) -> bool {
-        match self {
-            AnnotationTool::Rectangle(tool) => tool.supports_get_fill_color(),
-            AnnotationTool::Ellipse(tool) => tool.supports_get_fill_color(),
-            AnnotationTool::StraightLine(tool) => tool.supports_get_fill_color(),
-            AnnotationTool::Arrow(tool) => tool.supports_get_fill_color(),
-            AnnotationTool::Pencil(tool) => tool.supports_get_fill_color(),
-            AnnotationTool::MarkerPen(tool) => tool.supports_get_fill_color(),
-            AnnotationTool::Mosaic(_) => false,
-            AnnotationTool::Blur(_) => false,
-            AnnotationTool::Text => {
-                // tool.supports_get_fill_color()
-                todo!()
-            }
-            AnnotationTool::SerialNumber => {
-                // tool.supports_get_fill_color()
-                todo!()
-            }
-            AnnotationTool::Watermark => {
-                // tool.supports_get_fill_color()
-                todo!()
-            }
-            AnnotationTool::Eraser(_) => false,
-        }
-    }
+    fn supports_get_fill_color(&self) -> bool;
 
-    fn fill_color(&self) -> Option<Color32> {
-        match self {
-            AnnotationTool::Rectangle(tool) => tool.fill_color(),
-            AnnotationTool::Ellipse(tool) => tool.fill_color(),
-            AnnotationTool::StraightLine(tool) => tool.fill_color(),
-            AnnotationTool::Arrow(tool) => tool.fill_color(),
-            AnnotationTool::Pencil(tool) => tool.fill_color(),
-            AnnotationTool::MarkerPen(tool) => tool.fill_color(),
-            AnnotationTool::Mosaic(_) => {
-                // tool.fill_color()
-                todo!()
-            }
-            AnnotationTool::Blur(_) => {
-                // tool.fill_color()
-                todo!()
-            }
-            AnnotationTool::Text => {
-                // tool.fill_color()
-                todo!()
-            }
-            AnnotationTool::SerialNumber => {
-                // tool.fill_color()
-                todo!()
-            }
-            AnnotationTool::Watermark => {
-                // tool.fill_color()
-                todo!()
-            }
-            AnnotationTool::Eraser(_) => {
-                // tool.fill_color()
-                todo!()
-            }
-        }
-    }
+    fn fill_color(&self) -> Option<Color32>;
 
-    fn supports_set_fill_color(&self) -> bool {
-        match self {
-            AnnotationTool::Rectangle(tool) => tool.supports_set_fill_color(),
-            AnnotationTool::Ellipse(tool) => tool.supports_set_fill_color(),
-            AnnotationTool::StraightLine(tool) => tool.supports_set_fill_color(),
-            AnnotationTool::Arrow(tool) => tool.supports_set_fill_color(),
-            AnnotationTool::Pencil(tool) => tool.supports_set_fill_color(),
-            AnnotationTool::MarkerPen(tool) => tool.supports_set_fill_color(),
-            AnnotationTool::Mosaic(_) => false,
-            AnnotationTool::Blur(_) => false,
-            AnnotationTool::Text => {
-                // tool.supports_set_fill_color()
-                todo!()
-            }
-            AnnotationTool::SerialNumber => {
-                // tool.supports_set_fill_color()
-                todo!()
-            }
-            AnnotationTool::Watermark => {
-                // tool.supports_set_fill_color()
-                todo!()
-            }
-            AnnotationTool::Eraser(_) => false,
-        }
-    }
+    fn supports_set_fill_color(&self) -> bool;
 
-    fn set_fill_color(&mut self, color: Color32) {
-        match self {
-            AnnotationTool::Rectangle(tool) => {
-                tool.set_fill_color(color);
-            }
-            AnnotationTool::Ellipse(tool) => {
-                tool.set_fill_color(color);
-            }
-            AnnotationTool::StraightLine(tool) => {
-                tool.set_fill_color(color);
-            }
-            AnnotationTool::Arrow(tool) => {
-                tool.set_fill_color(color);
-            }
-            AnnotationTool::Pencil(tool) => {
-                tool.set_fill_color(color);
-            }
-            AnnotationTool::MarkerPen(tool) => {
-                tool.set_fill_color(color);
-            }
-            AnnotationTool::Mosaic(_) => {
-                // tool.set_fill_color(color);
-                todo!()
-            }
-            AnnotationTool::Blur(_) => {
-                // tool.set_fill_color(color);
-                todo!()
-            }
-            AnnotationTool::Text => {
-                // tool.set_fill_color(color);
-                todo!()
-            }
-            AnnotationTool::SerialNumber => {
-                // tool.set_fill_color(color);
-                todo!()
-            }
-            AnnotationTool::Watermark => {
-                // tool.set_fill_color(color);
-                todo!()
-            }
-            AnnotationTool::Eraser(_) => {
-                // tool.set_fill_color(color);
-                todo!()
-            }
-        }
-    }
+    fn set_fill_color(&mut self, color: Color32);
 }
 
 impl AnnotationToolCommon for AnnotationTool {
@@ -1525,15 +618,15 @@ impl Widget for &mut AnnotationTool {
             AnnotationTool::MarkerPen(tool) => tool.ui(ui),
             AnnotationTool::Mosaic(tool) => tool.ui(ui),
             AnnotationTool::Blur(tool) => tool.ui(ui),
-            AnnotationTool::Text => {
-                todo!("Text")
-            }
-            AnnotationTool::SerialNumber => {
-                todo!("Serial Number")
-            }
-            AnnotationTool::Watermark => {
-                todo!("Watermark")
-            }
+            // AnnotationTool::Text => {
+            //     todo!("Text")
+            // }
+            // AnnotationTool::SerialNumber => {
+            //     todo!("Serial Number")
+            // }
+            // AnnotationTool::Watermark => {
+            //     todo!("Watermark")
+            // }
             AnnotationTool::Eraser(tool) => tool.ui(ui),
         }
     }

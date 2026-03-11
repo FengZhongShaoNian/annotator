@@ -1,6 +1,6 @@
 use crate::annotator::cursor::Crosshair;
 use crate::annotator::rectangle_based::{EllipseTool, HitTarget, HitTest, RectangleTool};
-use crate::annotator::{ActivationState, ActivationSupport, Annotation, AnnotationCommon, AnnotationStyle, AnnotationToolCommon, WheelHandler, AnnotatorState, DEFAULT_SIZE_FOR_SMALL_RECT, FillColorSupport, PainterExt, SharedAnnotatorState, SmallRect, StackTopAccessor, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport, dash_len_for_dashed_line, gap_len_for_dashed_line, radius_for_dotted_line, spacing_for_dotted_line, Paint};
+use crate::annotator::{ActivationState, ActivationSupport, Annotation, AnnotationStyle, AnnotationToolCommon, WheelHandler, AnnotatorState, DEFAULT_SIZE_FOR_SMALL_RECT, FillColorSupport, PainterExt, SharedAnnotatorState, SmallRect, StackTopAccessor, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport, dash_len_for_dashed_line, gap_len_for_dashed_line, radius_for_dotted_line, spacing_for_dotted_line, Paint, AnnotationActivationSupport};
 use crate::{impl_stack_top_access_for, impl_stroke_width_handler_for};
 use egui::{Color32, CursorIcon, Pos2, Rect, Response, Sense, Shape, Stroke, Ui, Widget, vec2, Painter};
 use std::cell::RefCell;
@@ -334,7 +334,7 @@ where
     }
 }
 
-impl<S> AnnotationCommon for StraightLineBasedAnnotation<S>
+impl<S> AnnotationActivationSupport for StraightLineBasedAnnotation<S>
 where
     S: AnnotationStyle,
 {

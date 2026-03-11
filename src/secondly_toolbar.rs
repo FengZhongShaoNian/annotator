@@ -1,17 +1,15 @@
-use crate::annotator::drop_down_box::{DropdownBox, create_stroke_type_selector};
-use crate::annotator::{AnnotationCommon, AnnotationTool, AnnotatorState, FillColorSupport, PainterExt, SharedAnnotatorState, StrokeColorSupport, StrokeType, StrokeTypeSupport, ToolName};
+use crate::annotator::drop_down_box::create_stroke_type_selector;
+use crate::annotator::{AnnotatorState, FillColorSupport, SharedAnnotatorState, StrokeColorSupport, StrokeTypeSupport, ToolName};
 use crate::application::Application;
-use crate::context::Command;
 use crate::dpi::{LogicalPosition, LogicalSize};
 use crate::global::ReadGlobal;
 use crate::view::{View, ViewId};
 use crate::window::AppWindow;
 use egui::{
-    Color32, Frame, Id, Margin, Rect, Response, Sense, Shape, Stroke, StrokeKind, Ui, Widget, pos2,
-    vec2,
+    vec2, Color32, Frame, Id, Margin, Response, Sense, Stroke, StrokeKind, Ui,
+    Widget,
 };
 use std::any::TypeId;
-use std::sync::Arc;
 
 fn run_ui<F>(
     app: &mut Application,

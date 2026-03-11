@@ -1,4 +1,4 @@
-use crate::annotator::{AnnotationCommon, AnnotatorState, SharedAnnotatorState, StrokeType, StrokeTypeSupport};
+use crate::annotator::{AnnotatorState, SharedAnnotatorState, StrokeType, StrokeTypeSupport};
 use crate::application::Application;
 use crate::dpi::LogicalSize;
 use crate::global::{ReadGlobal, ReadGlobalMut};
