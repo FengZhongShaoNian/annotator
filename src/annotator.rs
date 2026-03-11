@@ -35,7 +35,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 use delegate::delegate;
-use crate::annotator::text::TextTool;
+use crate::annotator::text::{TextAnnotation, TextTool};
 
 /// 线条类型（实线、虚线、点线）
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
@@ -221,6 +221,14 @@ impl ActivationState {
     pub fn new(active: bool) -> Self {
         ActivationState { active }
     }
+
+    pub fn active() -> Self{
+        Self::new(true)
+    }
+
+    pub fn not_active() -> Self{
+        Self::new(false)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -377,7 +385,7 @@ pub enum Annotation {
     Blur(BlurAnnotation),
 
     /// 文本
-    // Text(TextState),
+    Text(TextAnnotation),
 
     /// 序号
     // SerialNumber(SerialNumberState),
@@ -402,7 +410,7 @@ impl Annotation {
             Annotation::MarkerPen(_) => tool_name == ToolName::MarkerPen,
             Annotation::Mosaic(_) => tool_name == ToolName::Mosaic,
             Annotation::Blur(_) => tool_name == ToolName::Blur,
-            // Annotation::Text(_) => tool_name == ToolName::Text,
+            Annotation::Text(_) => tool_name == ToolName::Text,
             // Annotation::SerialNumber(_) => tool_name == ToolName::SerialNumber,
             // Annotation::Watermark(_) => tool_name == ToolName::Watermark,
             Annotation::Eraser(_) => tool_name == ToolName::Eraser,
@@ -419,7 +427,7 @@ impl Annotation {
             Annotation::MarkerPen(inner) => inner,
             Annotation::Mosaic(inner) => inner,
             Annotation::Blur(inner) => inner,
-            // Annotation::Text(inner) => inner,
+            Annotation::Text(inner) => inner,
             // Annotation::SerialNumber(inner) => inner,
             // Annotation::Watermark(inner) => inner,
             Annotation::Eraser(inner) => inner,
