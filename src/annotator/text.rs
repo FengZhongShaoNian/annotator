@@ -176,7 +176,10 @@ impl Widget for &mut TextAnnotation {
                         .margin(Margin::same(0))
                         .desired_width(f32::INFINITY)
                         .desired_rows(1);
-                    ui.add_sized(vec2(text_width, row_height + style.padding.sum().y), text_edit)
+                    let response = ui.add_sized(vec2(text_width, row_height + style.padding.sum().y), text_edit);
+                    if self.activation.is_active() {
+                        response.request_focus();
+                    }
                 });
                 let rect = response.response.rect;
                 self.rect = Some(rect);
