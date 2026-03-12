@@ -137,6 +137,8 @@ impl DeactivatedAware for SerialNumberTool {
 
 }
 
+const MAX_NUMBER: u32 = 99;
+
 impl Widget for &mut SerialNumberTool {
     fn ui(self, ui: &mut Ui) -> Response {
         let sense_area = Rect::from_min_size(Pos2::ZERO, ui.available_size());
@@ -150,6 +152,9 @@ impl Widget for &mut SerialNumberTool {
             let number = self.tool_state.next_number;
             let annotation = SerialNumberAnnotation::new(pointer_pos.unwrap(), number, self.tool_state.style.clone());
             self.tool_state.next_number += 1;
+            if self.tool_state.next_number > MAX_NUMBER {
+                self.tool_state.next_number = 1;
+            }
 
             let  annotator_state= self.annotator_state.upgrade().unwrap();
             annotator_state.borrow_mut().annotations_stack.push(annotation.into());
@@ -162,14 +167,17 @@ impl Widget for &mut SerialNumberTool {
 impl WheelHandler for SerialNumberTool {
     fn on_scroll_delta_changed(&mut self, value: f32) {
         if value < 0. {
-            if self.tool_state.next_number + 1 <= 99 {
-                self.tool_state.next_number += 1;
+            self.tool_state.next_number += 1;
+            if self.tool_state.next_number > MAX_NUMBER {
+                self.tool_state.next_number = 1;
             }
-        }else {
-            if self.tool_state.next_number - 1 > 0 {
-                self.tool_state.next_number -= 1;
+        } else {
+            let next_number = self.tool_state.next_number as i32 - 1i32;
+            if next_number <= 0i32 {
+                self.tool_state.next_number = MAX_NUMBER;
+            }else {
+                self.tool_state.next_number = next_number as u32;
             }
-
         }
 
     }

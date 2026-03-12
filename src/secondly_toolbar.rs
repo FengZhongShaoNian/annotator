@@ -78,6 +78,7 @@ pub fn create_secondly_toolbar(
 
                                     let supports_set_stroke_type = active_tool.supports_set_stroke_type();
                                     let supports_set_stroke_color = active_tool.supports_set_stroke_color();
+                                    let supports_set_fill_color = active_tool.supports_set_fill_color();
 
                                     if supports_set_stroke_type {
                                         create_stroke_type_selector(
@@ -90,7 +91,7 @@ pub fn create_secondly_toolbar(
                                         );
                                     }
 
-                                    if supports_set_stroke_color {
+                                    if supports_set_stroke_color || supports_set_fill_color {
                                         create_color_selector(
                                             app,
                                             window,
@@ -123,7 +124,13 @@ fn create_color_selector(
     let button_width = 18f32;
     let width = button_width * 5. + ui.spacing().item_spacing.x * 5.;
     let tool = annotator_state.current_annotation_tool.as_mut().unwrap();
-    let current_color = tool.stroke_color();
+
+    let current_color = if tool.supports_get_stroke_color() {
+        tool.stroke_color()
+    } else {
+        tool.fill_color().unwrap()
+    };
+
     if tool.tool_name() != ToolName::MarkerPen {
         if ui
             .add(ColorButton::new(
@@ -134,9 +141,13 @@ fn create_color_selector(
             ))
             .clicked()
         {
-            tool.set_stroke_color(Color32::RED);
-            if tool.fill_color().is_some() {
-                tool.set_fill_color(Color32::RED);
+            if tool.supports_set_stroke_color() {
+                tool.set_stroke_color(Color32::RED);
+            }
+            if tool.supports_set_fill_color() {
+                if tool.fill_color().is_some() {
+                    tool.set_fill_color(Color32::RED);
+                }
             }
         }
         if ui
@@ -148,10 +159,15 @@ fn create_color_selector(
             ))
             .clicked()
         {
-            tool.set_stroke_color(Color32::BLACK);
-            if tool.fill_color().is_some() {
-                tool.set_fill_color(Color32::BLACK);
+            if tool.supports_set_stroke_color() {
+                tool.set_stroke_color(Color32::BLACK);
             }
+            if tool.supports_set_fill_color() {
+                if tool.fill_color().is_some() {
+                    tool.set_fill_color(Color32::BLACK);
+                }
+            }
+
         }
         if ui
             .add(ColorButton::new(
@@ -162,9 +178,13 @@ fn create_color_selector(
             ))
             .clicked()
         {
-            tool.set_stroke_color(Color32::BLUE);
-            if tool.fill_color().is_some() {
-                tool.set_fill_color(Color32::BLUE);
+            if tool.supports_set_stroke_color() {
+                tool.set_stroke_color(Color32::BLUE);
+            }
+            if tool.supports_set_fill_color() {
+                if tool.fill_color().is_some() {
+                    tool.set_fill_color(Color32::BLUE);
+                }
             }
         }
         if ui
@@ -176,9 +196,13 @@ fn create_color_selector(
             ))
             .clicked()
         {
-            tool.set_stroke_color(Color32::GREEN);
-            if tool.fill_color().is_some() {
-                tool.set_fill_color(Color32::GREEN);
+            if tool.supports_set_stroke_color() {
+                tool.set_stroke_color(Color32::GREEN);
+            }
+            if tool.supports_set_fill_color() {
+                if tool.fill_color().is_some() {
+                    tool.set_fill_color(Color32::GREEN);
+                }
             }
         }
         if ui
@@ -190,9 +214,13 @@ fn create_color_selector(
             ))
             .clicked()
         {
-            tool.set_stroke_color(Color32::GOLD);
-            if tool.fill_color().is_some() {
-                tool.set_fill_color(Color32::GOLD);
+            if tool.supports_set_stroke_color() {
+                tool.set_stroke_color(Color32::GOLD);
+            }
+            if tool.supports_set_fill_color() {
+                if tool.fill_color().is_some() {
+                    tool.set_fill_color(Color32::GOLD);
+                }
             }
         }
     }else {
@@ -207,9 +235,13 @@ fn create_color_selector(
             ))
             .clicked()
         {
-            tool.set_stroke_color(red);
-            if tool.fill_color().is_some() {
-                tool.set_fill_color(red);
+            if tool.supports_set_stroke_color() {
+                tool.set_stroke_color(red);
+            }
+            if tool.supports_set_fill_color() {
+                if tool.fill_color().is_some() {
+                    tool.set_fill_color(red);
+                }
             }
         }
         let black = Color32::from_rgba_unmultiplied(0, 0, 0, 76);
@@ -222,9 +254,13 @@ fn create_color_selector(
             ))
             .clicked()
         {
-            tool.set_stroke_color(black);
-            if tool.fill_color().is_some() {
-                tool.set_fill_color(black);
+            if tool.supports_set_stroke_color() {
+                tool.set_stroke_color(black);
+            }
+            if tool.supports_set_fill_color() {
+                if tool.fill_color().is_some() {
+                    tool.set_fill_color(black);
+                }
             }
         }
 
@@ -238,9 +274,13 @@ fn create_color_selector(
             ))
             .clicked()
         {
-            tool.set_stroke_color(blue);
-            if tool.fill_color().is_some() {
-                tool.set_fill_color(blue);
+            if tool.supports_set_stroke_color() {
+                tool.set_stroke_color(blue);
+            }
+            if tool.supports_set_fill_color() {
+                if tool.fill_color().is_some() {
+                    tool.set_fill_color(blue);
+                }
             }
         }
         let green = Color32::from_rgba_unmultiplied(0, 255, 0, 76);
@@ -253,9 +293,13 @@ fn create_color_selector(
             ))
             .clicked()
         {
-            tool.set_stroke_color(green);
-            if tool.fill_color().is_some() {
-                tool.set_fill_color(green);
+            if tool.supports_set_stroke_color() {
+                tool.set_stroke_color(green);
+            }
+            if tool.supports_set_fill_color() {
+                if tool.fill_color().is_some() {
+                    tool.set_fill_color(green);
+                }
             }
         }
         let gold = Color32::from_rgba_unmultiplied(255, 215, 0, 76);
@@ -268,14 +312,24 @@ fn create_color_selector(
             ))
             .clicked()
         {
-            tool.set_stroke_color(gold);
-            if tool.fill_color().is_some() {
-                tool.set_fill_color(gold);
+            if tool.supports_set_stroke_color() {
+                tool.set_stroke_color(gold);
+            }
+            if tool.supports_set_fill_color() {
+                if tool.fill_color().is_some() {
+                    tool.set_fill_color(gold);
+                }
             }
         }
     }
 
-    if current_color != tool.stroke_color() {
+    let new_current_color = if tool.supports_get_stroke_color() {
+        tool.stroke_color()
+    } else {
+        tool.fill_color().unwrap()
+    };
+
+    if current_color != new_current_color {
         annotator_state
             .annotations_stack
             .last_mut()
