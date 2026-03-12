@@ -1,6 +1,6 @@
 use crate::annotator::{
-    ActivationSupport, Annotation, AnnotationActivationSupport, AnnotatorState, FillColorSupport,
-    StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport,
+    ActivationSupport, Annotation, AnnotationActivationSupport, AnnotatorState, DeactivatedAware,
+    FillColorSupport, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport,
 };
 use crate::dpi::{LogicalBounds, PhysicalBounds, PhysicalSize};
 use crate::egui_off_screen_render::EguiOffScreenRender;
@@ -354,6 +354,13 @@ impl<S: Default + Clone, H: ImageHandler> ImageBasedTool<S, H> {
             image_handler,
         }
     }
+}
+
+impl<S, H> DeactivatedAware for ImageBasedTool<S, H>
+where
+    S: Default + Clone,
+    H: ImageHandler,
+{
 }
 
 pub type MosaicTool = ImageBasedTool<MosaicStyle, MosaicHandler>;

@@ -1,8 +1,17 @@
 use crate::annotator::cursor::{Crosshair, CustomCursor};
 use crate::annotator::rectangle_based::{EllipseTool, HitTarget, HitTest, RectangleTool};
-use crate::annotator::{ActivationState, ActivationSupport, Annotation, AnnotationStyle, AnnotationToolCommon, WheelHandler, AnnotatorState, DEFAULT_SIZE_FOR_SMALL_RECT, FillColorSupport, PainterExt, SharedAnnotatorState, SmallRect, StackTopAccessor, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport, dash_len_for_dashed_line, gap_len_for_dashed_line, radius_for_dotted_line, spacing_for_dotted_line, AnnotationActivationSupport};
+use crate::annotator::{
+    ActivationState, ActivationSupport, Annotation, AnnotationActivationSupport, AnnotationStyle,
+    AnnotationToolCommon, AnnotatorState, DEFAULT_SIZE_FOR_SMALL_RECT, DeactivatedAware,
+    FillColorSupport, PainterExt, SharedAnnotatorState, SmallRect, StackTopAccessor,
+    StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport, WheelHandler,
+    dash_len_for_dashed_line, gap_len_for_dashed_line, radius_for_dotted_line,
+    spacing_for_dotted_line,
+};
 use crate::{impl_stack_top_access_for, impl_stroke_width_handler_for};
-use egui::{Color32, CursorIcon, Pos2, Rect, Response, Sense, Shape, Stroke, Ui, Widget, vec2, Painter};
+use egui::{
+    Color32, CursorIcon, Painter, Pos2, Rect, Response, Sense, Shape, Stroke, Ui, Widget, vec2,
+};
 use std::cell::RefCell;
 use std::rc::Weak;
 
@@ -417,7 +426,6 @@ impl Widget for &mut ArrowAnnotation {
             self.style.stroke,
         );
 
-
         if self.activation().is_active() {
             painter.small_rect(&self.start_position);
             painter.small_rect(&self.end_position);
@@ -663,9 +671,10 @@ where
     }
 }
 
+impl<S> DeactivatedAware for StraightLineBasedTool<S> where S: AnnotationStyle + Default {}
+
 pub type StraightLineTool = StraightLineBasedTool<StraightLineStyle>;
 pub type ArrowTool = StraightLineBasedTool<ArrowStyle>;
-
 
 impl_stack_top_access_for!(StraightLineTool=>StraightLineAnnotation, ArrowTool=>ArrowAnnotation);
 

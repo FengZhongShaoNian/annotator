@@ -1,8 +1,5 @@
 use crate::annotator::rectangle_based::{HitTarget, HitTest};
-use crate::annotator::{
-    ActivationState, ActivationSupport, Annotation, AnnotationActivationSupport,
-    AnnotationToolCommon, AnnotatorState, PainterExt, SharedAnnotatorState, StackTopAccessor,
-};
+use crate::annotator::{ActivationState, ActivationSupport, Annotation, AnnotationActivationSupport, AnnotationToolCommon, AnnotatorState, DeactivatedAware, PainterExt, SharedAnnotatorState, StackTopAccessor};
 use crate::annotator::{
     FillColorSupport, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport,
 };
@@ -458,5 +455,14 @@ impl Widget for &mut TextTool {
         }
 
         response
+    }
+}
+
+impl DeactivatedAware for TextTool {
+    fn on_deactivated(&mut self, annotator_state: &mut AnnotatorState){
+        if let Some(mut annotation) = self.tool_state.current_annotation.take() {
+            annotation.activation.deactivate();
+            annotator_state.annotations_stack.push(annotation.into());
+        }
     }
 }

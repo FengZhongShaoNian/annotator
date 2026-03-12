@@ -1,8 +1,16 @@
 use crate::annotator::cursor::{Crosshair, CustomCursor};
-use crate::annotator::{ActivationState, ActivationSupport, Annotation, AnnotationActivationSupport, AnnotationStyle, AnnotationToolCommon, AnnotatorState, FillColorSupport, PainterExt, SharedAnnotatorState, StackTopAccessor, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport, WheelHandler};
+use crate::annotator::{
+    ActivationState, ActivationSupport, Annotation, AnnotationActivationSupport, AnnotationStyle,
+    AnnotationToolCommon, AnnotatorState, DeactivatedAware, FillColorSupport, PainterExt,
+    SharedAnnotatorState, StackTopAccessor, StrokeColorSupport, StrokeType, StrokeTypeSupport,
+    StrokeWidthSupport, WheelHandler,
+};
 use crate::{impl_stack_top_access_for, impl_stroke_width_handler_for};
 use egui::epaint::EllipseShape;
-use egui::{pos2, vec2, Color32, CursorIcon, Painter, Pos2, Rect, Response, Sense, Stroke, StrokeKind, Ui, Widget};
+use egui::{
+    Color32, CursorIcon, Painter, Pos2, Rect, Response, Sense, Stroke, StrokeKind, Ui, Widget,
+    pos2, vec2,
+};
 use std::cell::RefCell;
 use std::rc::Weak;
 
@@ -88,8 +96,7 @@ impl FillColorSupport for RectangleStyle {
     }
 }
 
-impl AnnotationStyle for RectangleStyle {
-}
+impl AnnotationStyle for RectangleStyle {}
 
 impl Default for RectangleStyle {
     fn default() -> Self {
@@ -183,8 +190,7 @@ impl FillColorSupport for EllipseStyle {
     }
 }
 
-impl AnnotationStyle for EllipseStyle {
-}
+impl AnnotationStyle for EllipseStyle {}
 
 impl Default for EllipseStyle {
     fn default() -> Self {
@@ -627,6 +633,8 @@ where
     }
 }
 
+impl<S> DeactivatedAware for RectangleBasedTool<S> where S: AnnotationStyle + Default {}
+
 pub type RectangleTool = RectangleBasedTool<RectangleStyle>;
 pub type EllipseTool = RectangleBasedTool<EllipseStyle>;
 
@@ -816,7 +824,6 @@ macro_rules! impl_widget_for {
         )*
     };
 }
-
 
 impl_widget_for!(RectangleTool => RectangleAnnotation, EllipseTool => EllipseAnnotation);
 

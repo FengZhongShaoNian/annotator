@@ -35,6 +35,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 use delegate::delegate;
+use log::info;
 use crate::annotator::text::{TextAnnotation, TextTool};
 
 /// 线条类型（实线、虚线、点线）
@@ -571,6 +572,10 @@ impl AnnotationTool {
     }
 }
 
+pub trait DeactivatedAware {
+    fn on_deactivated(&mut self, _annotator_state: &mut AnnotatorState){}
+}
+
 #[delegate_impl]
 impl StrokeWidthSupport for AnnotationTool {
     fn supports_get_stroke_width(&self) -> bool;
@@ -616,6 +621,12 @@ impl AnnotationToolCommon for AnnotationTool {
 impl Widget for &mut AnnotationTool {
     fn ui(self, ui: &mut Ui) -> Response;
 }
+
+#[delegate_impl]
+impl DeactivatedAware for AnnotationTool {
+    fn on_deactivated(&mut self, annotator_state: &mut AnnotatorState);
+}
+
 
 /// 当前标注状态
 pub struct AnnotatorState {
@@ -741,14 +752,16 @@ impl AnnotatorState {
             .annotation_tools
             .remove(&tool_name)
             .expect(&format!("{:?}Tool does not exist", tool_name));
-        if let Some(previous_tool) = self.current_annotation_tool.replace(tool) {
+        if let Some(mut previous_tool) = self.current_annotation_tool.replace(tool) {
+            previous_tool.on_deactivated(self);
             self.annotation_tools
                 .insert(previous_tool.tool_name(), previous_tool);
         }
     }
 
     pub fn deactivate_annotation_tool(&mut self) {
-        if let Some(previous_tool) = self.current_annotation_tool.take() {
+        if let Some(mut previous_tool) = self.current_annotation_tool.take() {
+            previous_tool.on_deactivated(self);
             self.annotation_tools
                 .insert(previous_tool.tool_name(), previous_tool);
         }

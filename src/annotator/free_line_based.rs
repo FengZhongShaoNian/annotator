@@ -1,5 +1,5 @@
 use crate::annotator::cursor::{Circle, Crosshair, CustomCursor};
-use crate::annotator::{ActivationSupport, Annotation, AnnotationActivationSupport, AnnotationStyle, AnnotationToolCommon, AnnotatorState, FillColorSupport, SharedAnnotatorState, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport, WheelHandler};
+use crate::annotator::{ActivationSupport, Annotation, AnnotationActivationSupport, AnnotationStyle, AnnotationToolCommon, AnnotatorState, DeactivatedAware, FillColorSupport, SharedAnnotatorState, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport, WheelHandler};
 use egui::{pos2, Color32, CursorIcon, Pos2, Rect, Response, Sense, Stroke, Ui, Widget};
 use std::cell::RefCell;
 use std::rc::Weak;
@@ -520,6 +520,12 @@ where
     fn annotator_state(&self) -> SharedAnnotatorState {
         self.annotator_state.upgrade().unwrap()
     }
+}
+
+impl <S> DeactivatedAware for FreeLineBasedTool<S>
+where
+    S: AnnotationStyle + Default,
+{
 }
 
 /// 限制最大的线条宽度
