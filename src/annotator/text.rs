@@ -252,7 +252,6 @@ impl Default for TextToolState {
 pub struct TextTool {
     annotator_state: Weak<RefCell<AnnotatorState>>,
     tool_state: TextToolState,
-    custom_cursor: Option<Box<dyn CustomCursor>>,
 }
 
 impl TextTool {
@@ -260,7 +259,6 @@ impl TextTool {
         Self {
             annotator_state,
             tool_state: TextToolState::default(),
-            custom_cursor: None,
         }
     }
 
@@ -448,10 +446,6 @@ impl Widget for &mut TextTool {
             if let Some(annotation) = self.tool_state.current_annotation.as_mut() {
                 ui.add(annotation);
             }
-        }
-
-        if let Some(cursor) = self.custom_cursor.as_ref() {
-            cursor.paint_with(ui.painter());
         }
 
         response

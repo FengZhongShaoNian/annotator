@@ -1,4 +1,4 @@
-use egui::{vec2, Color32, Painter, Pos2, Rangef, Shape, Stroke};
+use egui::{pos2, vec2, Color32, FontId, Painter, Pos2, Rangef, Rect, Shape, Stroke, StrokeKind, Ui};
 
 pub trait CustomCursor {
     fn paint_with(&self, painter: &Painter);
@@ -155,5 +155,96 @@ impl CustomCursor for Move {
         painter.arrow(self.center_pos, vec2(0., -half_size), Stroke::new(stroke_width, self.color));
         // 向下的箭头
         painter.arrow(self.center_pos, vec2(0., half_size), Stroke::new(stroke_width, self.color));
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct SerialNumberStyle {
+    /// 文本颜色
+    pub text_color: Color32,
+    /// 填充颜色
+    pub fill_color: Color32,
+    /// 是否绘制矩形外框
+    pub draw_rect_stroke: bool,
+    /// 圆的半径
+    pub radius: f32,
+}
+
+impl SerialNumberStyle {
+    pub fn new(text_color: Color32, fill_color: Color32, draw_rect_stroke: bool) -> Self {
+        Self {
+            text_color,
+            fill_color,
+            draw_rect_stroke,
+            radius: 16.,
+        }
+    }
+}
+
+impl Default for SerialNumberStyle {
+    fn default() -> Self {
+        Self::new(Color32::WHITE, Color32::RED, true)
+    }
+}
+
+/// 带圆圈的数字光标
+#[derive(Clone)]
+pub struct SerialNumber {
+    /// 光标中点的坐标
+    center_pos: Pos2,
+    /// 数字
+    number: u32,
+    style: SerialNumberStyle,
+}
+impl SerialNumber {
+    pub fn new(center_pos: Pos2, number: u32, style: SerialNumberStyle) -> Self {
+        Self {
+            center_pos,
+            number,
+            style,
+        }
+    }
+
+    pub fn rect(&self) -> Rect {
+        let radius = self.style.radius;
+        Rect::from_min_size(self.center_pos - vec2(radius, radius), vec2(radius*2., radius*2.))
+    }
+
+    pub fn style(&self) -> &SerialNumberStyle {
+        &self.style
+    }
+
+    pub fn style_mut(&mut self) -> &mut SerialNumberStyle {
+        &mut self.style
+    }
+}
+
+impl CustomCursor for SerialNumber {
+    fn paint_with(&self, painter: &Painter) {
+        // 圆的半径
+        let radius = 14.0;
+        let rect = self.rect();
+
+        // 绘制圆圈（边框）
+        if self.style.draw_rect_stroke {
+            painter.rect_stroke(
+                rect,
+                0.,
+                Stroke::new(1., Color32::WHITE),
+                StrokeKind::Middle,
+            );
+        }
+
+        // 绘制圆圈
+        painter.circle_filled(self.center_pos, radius, self.style.fill_color);
+
+        // 绘制数字文本
+        painter.text(
+            self.center_pos,
+            egui::Align2::CENTER_CENTER,
+            self.number.to_string(),
+            FontId::proportional(16.0),
+            self.style.text_color,
+        );
     }
 }

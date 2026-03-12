@@ -36,6 +36,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use delegate::delegate;
 use log::info;
+use crate::annotator::serial_number::{SerialNumberAnnotation, SerialNumberTool};
 use crate::annotator::text::{TextAnnotation, TextTool};
 
 /// 线条类型（实线、虚线、点线）
@@ -389,7 +390,7 @@ pub enum Annotation {
     Text(TextAnnotation),
 
     /// 序号
-    // SerialNumber(SerialNumberState),
+    SerialNumber(SerialNumberAnnotation),
 
     /// 水印
     // Watermark(WaterMarkState),
@@ -412,7 +413,7 @@ impl Annotation {
             Annotation::Mosaic(_) => tool_name == ToolName::Mosaic,
             Annotation::Blur(_) => tool_name == ToolName::Blur,
             Annotation::Text(_) => tool_name == ToolName::Text,
-            // Annotation::SerialNumber(_) => tool_name == ToolName::SerialNumber,
+            Annotation::SerialNumber(_) => tool_name == ToolName::SerialNumber,
             // Annotation::Watermark(_) => tool_name == ToolName::Watermark,
             Annotation::Eraser(_) => tool_name == ToolName::Eraser,
         }
@@ -429,7 +430,7 @@ impl Annotation {
             Annotation::Mosaic(inner) => inner,
             Annotation::Blur(inner) => inner,
             Annotation::Text(inner) => inner,
-            // Annotation::SerialNumber(inner) => inner,
+            Annotation::SerialNumber(inner) => inner,
             // Annotation::Watermark(inner) => inner,
             Annotation::Eraser(inner) => inner,
         } {
@@ -543,10 +544,10 @@ pub enum AnnotationTool {
 
     /// 文本
     Text(TextTool),
-    //
-    // /// 序号
-    // SerialNumber,
-    //
+
+    /// 序号
+    SerialNumber(SerialNumberTool),
+
     // /// 水印
     // Watermark,
     /// 橡皮擦
@@ -565,7 +566,7 @@ impl AnnotationTool {
             AnnotationTool::Mosaic(_) => ToolName::Mosaic,
             AnnotationTool::Blur(_) => ToolName::Blur,
             AnnotationTool::Text(_) => ToolName::Text,
-            // AnnotationTool::SerialNumber(_) => ToolName::SerialNumber,
+            AnnotationTool::SerialNumber(_) => ToolName::SerialNumber,
             // AnnotationTool::Watermark(_) => ToolName::Watermark,
             AnnotationTool::Eraser(_) => ToolName::Eraser,
         }
@@ -626,7 +627,6 @@ impl Widget for &mut AnnotationTool {
 impl DeactivatedAware for AnnotationTool {
     fn on_deactivated(&mut self, annotator_state: &mut AnnotatorState);
 }
-
 
 /// 当前标注状态
 pub struct AnnotatorState {
