@@ -733,9 +733,10 @@ impl Dispatch<zwp_text_input_v3::ZwpTextInputV3, ()> for Application {
                 }
             }
             zwp_text_input_v3::Event::PreeditString { text, .. } => {
-                let Some(text) = text else {
-                    return;
-                };
+                // egui看起来不支持“没有ImeEvent::Preedit而直接ImeEvent::Commit的情况”，
+                // 然而在输入中文标点符号的时候，Event::PreeditString的text为None，
+                // 为了避免无法输入中文标点符号，这里替换成空字符串
+                let text = text.unwrap_or("".to_string());
 
                 for window in &mut this.windows {
                     if window.keyboard_focus() {
