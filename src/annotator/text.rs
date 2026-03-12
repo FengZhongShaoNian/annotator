@@ -10,25 +10,31 @@ use crate::{
     declare_not_support_fill_color, declare_not_support_stroke_type, impl_stack_top_access_for,
 };
 use delegate::delegate;
-use egui::{Area, Color32, CursorIcon, Id, Pos2, Rect, Response, Sense, TextEdit, Ui, Widget, vec2, Stroke, StrokeKind};
+use egui::{Area, Color32, CursorIcon, Id, Margin, Pos2, Rect, Response, Sense, Stroke, StrokeKind, TextEdit, Ui, Widget, vec2, FontSelection, FontId};
+use log::info;
 use std::cell::RefCell;
 use std::rc::Weak;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use log::info;
+use crate::annotator::cursor::{CustomCursor, Move};
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct TextStyle {
-    font_color: Color32,
-    font_size: f32,
-    // 边框的线条样式
+    /// 文本颜色
+    text_color: Color32,
+    /// 字体族和字体大小
+    font: FontId,
+    /// 文本和边框的间距
+    padding: Margin,
+    /// 边框的线条样式
     stroke: Stroke,
 }
 
 impl Default for TextStyle {
     fn default() -> Self {
         Self {
-            font_color: Color32::RED,
-            font_size: 18.0,
+            text_color: Color32::RED,
+            font: FontId::proportional(18.),
+            padding: Margin::same(10),
             stroke: Stroke::new(1.0, Color32::WHITE),
         }
     }
@@ -80,6 +86,7 @@ pub struct TextAnnotation {
     text: String,
     pos: Pos2,
     activation: ActivationSupport,
+    /// 仅用于记录文本标注组件的矩形区域信息，不应该从外部修改它
     rect: Option<Rect>,
 }
 
@@ -117,6 +124,22 @@ impl TextAnnotation {
         self.pos = pos;
     }
 
+    fn max_line_width(&self, ui: &mut Ui) -> f32 {
+        let galley = ui.fonts_mut(|fonts_view| {
+            fonts_view.layout(
+                self.text.clone(),
+                self.style.font.clone(),
+                self.style.text_color,
+                f32::INFINITY, // 不因宽度折行，保留原始换行
+            )
+        });
+        galley
+            .rows
+            .iter()
+            .map(|row| row.rect().width())
+            .fold(0.0, f32::max)
+    }
+
     pub fn rect(&self) -> Option<&Rect> {
         self.rect.as_ref()
     }
@@ -128,24 +151,39 @@ impl Into<Annotation> for TextAnnotation {
     }
 }
 
+const MIN_TEXT_WIDTH: f32 = 30.0;
+
 impl Widget for &mut TextAnnotation {
     fn ui(self, ui: &mut Ui) -> Response {
+        let max_text_width = self.max_line_width(ui);
+        let style = self.style.clone();
+        let row_height = ui.fonts_mut(|f| f.row_height(&style.font));
+        let text_width = max_text_width.max(MIN_TEXT_WIDTH);
         let inner_response = Area::new(self.id)
-            .movable(true)
-            .current_pos(self.pos())
+            .current_pos(self.pos() - vec2(style.padding.leftf(), style.padding.topf() + row_height/2.0))
+            .movable(false)
             .show(ui.ctx(), |ui| {
-                let response = ui.add(
-                    TextEdit::multiline(self.text_mut())
+                let frame = egui::Frame::default().inner_margin(style.padding);
+                let response = frame.show(ui, |ui| {
+                    let text_color = self.style.text_color;
+                    let interactive = self.activation.is_active();
+                    let text_edit = TextEdit::multiline(self.text_mut())
                         .frame(false)
-                        .text_color(Color32::RED)
-                        .background_color(Color32::TRANSPARENT)
-                        .min_size(vec2(100.0, 40.0)),
-                );
-                self.rect = Some(response.rect);
+                        .text_color(text_color)
+                        .font(style.font)
+                        .background_color(Color32::GREEN)
+                        .interactive(interactive)
+                        .margin(Margin::same(0))
+                        .desired_width(f32::INFINITY)
+                        .desired_rows(1);
+                    ui.add_sized(vec2(text_width, row_height + style.padding.sum().y), text_edit)
+                });
+                let rect = response.response.rect;
+                self.rect = Some(rect);
                 if self.activation.is_active() {
                     let painter = ui.painter();
-                    painter.rect_stroke(response.rect, 0., self.style.stroke, StrokeKind::Middle);
-                    painter.small_rects(&response.rect);
+                    painter.rect_stroke(rect, 0., self.style.stroke, StrokeKind::Middle);
+                    painter.small_rects(&rect);
                 }
             });
         inner_response.response
@@ -214,6 +252,7 @@ impl Default for TextToolState {
 pub struct TextTool {
     annotator_state: Weak<RefCell<AnnotatorState>>,
     tool_state: TextToolState,
+    custom_cursor: Option<Box<dyn CustomCursor>>,
 }
 
 impl TextTool {
@@ -221,6 +260,7 @@ impl TextTool {
         Self {
             annotator_state,
             tool_state: TextToolState::default(),
+            custom_cursor: None,
         }
     }
 
@@ -231,30 +271,39 @@ impl TextTool {
             // 判断当前鼠标是否位于此标注上
             match annotation_on_stack_top {
                 None => None,
-                Some(annotation) => {
-                    let stroke_width = annotation.stroke_width();
-                    if let Some(rect) = annotation.rect() {
-                        return Some(rect.hit_test(&pointer_pos, stroke_width));
-                    }
-                    None
-                }
+                Some(annotation) => Self::hit_test_for_annotation(annotation, pointer_pos),
             }
         })
     }
 
-    fn update_cursor_icon(&self, ui: &mut Ui) {
+    fn hit_test_for_annotation(
+        annotation: &TextAnnotation,
+        pointer_pos: &Pos2,
+    ) -> Option<HitTarget> {
+        // 判断当前鼠标是否位于此标注上
+        let stroke_width = annotation.stroke_width();
+        if let Some(rect) = annotation.rect() {
+            Some(rect.hit_test(&pointer_pos, stroke_width))
+        } else {
+            None
+        }
+    }
+
+    fn update_cursor_icon(&mut self, ui: &mut Ui) {
         let Some(pointer_pos) = ui.ctx().pointer_hover_pos() else {
             return;
         };
         // 从标注栈的栈顶中获取最近的一个标注
-        let hit_target =
-            self.hit_test_for_annotation_on_stack_top(&pointer_pos);
-
-        if let Some(hit_target) = hit_target {
-            if hit_target != HitTarget::Outside && hit_target != HitTarget::Inside {
-                ui.ctx().set_cursor_icon(CursorIcon::Move);
-            }
-            else {
+        if let Some(annotation) = self.tool_state.current_annotation.as_ref() {
+            let hit_target = Self::hit_test_for_annotation(annotation, &pointer_pos);
+            if let Some(hit_target) = hit_target {
+                // 鼠标位于边框上
+                if hit_target != HitTarget::Outside && hit_target != HitTarget::Inside {
+                    ui.ctx().set_cursor_icon(CursorIcon::Move);
+                } else {
+                    ui.ctx().set_cursor_icon(CursorIcon::Text);
+                }
+            } else {
                 ui.ctx().set_cursor_icon(CursorIcon::Text);
             }
         } else {
@@ -362,88 +411,47 @@ impl Widget for &mut TextTool {
         let sense_area = Rect::from_min_size(Pos2::ZERO, ui.available_size());
         let response = ui.allocate_rect(sense_area, Sense::click_and_drag());
 
-        let Some(pointer_pos) = ui.ctx().pointer_hover_pos() else {
-            return response;
-        };
-
         self.update_cursor_icon(ui);
 
         if response.drag_started() {
-            let drag_started_pos = ui.ctx().input(|i| i.pointer.press_origin().unwrap());
-            // 从标注栈的栈顶中获取最近的一个标注
-            let hit_target = self.hit_test_for_annotation_on_stack_top(&drag_started_pos);
-
-            if let Some(hit_target) = hit_target {
-                if hit_target != HitTarget::Inside && hit_target != HitTarget::Outside {
-                    let support_activate = self
-                        .peek_annotation(|annotation_on_stack_top: Option<&TextAnnotation>| {
-                            Some(
-                                annotation_on_stack_top
-                                    .unwrap()
-                                    .activation()
-                                    .supports_activate(),
-                            )
-                        })
-                        .unwrap();
-
-                    if support_activate {
-                        // 调整现有的标注
-                        let mut annotation = self.pop_annotation().unwrap();
-                        annotation.activation_mut().activate();
-                        self.tool_state.current_annotation = Some(annotation);
-                    }
-                } else {
-                    self.peek_annotation_mut(|mut annotation_on_stack_top| {
-                        // 把栈顶的标注设为非激活状态
-                        annotation_on_stack_top
-                            .as_mut()
-                            .unwrap()
-                            .activation_mut()
-                            .deactivate();
-                        None::<()>
-                    });
-                }
-            }
-        }else if response.clicked() {
+            info!("drag started!");
+        } else if response.clicked() {
+            println!("clicked!");
+            let pointer_pos = response.hover_pos().unwrap();
             let hit_target = self.hit_test_for_annotation_on_stack_top(&pointer_pos);
             if hit_target.is_none() || hit_target.unwrap() != HitTarget::Inside {
+                if let Some(mut annotation) = self.tool_state.current_annotation.take() {
+                    annotation.activation.deactivate();
+                    let annotation_state = self.annotator_state.upgrade().unwrap();
+                    annotation_state
+                        .borrow_mut()
+                        .annotations_stack
+                        .push(annotation.into());
+                }
                 let annotation = TextAnnotation::new(
                     generate_unique_text_annotation_id(),
-                    self.tool_state.style,
-                    String::from("Hello World"),
+                    self.tool_state.style.clone(),
+                    String::new(),
                     pointer_pos,
                     ActivationSupport::Supported(ActivationState::active()),
                 );
-                self.peek_annotation_mut(|annotation_on_stack_top: Option<&mut TextAnnotation>| {
-                    if let Some(annotation) = annotation_on_stack_top {
-                        annotation.activation_mut().deactivate();
-                    }
-                    None::<()>
-                });
-                let annotation_state = self.annotator_state.upgrade().unwrap();
-                annotation_state
-                    .borrow_mut()
-                    .annotations_stack
-                    .push(annotation.into());
+                self.tool_state.current_annotation = Some(annotation);
             }
-        }
-
-        if response.dragged() {
+        } else if response.dragged() {
+            println!("dragged!");
             if let Some(annotation) = self.tool_state.current_annotation.as_mut() {
                 let new_pos = annotation.pos + response.drag_delta();
                 annotation.set_pos(new_pos);
                 ui.add(annotation);
             }
+        } else {
+            if let Some(annotation) = self.tool_state.current_annotation.as_mut() {
+                ui.add(annotation);
+            }
         }
 
-        if response.drag_stopped() {
-            if let Some(annotation) = self.tool_state.current_annotation.take() {
-                let annotation_state = self.annotator_state.upgrade().unwrap();
-                annotation_state
-                    .borrow_mut()
-                    .annotations_stack
-                    .push(annotation.into());
-            }
+        if let Some(cursor) = self.custom_cursor.as_ref() {
+            cursor.paint_with(ui.painter());
         }
 
         response

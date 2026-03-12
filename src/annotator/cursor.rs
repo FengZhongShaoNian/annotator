@@ -1,4 +1,8 @@
-use egui::{Color32, Painter, Pos2, Rangef, Shape, Stroke};
+use egui::{vec2, Color32, Painter, Pos2, Rangef, Shape, Stroke};
+
+pub trait CustomCursor {
+    fn paint_with(&self, painter: &Painter);
+}
 
 /// 中间带圆点的十字光标
 pub struct Crosshair {
@@ -18,8 +22,10 @@ impl Crosshair {
             crosshair_dot_diameter,
         }
     }
+}
 
-    pub fn paint_with(self, painter: &Painter) {
+impl CustomCursor for Crosshair {
+    fn paint_with(&self, painter: &Painter) {
         let crosshair_dot_radius = self.crosshair_dot_diameter / 2.;
         let center_pos = self.center_pos;
         let color = self.color;
@@ -99,8 +105,10 @@ impl Circle {
             diameter,
         }
     }
+}
 
-    pub fn paint_with(self, painter: &Painter) {
+impl CustomCursor for Circle {
+    fn paint_with(&self, painter: &Painter) {
         let radius = self.diameter / 2.;
         let center_pos = self.center_pos;
         let color = self.color;
@@ -112,5 +120,40 @@ impl Circle {
             color,
             Stroke::new(0.5, color),
         );
+    }
+}
+
+/// 十字箭头光标
+pub struct Move {
+    /// 光标中点的坐标
+    center_pos: Pos2,
+    /// 光标的颜色
+    color: Color32,
+    /// 光标的宽高
+    size: f32,
+}
+
+impl Move {
+    pub fn new(center_pos: Pos2, color: Color32, size: f32) -> Self {
+        Self {
+            center_pos,
+            color,
+            size,
+        }
+    }
+}
+
+impl CustomCursor for Move {
+    fn paint_with(&self, painter: &Painter) {
+        let half_size = self.size / 2.;
+        let stroke_width = 2.5;
+        // 向左的箭头
+        painter.arrow(self.center_pos, vec2(-half_size, 0.), Stroke::new(stroke_width, self.color));
+        // 向右的箭头
+        painter.arrow(self.center_pos, vec2(half_size, 0.), Stroke::new(stroke_width, self.color));
+        // 向上的箭头
+        painter.arrow(self.center_pos, vec2(0., -half_size), Stroke::new(stroke_width, self.color));
+        // 向下的箭头
+        painter.arrow(self.center_pos, vec2(0., half_size), Stroke::new(stroke_width, self.color));
     }
 }

@@ -1,4 +1,4 @@
-use crate::annotator::cursor::Crosshair;
+use crate::annotator::cursor::{Crosshair, CustomCursor};
 use crate::annotator::{ActivationState, ActivationSupport, Annotation, AnnotationActivationSupport, AnnotationStyle, AnnotationToolCommon, AnnotatorState, FillColorSupport, PainterExt, SharedAnnotatorState, StackTopAccessor, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport, WheelHandler};
 use crate::{impl_stack_top_access_for, impl_stroke_width_handler_for};
 use egui::epaint::EllipseShape;
