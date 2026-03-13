@@ -264,6 +264,7 @@ impl StrokeWidthSupport for TextAnnotation {
     pub struct TextTool {
         annotator_state: Weak<RefCell<AnnotatorState>>,
         tool_state: TextToolState,
+        custom_cursor: Option<Box<dyn CustomCursor>>,
     }
 
     impl TextTool {
@@ -271,6 +272,7 @@ impl StrokeWidthSupport for TextAnnotation {
             Self {
                 annotator_state,
                 tool_state: TextToolState::default(),
+                custom_cursor: None,
             }
         }
 
@@ -309,7 +311,8 @@ impl StrokeWidthSupport for TextAnnotation {
                 if let Some(hit_target) = hit_target {
                     // 鼠标位于边框上
                     if hit_target != HitTarget::Outside && hit_target != HitTarget::Inside {
-                        ui.ctx().set_cursor_icon(CursorIcon::Move);
+                        ui.ctx().set_cursor_icon(CursorIcon::None);
+                        self.custom_cursor = Some(Box::new(Move::new(pointer_pos, Color32::RED, 24.)));
                     } else {
                         ui.ctx().set_cursor_icon(CursorIcon::Text);
                     }
@@ -458,6 +461,10 @@ impl StrokeWidthSupport for TextAnnotation {
                 if let Some(annotation) = self.tool_state.current_annotation.as_mut() {
                     ui.add(annotation);
                 }
+            }
+
+            if let Some(custom_cursor) = self.custom_cursor.take() {
+                custom_cursor.paint_with(ui.painter());
             }
 
             response
