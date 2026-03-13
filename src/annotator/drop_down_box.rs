@@ -111,7 +111,7 @@ impl Widget for DropdownBox<'_, '_, '_, '_> {
     }
 }
 
-const STROKE_TYPE_SELECTOR_WIDTH: u32 = 100u32;
+pub(crate) const STROKE_TYPE_SELECTOR_WIDTH: u32 = 100u32;
 
 pub fn create_stroke_type_selector(
     id: Id,
@@ -120,7 +120,7 @@ pub fn create_stroke_type_selector(
     current_view: &mut dyn View,
     annotator_state: &mut AnnotatorState,
     ui: &mut Ui,
-) -> u32 {
+) {
     let dropdown = DropdownBox {
         id,
         app,
@@ -224,8 +224,6 @@ pub fn create_stroke_type_selector(
         )),
     };
     ui.add(dropdown);
-
-    STROKE_TYPE_SELECTOR_WIDTH
 }
 
 struct StrokeTypeButton {
