@@ -19,6 +19,7 @@ pub enum Command {
     HideView(ViewId),
     ResizeView(ViewId, LogicalSize<u32>),
     DropView(ViewId),
+    RepositionSubView(ViewId, LogicalPosition<i32>),
 }
 
 impl Default for WindowContext {

@@ -121,7 +121,7 @@ impl<'window> View for SurfaceView<'window> {
     }
 
     fn resize(&mut self, new_size: LogicalSize<u32>, gpu: &GpuContext) {
-        info!("Resize viewport to: {:?}", new_size);
+        info!("Resize viewport {:?} to: {:?}", self.id, new_size);
 
         let physical_size = new_size.to_physical(self.scale_factor());
         self.resize_surface(physical_size, &gpu);

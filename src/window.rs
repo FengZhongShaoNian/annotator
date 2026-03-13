@@ -261,7 +261,7 @@ impl AppWindow {
 
     /// 创建xdg-popup
     /// 需要注意：positioner的anchor_rect必须是root-view上的有效区域，
-    /// 也就是弹窗必须和xdg-toplevel挨着，不让弹窗不显示
+    /// 也就是弹窗必须和xdg-toplevel挨着，不然弹窗不显示
     pub fn create_xdg_popup_view(
         &mut self,
         id: ViewId,
@@ -650,6 +650,21 @@ impl AppWindow {
                     let app_view = self.views.remove(&id);
                     if let Some(Some(app_view)) = app_view {
                         self.surface_id_to_view_id.remove(&app_view.surface_id());
+                    }
+                }
+                Command::RepositionSubView(id, position) => {
+                    let view = self.views.get_mut(&id);
+                    if let Some(Some(app_view)) = view {
+                        match app_view {
+                            Child(sub_view) => {
+                                sub_view.set_position(position);
+                            }
+                            _  => {
+                                warn!("AppView with id {:?} is not type of SubView", id);
+                            }
+                        }
+                    }else {
+                        warn!("AppView with id {:?} not found", id);
                     }
                 }
             }

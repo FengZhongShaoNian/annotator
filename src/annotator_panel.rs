@@ -28,13 +28,12 @@ pub fn create_annotator_panel(
     app: &mut Application,
     window: &mut AppWindow,
     image: Arc<RgbaImage>,
+    logical_position: LogicalPosition<i32>,
 ) {
     let global_state = &app.global_state;
 
     let scale_factor = window.scale_factor().unwrap();
     let panel_size = PhysicalSize::new(image.width(), image.height()).to_logical(scale_factor);
-
-    let logical_position = LogicalPosition::new(0, 0);
 
     window.create_sub_surface_view(
         view_id,

@@ -128,15 +128,19 @@ pub fn create_secondly_toolbar(
                                     if supports_set_stroke_type {
                                         new_width += STROKE_TYPE_SELECTOR_WIDTH + 10;
                                     }
-                                    let new_size =
+                                    let view_new_size =
                                         LogicalSize::new(new_width, current_view.size().height);
-                                    window
-                                        .window_context
-                                        .commands
-                                        .push_back(Command::ResizeView(
-                                            current_view.id(),
-                                            new_size,
-                                        ));
+
+                                    let view_current_size = current_view.size();
+                                    if view_new_size != view_current_size {
+                                        window
+                                            .window_context
+                                            .commands
+                                            .push_back(Command::ResizeView(
+                                                current_view.id(),
+                                                view_new_size,
+                                            ));
+                                    }
                                 },
                             );
                         });
