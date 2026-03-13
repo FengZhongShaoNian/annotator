@@ -1,8 +1,9 @@
 use crate::annotator::cursor::{Circle, Crosshair, CustomCursor};
-use crate::annotator::{ActivationSupport, Annotation, AnnotationActivationSupport, AnnotationStyle, AnnotationToolCommon, AnnotatorState, UnsubmittedAnnotationHandler, FillColorSupport, SharedAnnotatorState, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport, WheelHandler};
+use crate::annotator::{ActivationSupport, Annotation, AnnotationActivationSupport, AnnotationStyle, AnnotationToolCommon, AnnotatorState, UnsubmittedAnnotationHandler, FillColorSupport, SharedAnnotatorState, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport, WheelHandler, FontColorSupport};
 use egui::{pos2, Color32, CursorIcon, Pos2, Rect, Response, Sense, Stroke, Ui, Widget};
 use std::cell::RefCell;
 use std::rc::Weak;
+use crate::declare_not_support_font_color;
 
 #[derive(Debug, Copy, Clone)]
 pub struct PencilStyle {
@@ -531,10 +532,10 @@ where
 /// 限制最大的线条宽度
 const MAX_STROKE_WIDTH: f32 = 62.;
 
-
-
 pub type PencilTool = FreeLineBasedTool<PencilStyle>;
 pub type MarkerPenTool = FreeLineBasedTool<MarkerPenStyle>;
+
+declare_not_support_font_color!(PencilTool, MarkerPenTool);
 
 impl PencilTool {
     fn update_cursor_icon(&self, ui: &mut Ui) {

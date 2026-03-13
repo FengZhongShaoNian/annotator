@@ -16,7 +16,7 @@ use crate::global::{ReadGlobalMut, ReadOrInsertGlobal};
 use crate::view::ViewId;
 use crate::window::AppWindow;
 use egui::load::SizedTexture;
-use egui::{Area, ColorImage, Frame, Image, ImageSource, Rect, pos2, vec2};
+use egui::{Area, ColorImage, Frame, Image, ImageSource, Rect, pos2, vec2, Color32};
 use image::RgbaImage;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -75,6 +75,23 @@ pub fn create_annotator_panel(
                         annotations_stack: vec![],
                         redo_stack: vec![],
                         current_annotation_tool: None,
+                        candidate_colors: vec![
+                            Color32::RED,
+                            Color32::DARK_RED,
+                            Color32::LIGHT_RED,
+                            Color32::YELLOW,
+                            Color32::CYAN,
+                            Color32::MAGENTA,
+                            Color32::GREEN,
+                            Color32::DARK_GREEN,
+                            Color32::LIGHT_GREEN,
+                            Color32::BLUE,
+                            Color32::DARK_BLUE,
+                            Color32::LIGHT_BLUE,
+                            Color32::BLACK,
+                            Color32::WHITE,
+                            Color32::GRAY,
+                        ]
                     };
 
                     let annotator_state_rc = Rc::new(RefCell::new(annotator_state));

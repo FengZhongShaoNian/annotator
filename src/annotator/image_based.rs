@@ -1,13 +1,10 @@
 use crate::annotator::{
     ActivationSupport, Annotation, AnnotationActivationSupport, AnnotatorState, UnsubmittedAnnotationHandler,
-    FillColorSupport, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport,
+    FillColorSupport, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport,FontColorSupport
 };
 use crate::dpi::{LogicalBounds, PhysicalBounds, PhysicalSize};
 use crate::egui_off_screen_render::EguiOffScreenRender;
-use crate::{
-    declare_not_support_fill_color, declare_not_support_stroke_color,
-    declare_not_support_stroke_type, declare_not_support_stroke_width,
-};
+use crate::{declare_not_support_fill_color, declare_not_support_font_color, declare_not_support_stroke_color, declare_not_support_stroke_type, declare_not_support_stroke_width};
 use egui::load::SizedTexture;
 use egui::{
     Color32, ColorImage, CursorIcon, Frame, Image, ImageSource, Pos2, Rect, Response, Sense,
@@ -371,6 +368,7 @@ declare_not_support_stroke_width!(MosaicTool, BlurTool, EraserTool);
 declare_not_support_stroke_color!(MosaicTool, BlurTool, EraserTool);
 declare_not_support_stroke_type!(MosaicTool, BlurTool, EraserTool);
 declare_not_support_fill_color!(MosaicTool, BlurTool, EraserTool);
+declare_not_support_font_color!(MosaicTool, BlurTool, EraserTool);
 
 impl Into<Annotation> for MosaicAnnotation {
     fn into(self) -> Annotation {

@@ -100,6 +100,18 @@ pub trait FillColorSupport {
     fn set_fill_color(&mut self, color: Color32);
 }
 
+/// 字体颜色
+pub trait FontColorSupport {
+    /// 是否支持获取字体颜色
+    fn supports_get_font_color(&self) -> bool;
+    /// 字体颜色
+    fn font_color(&self) -> Color32;
+    /// 是否支持设置字体颜色
+    fn supports_set_font_color(&self) -> bool;
+    /// 设置字体颜色
+    fn set_font_color(&mut self, color: Color32);
+}
+
 #[macro_export]
 macro_rules! declare_not_support_stroke_width {
     ($($type_name:ty),*) => {
@@ -206,6 +218,34 @@ macro_rules! declare_not_support_fill_color {
                 }
                 /// 设置填充颜色
                 fn set_fill_color(&mut self, _color: Color32){
+                    unimplemented!()
+                }
+            }
+
+        )*
+    }
+}
+
+#[macro_export]
+macro_rules! declare_not_support_font_color {
+    ($($type_name:ty),*) => {
+        $(
+
+            impl FontColorSupport for $type_name {
+                /// 是否支持获取字体颜色
+                fn supports_get_font_color(&self) -> bool{
+                    false
+                }
+                /// 字体颜色
+                fn font_color(&self) -> Color32 {
+                    unimplemented!()
+                }
+                /// 是否支持设置字体颜色
+                fn supports_set_font_color(&self) -> bool{
+                    false
+                }
+                /// 设置字体颜色
+                fn set_font_color(&mut self, _color: Color32){
                     unimplemented!()
                 }
             }
@@ -621,6 +661,17 @@ impl FillColorSupport for AnnotationTool {
 
     fn set_fill_color(&mut self, color: Color32);
 }
+#[delegate_impl]
+impl FontColorSupport for AnnotationTool {
+    /// 是否支持获取字体颜色
+    fn supports_get_font_color(&self) -> bool;
+    /// 字体颜色
+    fn font_color(&self) -> Color32;
+    /// 是否支持设置字体颜色
+    fn supports_set_font_color(&self) -> bool;
+    /// 设置字体颜色
+    fn set_font_color(&mut self, color: Color32);
+}
 
 impl AnnotationToolCommon for AnnotationTool {
     fn annotator_state(&self) -> SharedAnnotatorState {
@@ -665,6 +716,9 @@ pub struct AnnotatorState {
 
     /// 当前激活的标注工具
     pub current_annotation_tool: Option<AnnotationTool>,
+    
+    /// 颜色选择器中可用的颜色
+    pub candidate_colors: Vec<Color32>,
 }
 
 pub type SharedAnnotatorState = Rc<RefCell<AnnotatorState>>;

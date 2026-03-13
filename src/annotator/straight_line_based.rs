@@ -4,11 +4,11 @@ use crate::annotator::{
     ActivationState, ActivationSupport, Annotation, AnnotationActivationSupport, AnnotationStyle,
     AnnotationToolCommon, AnnotatorState, DEFAULT_SIZE_FOR_SMALL_RECT, UnsubmittedAnnotationHandler,
     FillColorSupport, PainterExt, SharedAnnotatorState, SmallRect, StackTopAccessor,
-    StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport, WheelHandler,
+    StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport, WheelHandler, FontColorSupport,
     dash_len_for_dashed_line, gap_len_for_dashed_line, radius_for_dotted_line,
     spacing_for_dotted_line,
 };
-use crate::{impl_stack_top_access_for, impl_stroke_width_handler_for};
+use crate::{declare_not_support_font_color, impl_stack_top_access_for, impl_stroke_width_handler_for};
 use egui::{
     Color32, CursorIcon, Painter, Pos2, Rect, Response, Sense, Shape, Stroke, Ui, Widget, vec2,
 };
@@ -675,6 +675,8 @@ impl<S> UnsubmittedAnnotationHandler for StraightLineBasedTool<S> where S: Annot
 
 pub type StraightLineTool = StraightLineBasedTool<StraightLineStyle>;
 pub type ArrowTool = StraightLineBasedTool<ArrowStyle>;
+
+declare_not_support_font_color!(StraightLineTool, ArrowTool);
 
 impl_stack_top_access_for!(StraightLineTool=>StraightLineAnnotation, ArrowTool=>ArrowAnnotation);
 

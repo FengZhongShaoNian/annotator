@@ -1,5 +1,5 @@
 use crate::annotator::rectangle_based::{HitTarget, HitTest};
-use crate::annotator::{ActivationState, ActivationSupport, Annotation, AnnotationActivationSupport, AnnotationToolCommon, AnnotatorState, UnsubmittedAnnotationHandler, PainterExt, SharedAnnotatorState, StackTopAccessor};
+use crate::annotator::{ActivationState, ActivationSupport, Annotation, AnnotationActivationSupport, AnnotationToolCommon, AnnotatorState, UnsubmittedAnnotationHandler, PainterExt, SharedAnnotatorState, StackTopAccessor, FontColorSupport};
 use crate::annotator::{
     FillColorSupport, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport,
 };
@@ -366,20 +366,38 @@ impl StrokeWidthSupport for TextAnnotation {
 
     impl StrokeColorSupport for TextTool {
         delegate! {
-        to self.tool_state.style {
-            /// 是否支持获取线条颜色
-            fn supports_get_stroke_color(&self) -> bool;
-            /// 获取线条颜色
-            fn stroke_color(&self) -> Color32;
-            /// 是否支持设置线条颜色
-            fn supports_set_stroke_color(&self) -> bool;
-            /// 设置线条颜色
-            fn set_stroke_color(&mut self, color: Color32);
+            to self.tool_state.style {
+                /// 是否支持获取线条颜色
+                fn supports_get_stroke_color(&self) -> bool;
+                /// 获取线条颜色
+                fn stroke_color(&self) -> Color32;
+                /// 是否支持设置线条颜色
+                fn supports_set_stroke_color(&self) -> bool;
+                /// 设置线条颜色
+                fn set_stroke_color(&mut self, color: Color32);
+            }
         }
-    }
     }
     declare_not_support_fill_color!(TextTool);
     declare_not_support_stroke_type!(TextTool);
+
+impl FontColorSupport for TextTool {
+    fn supports_get_font_color(&self) -> bool {
+        true
+    }
+
+    fn font_color(&self) -> Color32 {
+        self.tool_state.style.text_color
+    }
+
+    fn supports_set_font_color(&self) -> bool {
+        true
+    }
+
+    fn set_font_color(&mut self, color: Color32) {
+        self.tool_state.style.text_color = color;
+    }
+}
 
     static COUNTER: AtomicUsize = AtomicUsize::new(0);
     fn generate_unique_text_annotation_id() -> Id {
@@ -500,7 +518,7 @@ impl StrokeWidthSupport for TextAnnotation {
         fn has_uncommitted_annotations(&self) -> bool {
             self.tool_state.current_annotation.is_some()
         }
-        
+
         fn submit_uncommitted_annotations(&mut self, annotator_state: &mut AnnotatorState) {
             self.submit_current_annotation(annotator_state);
         }

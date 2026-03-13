@@ -3,9 +3,9 @@ use crate::annotator::{
     ActivationState, ActivationSupport, Annotation, AnnotationActivationSupport, AnnotationStyle,
     AnnotationToolCommon, AnnotatorState, UnsubmittedAnnotationHandler, FillColorSupport, PainterExt,
     SharedAnnotatorState, StackTopAccessor, StrokeColorSupport, StrokeType, StrokeTypeSupport,
-    StrokeWidthSupport, WheelHandler,
+    StrokeWidthSupport, WheelHandler, FontColorSupport
 };
-use crate::{impl_stack_top_access_for, impl_stroke_width_handler_for};
+use crate::{declare_not_support_font_color, impl_stack_top_access_for, impl_stroke_width_handler_for};
 use egui::epaint::EllipseShape;
 use egui::{
     Color32, CursorIcon, Painter, Pos2, Rect, Response, Sense, Stroke, StrokeKind, Ui, Widget,
@@ -644,6 +644,7 @@ impl_stack_top_access_for!(RectangleTool=>RectangleAnnotation, EllipseTool=>Elli
 const MAX_STROKE_WIDTH: f32 = 62.;
 
 impl_stroke_width_handler_for!(RectangleTool => MAX_STROKE_WIDTH, EllipseTool => MAX_STROKE_WIDTH);
+declare_not_support_font_color!(RectangleTool, EllipseTool);
 
 macro_rules! impl_widget_for {
     ($($tool:ty=>$annotation:ty),*) => {
