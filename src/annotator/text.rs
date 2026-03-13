@@ -7,9 +7,11 @@ use crate::{
     declare_not_support_fill_color, declare_not_support_stroke_type, impl_stack_top_access_for,
 };
 use delegate::delegate;
-use egui::{Area, Color32, CursorIcon, Id, Margin, Pos2, Rect, Response, Sense, Stroke, StrokeKind, TextEdit, Ui, Widget, vec2, FontSelection, FontId};
+use egui::{Area, Color32, CursorIcon, Id, Margin, Pos2, Rect, Response, Sense, Stroke, StrokeKind, TextEdit, Ui, Widget, vec2, FontSelection, FontId, UiBuilder};
 use log::info;
 use std::cell::RefCell;
+use std::iter::Sum;
+use std::ops::Add;
 use std::rc::Weak;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use crate::annotator::cursor::{CustomCursor, Move};
@@ -81,6 +83,7 @@ pub struct TextAnnotation {
     id: Id,
     style: TextStyle,
     text: String,
+    /// 把第一行文本的宽高当作一个矩形，pos是这个矩形左侧的边的中点
     pos: Pos2,
     activation: ActivationSupport,
     /// 仅用于记录文本标注组件的矩形区域信息，不应该从外部修改它
@@ -121,7 +124,7 @@ impl TextAnnotation {
         self.pos = pos;
     }
 
-    fn max_line_width(&self, ui: &mut Ui) -> f32 {
+    fn measure_text(&self, ui: &mut Ui) -> (f32, f32) {
         let galley = ui.fonts_mut(|fonts_view| {
             fonts_view.layout(
                 self.text.clone(),
@@ -130,11 +133,18 @@ impl TextAnnotation {
                 f32::INFINITY, // 不因宽度折行，保留原始换行
             )
         });
-        galley
+        let max_line_width = galley
             .rows
             .iter()
             .map(|row| row.rect().width())
-            .fold(0.0, f32::max)
+            .fold(0.0, f32::max);
+
+        let height = galley
+            .rows
+            .iter()
+            .map(|row| row.rect().height())
+            .fold(0.0, f32::add);
+        (max_line_width, height)
     }
 
     pub fn rect(&self) -> Option<&Rect> {
@@ -152,46 +162,48 @@ const MIN_TEXT_WIDTH: f32 = 30.0;
 
 impl Widget for &mut TextAnnotation {
     fn ui(self, ui: &mut Ui) -> Response {
-        let max_text_width = self.max_line_width(ui);
+        let (max_text_width, text_height) = self.measure_text(ui);
         let style = self.style.clone();
         let row_height = ui.fonts_mut(|f| f.row_height(&style.font));
         let text_width = max_text_width.max(MIN_TEXT_WIDTH);
-        let inner_response = Area::new(self.id)
-            .current_pos(self.pos() - vec2(style.padding.leftf(), style.padding.topf() + row_height/2.0))
-            .movable(false)
-            .show(ui.ctx(), |ui| {
-                let frame = egui::Frame::default().inner_margin(style.padding);
-                let response = frame.show(ui, |ui| {
-                    let text_color = self.style.text_color;
-                    let interactive = self.activation.is_active();
-                    let text_edit = TextEdit::multiline(self.text_mut())
-                        .frame(false)
-                        .text_color(text_color)
-                        .font(style.font)
-                        .background_color(Color32::GREEN)
-                        .interactive(interactive)
-                        .margin(Margin::same(0))
-                        .desired_width(f32::INFINITY)
-                        .desired_rows(1);
-                    let response = ui.add_sized(vec2(text_width, row_height + style.padding.sum().y), text_edit);
-                    if self.activation.is_active() {
-                        response.request_focus();
-                    }
-                });
-                let rect = response.response.rect;
-                self.rect = Some(rect);
+        let text_height = text_height.max(row_height);
+        let left_top = self.pos() - vec2(style.padding.leftf(), style.padding.topf() + row_height / 2.0);
+        let right_bottom = left_top + vec2(text_width+ style.padding.sum().x, text_height + style.padding.sum().y);
+        let rect = Rect::from_two_pos(left_top, right_bottom);
+        self.rect = Some(rect);
+        if self.activation.is_active() {
+            let painter = ui.painter();
+            painter.rect_stroke(rect, 0., self.style.stroke, StrokeKind::Middle);
+            painter.small_rects(&rect);
+        }
+        let response = ui.scope_builder(UiBuilder::new().max_rect(rect), |ui| {
+            let frame = egui::Frame::default().inner_margin(style.padding);
+            let response = frame.show(ui, |ui| {
+                let text_color = self.style.text_color;
+                let interactive = self.activation.is_active();
+                let text_edit = TextEdit::multiline(self.text_mut())
+                    .frame(false)
+                    .text_color(text_color)
+                    .font(style.font)
+                    .background_color(Color32::GREEN)
+                    .interactive(interactive)
+                    .margin(Margin::same(0))
+                    .desired_width(f32::INFINITY)
+                    .desired_rows(1);
+                let response = ui.add_sized(vec2(text_width, row_height + style.padding.sum().y), text_edit);
                 if self.activation.is_active() {
-                    let painter = ui.painter();
-                    painter.rect_stroke(rect, 0., self.style.stroke, StrokeKind::Middle);
-                    painter.small_rects(&rect);
+                    response.request_focus();
                 }
+                response
             });
-        inner_response.response
+            response.inner
+        });
+        response.inner
     }
 }
 
 impl StrokeWidthSupport for TextAnnotation {
-    delegate! {
+        delegate! {
         to self.style {
            /// 是否支持获取线条宽度
            fn supports_get_stroke_width(&self) -> bool;
@@ -203,10 +215,10 @@ impl StrokeWidthSupport for TextAnnotation {
            fn set_stroke_width(&mut self, stroke_width: f32);
         }
     }
-}
+    }
 
-impl StrokeColorSupport for TextAnnotation {
-    delegate! {
+    impl StrokeColorSupport for TextAnnotation {
+        delegate! {
         to self.style {
             /// 是否支持获取线条颜色
             fn supports_get_stroke_color(&self) -> bool;
@@ -218,106 +230,106 @@ impl StrokeColorSupport for TextAnnotation {
             fn set_stroke_color(&mut self, color: Color32);
         }
     }
-}
-
-impl AnnotationActivationSupport for TextAnnotation {
-    fn activation(&self) -> &ActivationSupport {
-        &self.activation
     }
 
-    fn activation_mut(&mut self) -> &mut ActivationSupport {
-        &mut self.activation
-    }
-}
-
-declare_not_support_fill_color!(TextAnnotation);
-declare_not_support_stroke_type!(TextAnnotation);
-
-pub struct TextToolState {
-    /// 样式
-    style: TextStyle,
-    /// 当前的标注
-    current_annotation: Option<TextAnnotation>,
-}
-
-impl Default for TextToolState {
-    fn default() -> Self {
-        Self {
-            style: Default::default(),
-            current_annotation: None,
+    impl AnnotationActivationSupport for TextAnnotation {
+        fn activation(&self) -> &ActivationSupport {
+            &self.activation
         }
-    }
-}
 
-pub struct TextTool {
-    annotator_state: Weak<RefCell<AnnotatorState>>,
-    tool_state: TextToolState,
-}
-
-impl TextTool {
-    pub fn new(annotator_state: Weak<RefCell<AnnotatorState>>) -> Self {
-        Self {
-            annotator_state,
-            tool_state: TextToolState::default(),
+        fn activation_mut(&mut self) -> &mut ActivationSupport {
+            &mut self.activation
         }
     }
 
-    /// 如果栈顶不存在TextAnnotation或者TextAnnotation暂时不知道rect，则返回None
-    /// 否则返回碰撞检测结果
-    fn hit_test_for_annotation_on_stack_top(&self, pointer_pos: &Pos2) -> Option<HitTarget> {
-        self.peek_annotation(|annotation_on_stack_top: Option<&TextAnnotation>| {
-            // 判断当前鼠标是否位于此标注上
-            match annotation_on_stack_top {
-                None => None,
-                Some(annotation) => Self::hit_test_for_annotation(annotation, pointer_pos),
+    declare_not_support_fill_color!(TextAnnotation);
+    declare_not_support_stroke_type!(TextAnnotation);
+
+    pub struct TextToolState {
+        /// 样式
+        style: TextStyle,
+        /// 当前的标注
+        current_annotation: Option<TextAnnotation>,
+    }
+
+    impl Default for TextToolState {
+        fn default() -> Self {
+            Self {
+                style: Default::default(),
+                current_annotation: None,
             }
-        })
-    }
-
-    fn hit_test_for_annotation(
-        annotation: &TextAnnotation,
-        pointer_pos: &Pos2,
-    ) -> Option<HitTarget> {
-        // 判断当前鼠标是否位于此标注上
-        let stroke_width = annotation.stroke_width();
-        if let Some(rect) = annotation.rect() {
-            Some(rect.hit_test(&pointer_pos, stroke_width))
-        } else {
-            None
         }
     }
 
-    fn update_cursor_icon(&mut self, ui: &mut Ui) {
-        let Some(pointer_pos) = ui.ctx().pointer_hover_pos() else {
-            return;
-        };
-        // 从标注栈的栈顶中获取最近的一个标注
-        if let Some(annotation) = self.tool_state.current_annotation.as_ref() {
-            let hit_target = Self::hit_test_for_annotation(annotation, &pointer_pos);
-            if let Some(hit_target) = hit_target {
-                // 鼠标位于边框上
-                if hit_target != HitTarget::Outside && hit_target != HitTarget::Inside {
-                    ui.ctx().set_cursor_icon(CursorIcon::Move);
+    pub struct TextTool {
+        annotator_state: Weak<RefCell<AnnotatorState>>,
+        tool_state: TextToolState,
+    }
+
+    impl TextTool {
+        pub fn new(annotator_state: Weak<RefCell<AnnotatorState>>) -> Self {
+            Self {
+                annotator_state,
+                tool_state: TextToolState::default(),
+            }
+        }
+
+        /// 如果栈顶不存在TextAnnotation或者TextAnnotation暂时不知道rect，则返回None
+        /// 否则返回碰撞检测结果
+        fn hit_test_for_annotation_on_stack_top(&self, pointer_pos: &Pos2) -> Option<HitTarget> {
+            self.peek_annotation(|annotation_on_stack_top: Option<&TextAnnotation>| {
+                // 判断当前鼠标是否位于此标注上
+                match annotation_on_stack_top {
+                    None => None,
+                    Some(annotation) => Self::hit_test_for_annotation(annotation, pointer_pos),
+                }
+            })
+        }
+
+        fn hit_test_for_annotation(
+            annotation: &TextAnnotation,
+            pointer_pos: &Pos2,
+        ) -> Option<HitTarget> {
+            // 判断当前鼠标是否位于此标注上
+            let stroke_width = annotation.stroke_width();
+            if let Some(rect) = annotation.rect() {
+                Some(rect.hit_test(&pointer_pos, stroke_width))
+            } else {
+                None
+            }
+        }
+
+        fn update_cursor_icon(&mut self, ui: &mut Ui) {
+            let Some(pointer_pos) = ui.ctx().pointer_hover_pos() else {
+                return;
+            };
+            // 从标注栈的栈顶中获取最近的一个标注
+            if let Some(annotation) = self.tool_state.current_annotation.as_ref() {
+                let hit_target = Self::hit_test_for_annotation(annotation, &pointer_pos);
+                if let Some(hit_target) = hit_target {
+                    // 鼠标位于边框上
+                    if hit_target != HitTarget::Outside && hit_target != HitTarget::Inside {
+                        ui.ctx().set_cursor_icon(CursorIcon::Move);
+                    } else {
+                        ui.ctx().set_cursor_icon(CursorIcon::Text);
+                    }
                 } else {
                     ui.ctx().set_cursor_icon(CursorIcon::Text);
                 }
             } else {
                 ui.ctx().set_cursor_icon(CursorIcon::Text);
             }
-        } else {
-            ui.ctx().set_cursor_icon(CursorIcon::Text);
         }
     }
-}
 
-impl AnnotationToolCommon for TextTool {
-    fn annotator_state(&self) -> SharedAnnotatorState {
-        self.annotator_state.upgrade().unwrap()
+    impl AnnotationToolCommon for TextTool {
+        fn annotator_state(&self) -> SharedAnnotatorState {
+            self.annotator_state.upgrade().unwrap()
+        }
     }
-}
 
-impl StrokeWidthSupport for TextTool {
-    delegate! {
+    impl StrokeWidthSupport for TextTool {
+        delegate! {
         to self.tool_state.style {
             /// 是否支持获取线条宽度
             fn supports_get_stroke_width(&self) -> bool;
@@ -329,10 +341,10 @@ impl StrokeWidthSupport for TextTool {
             fn set_stroke_width(&mut self, stroke_width: f32);
         }
     }
-}
+    }
 
-impl StrokeColorSupport for TextTool {
-    delegate! {
+    impl StrokeColorSupport for TextTool {
+        delegate! {
         to self.tool_state.style {
             /// 是否支持获取线条颜色
             fn supports_get_stroke_color(&self) -> bool;
@@ -344,119 +356,119 @@ impl StrokeColorSupport for TextTool {
             fn set_stroke_color(&mut self, color: Color32);
         }
     }
-}
-declare_not_support_fill_color!(TextTool);
-declare_not_support_stroke_type!(TextTool);
+    }
+    declare_not_support_fill_color!(TextTool);
+    declare_not_support_stroke_type!(TextTool);
 
-static COUNTER: AtomicUsize = AtomicUsize::new(0);
-fn generate_unique_text_annotation_id() -> Id {
-    format!(
-        "text-annotation-{}",
-        COUNTER.fetch_add(1, Ordering::Relaxed)
-    )
-    .into()
-}
-
-impl_stack_top_access_for!(TextTool=>TextAnnotation);
-
-impl StackTopAccessor<TextAnnotation> for AnnotatorState {
-    fn peek_annotation<F, R>(&self, func: F) -> Option<R>
-    where
-        F: Fn(Option<&TextAnnotation>) -> Option<R>,
-    {
-        // 从标注栈的栈顶中获取最近的一个文本标注
-        let text_annotation_on_stack_top = self
-            .annotations_stack
-            .last()
-            .map(|annotation| match annotation {
-                Annotation::Text(text_annotation) => Some(text_annotation),
-                _ => None,
-            })
-            .flatten();
-        func(text_annotation_on_stack_top)
+    static COUNTER: AtomicUsize = AtomicUsize::new(0);
+    fn generate_unique_text_annotation_id() -> Id {
+        format!(
+            "text-annotation-{}",
+            COUNTER.fetch_add(1, Ordering::Relaxed)
+        )
+            .into()
     }
 
-    fn peek_annotation_mut<F, R>(&mut self, func: F) -> Option<R>
-    where
-        F: Fn(Option<&mut TextAnnotation>) -> Option<R>,
-    {
-        // 从标注栈的栈顶中获取最近的一个文本标注
-        let text_annotation_on_stack_top = self
-            .annotations_stack
-            .last_mut()
-            .map(|annotation| match annotation {
-                Annotation::Text(text_annotation) => Some(text_annotation),
-                _ => None,
-            })
-            .flatten();
-        func(text_annotation_on_stack_top)
+    impl_stack_top_access_for!(TextTool=>TextAnnotation);
+
+    impl StackTopAccessor<TextAnnotation> for AnnotatorState {
+        fn peek_annotation<F, R>(&self, func: F) -> Option<R>
+        where
+            F: Fn(Option<&TextAnnotation>) -> Option<R>,
+        {
+            // 从标注栈的栈顶中获取最近的一个文本标注
+            let text_annotation_on_stack_top = self
+                .annotations_stack
+                .last()
+                .map(|annotation| match annotation {
+                    Annotation::Text(text_annotation) => Some(text_annotation),
+                    _ => None,
+                })
+                .flatten();
+            func(text_annotation_on_stack_top)
+        }
+
+        fn peek_annotation_mut<F, R>(&mut self, func: F) -> Option<R>
+        where
+            F: Fn(Option<&mut TextAnnotation>) -> Option<R>,
+        {
+            // 从标注栈的栈顶中获取最近的一个文本标注
+            let text_annotation_on_stack_top = self
+                .annotations_stack
+                .last_mut()
+                .map(|annotation| match annotation {
+                    Annotation::Text(text_annotation) => Some(text_annotation),
+                    _ => None,
+                })
+                .flatten();
+            func(text_annotation_on_stack_top)
+        }
+
+        fn pop_annotation(&mut self) -> Option<TextAnnotation> {
+            // 从标注栈的栈顶中获取最近的一个文本标注
+            self.annotations_stack
+                .pop()
+                .map(|annotation| match annotation {
+                    Annotation::Text(text_annotation) => Some(text_annotation),
+                    _ => None,
+                })
+                .flatten()
+        }
     }
 
-    fn pop_annotation(&mut self) -> Option<TextAnnotation> {
-        // 从标注栈的栈顶中获取最近的一个文本标注
-        self.annotations_stack
-            .pop()
-            .map(|annotation| match annotation {
-                Annotation::Text(text_annotation) => Some(text_annotation),
-                _ => None,
-            })
-            .flatten()
-    }
-}
+    impl Widget for &mut TextTool {
+        fn ui(self, ui: &mut Ui) -> Response {
+            let sense_area = Rect::from_min_size(Pos2::ZERO, ui.available_size());
+            let response = ui.allocate_rect(sense_area, Sense::click_and_drag());
 
-impl Widget for &mut TextTool {
-    fn ui(self, ui: &mut Ui) -> Response {
-        let sense_area = Rect::from_min_size(Pos2::ZERO, ui.available_size());
-        let response = ui.allocate_rect(sense_area, Sense::click_and_drag());
+            self.update_cursor_icon(ui);
 
-        self.update_cursor_icon(ui);
-
-        if response.drag_started() {
-            info!("drag started!");
-        } else if response.clicked() {
-            println!("clicked!");
-            let pointer_pos = response.hover_pos().unwrap();
-            let hit_target = self.hit_test_for_annotation_on_stack_top(&pointer_pos);
-            if hit_target.is_none() || hit_target.unwrap() != HitTarget::Inside {
-                if let Some(mut annotation) = self.tool_state.current_annotation.take() {
-                    annotation.activation.deactivate();
-                    let annotation_state = self.annotator_state.upgrade().unwrap();
-                    annotation_state
-                        .borrow_mut()
-                        .annotations_stack
-                        .push(annotation.into());
+            if response.drag_started() {
+                info!("drag started!");
+            } else if response.clicked() {
+                println!("clicked!");
+                let pointer_pos = response.hover_pos().unwrap();
+                let hit_target = self.hit_test_for_annotation_on_stack_top(&pointer_pos);
+                if hit_target.is_none() || hit_target.unwrap() != HitTarget::Inside {
+                    if let Some(mut annotation) = self.tool_state.current_annotation.take() {
+                        annotation.activation.deactivate();
+                        let annotation_state = self.annotator_state.upgrade().unwrap();
+                        annotation_state
+                            .borrow_mut()
+                            .annotations_stack
+                            .push(annotation.into());
+                    }
+                    let annotation = TextAnnotation::new(
+                        generate_unique_text_annotation_id(),
+                        self.tool_state.style.clone(),
+                        String::new(),
+                        pointer_pos,
+                        ActivationSupport::Supported(ActivationState::active()),
+                    );
+                    self.tool_state.current_annotation = Some(annotation);
                 }
-                let annotation = TextAnnotation::new(
-                    generate_unique_text_annotation_id(),
-                    self.tool_state.style.clone(),
-                    String::new(),
-                    pointer_pos,
-                    ActivationSupport::Supported(ActivationState::active()),
-                );
-                self.tool_state.current_annotation = Some(annotation);
+            } else if response.dragged() {
+                println!("dragged!");
+                if let Some(annotation) = self.tool_state.current_annotation.as_mut() {
+                    let new_pos = annotation.pos + response.drag_delta();
+                    annotation.set_pos(new_pos);
+                    ui.add(annotation);
+                }
+            } else {
+                if let Some(annotation) = self.tool_state.current_annotation.as_mut() {
+                    ui.add(annotation);
+                }
             }
-        } else if response.dragged() {
-            println!("dragged!");
-            if let Some(annotation) = self.tool_state.current_annotation.as_mut() {
-                let new_pos = annotation.pos + response.drag_delta();
-                annotation.set_pos(new_pos);
-                ui.add(annotation);
-            }
-        } else {
-            if let Some(annotation) = self.tool_state.current_annotation.as_mut() {
-                ui.add(annotation);
-            }
-        }
 
-        response
-    }
-}
-
-impl DeactivatedAware for TextTool {
-    fn on_deactivated(&mut self, annotator_state: &mut AnnotatorState){
-        if let Some(mut annotation) = self.tool_state.current_annotation.take() {
-            annotation.activation.deactivate();
-            annotator_state.annotations_stack.push(annotation.into());
+            response
         }
     }
-}
+
+    impl DeactivatedAware for TextTool {
+        fn on_deactivated(&mut self, annotator_state: &mut AnnotatorState) {
+            if let Some(mut annotation) = self.tool_state.current_annotation.take() {
+                annotation.activation.deactivate();
+                annotator_state.annotations_stack.push(annotation.into());
+            }
+        }
+    }
