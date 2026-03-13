@@ -168,7 +168,9 @@ impl Widget for &mut TextAnnotation {
         let text_width = max_text_width.max(MIN_TEXT_WIDTH);
         let text_height = text_height.max(row_height);
         let left_top = self.pos() - vec2(style.padding.leftf(), style.padding.topf() + row_height / 2.0);
-        let right_bottom = left_top + vec2(text_width+ style.padding.sum().x, text_height + style.padding.sum().y);
+        // 文本的底部和边框添加额外的间距，不然边框底边的鼠标的拖动事件会被编辑框吞了，导致无法拖动
+        let extra_padding_bottom = 20.;
+        let right_bottom = left_top + vec2(text_width+ style.padding.sum().x, text_height + style.padding.sum().y + extra_padding_bottom);
         let rect = Rect::from_two_pos(left_top, right_bottom);
         self.rect = Some(rect);
         if self.activation.is_active() {
@@ -265,6 +267,7 @@ impl StrokeWidthSupport for TextAnnotation {
         annotator_state: Weak<RefCell<AnnotatorState>>,
         tool_state: TextToolState,
         custom_cursor: Option<Box<dyn CustomCursor>>,
+        is_dragging: bool,
     }
 
     impl TextTool {
@@ -273,6 +276,7 @@ impl StrokeWidthSupport for TextAnnotation {
                 annotator_state,
                 tool_state: TextToolState::default(),
                 custom_cursor: None,
+                is_dragging: false,
             }
         }
 
@@ -305,6 +309,11 @@ impl StrokeWidthSupport for TextAnnotation {
             let Some(pointer_pos) = ui.ctx().pointer_hover_pos() else {
                 return;
             };
+            if self.is_dragging {
+                ui.ctx().set_cursor_icon(CursorIcon::None);
+                self.custom_cursor = Some(Box::new(Move::new(pointer_pos)));
+                return;
+            }
             // 从标注栈的栈顶中获取最近的一个标注
             if let Some(annotation) = self.tool_state.current_annotation.as_ref() {
                 let hit_target = Self::hit_test_for_annotation(annotation, &pointer_pos);
@@ -428,6 +437,7 @@ impl StrokeWidthSupport for TextAnnotation {
 
             if response.drag_started() {
                 info!("drag started!");
+                self.is_dragging = true;
             } else if response.clicked() {
                 println!("clicked!");
                 let pointer_pos = response.hover_pos().unwrap();
@@ -461,6 +471,10 @@ impl StrokeWidthSupport for TextAnnotation {
                 if let Some(annotation) = self.tool_state.current_annotation.as_mut() {
                     ui.add(annotation);
                 }
+            }
+
+            if response.drag_stopped() {
+                self.is_dragging = false;
             }
 
             if let Some(custom_cursor) = self.custom_cursor.take() {
