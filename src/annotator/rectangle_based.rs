@@ -923,7 +923,7 @@ impl HitTest for Rect {
     /// 矩形的stroke_kind固定为StrokeKind::Middle
     fn hit_test(&self, pointer_pos: &Pos2, stroke_width: f32) -> HitTarget {
         // 允许一定的误差
-        let tolerance = 6.;
+        let tolerance = 8.;
 
         let tolerance = if tolerance > stroke_width {
             tolerance
