@@ -716,7 +716,7 @@ pub struct AnnotatorState {
 
     /// 当前激活的标注工具
     pub current_annotation_tool: Option<AnnotationTool>,
-    
+
     /// 颜色选择器中可用的颜色
     pub candidate_colors: Vec<Color32>,
 }
