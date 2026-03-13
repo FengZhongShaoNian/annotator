@@ -332,6 +332,15 @@ impl StrokeWidthSupport for TextAnnotation {
                 ui.ctx().set_cursor_icon(CursorIcon::Text);
             }
         }
+
+        pub fn submit_current_annotation(&mut self, annotator_state: &mut AnnotatorState) {
+            if let Some(mut annotation) = self.tool_state.current_annotation.take() {
+                annotation.activation.deactivate();
+                if !annotation.text.is_empty() {
+                    annotator_state.annotations_stack.push(annotation.into());
+                }
+            }
+        }
     }
 
     impl AnnotationToolCommon for TextTool {
@@ -443,13 +452,9 @@ impl StrokeWidthSupport for TextAnnotation {
                 let pointer_pos = response.hover_pos().unwrap();
                 let hit_target = self.hit_test_for_annotation_on_stack_top(&pointer_pos);
                 if hit_target.is_none() || hit_target.unwrap() != HitTarget::Inside {
-                    if let Some(mut annotation) = self.tool_state.current_annotation.take() {
-                        annotation.activation.deactivate();
+                    if self.tool_state.current_annotation.is_some() {
                         let annotation_state = self.annotator_state.upgrade().unwrap();
-                        annotation_state
-                            .borrow_mut()
-                            .annotations_stack
-                            .push(annotation.into());
+                        self.submit_current_annotation(&mut *annotation_state.borrow_mut());
                     }
                     let annotation = TextAnnotation::new(
                         generate_unique_text_annotation_id(),
@@ -459,9 +464,15 @@ impl StrokeWidthSupport for TextAnnotation {
                         ActivationSupport::Supported(ActivationState::active()),
                     );
                     self.tool_state.current_annotation = Some(annotation);
+                }else if hit_target.is_some() && hit_target.unwrap() == HitTarget::Inside {
+                    if self.tool_state.current_annotation.is_none() {
+                        if let Some(mut annotation) = self.pop_annotation() {
+                            annotation.activation.activate();
+                            self.tool_state.current_annotation = Some(annotation);
+                        }
+                    }
                 }
             } else if response.dragged() {
-                println!("dragged!");
                 if let Some(annotation) = self.tool_state.current_annotation.as_mut() {
                     let new_pos = annotation.pos + response.drag_delta();
                     annotation.set_pos(new_pos);
@@ -487,9 +498,6 @@ impl StrokeWidthSupport for TextAnnotation {
 
     impl DeactivatedAware for TextTool {
         fn on_deactivated(&mut self, annotator_state: &mut AnnotatorState) {
-            if let Some(mut annotation) = self.tool_state.current_annotation.take() {
-                annotation.activation.deactivate();
-                annotator_state.annotations_stack.push(annotation.into());
-            }
+            self.submit_current_annotation(annotator_state);
         }
     }
