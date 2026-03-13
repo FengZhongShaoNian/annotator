@@ -1,5 +1,5 @@
 use crate::annotator::cursor::{Circle, Crosshair, CustomCursor};
-use crate::annotator::{ActivationSupport, Annotation, AnnotationActivationSupport, AnnotationStyle, AnnotationToolCommon, AnnotatorState, DeactivatedAware, FillColorSupport, SharedAnnotatorState, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport, WheelHandler};
+use crate::annotator::{ActivationSupport, Annotation, AnnotationActivationSupport, AnnotationStyle, AnnotationToolCommon, AnnotatorState, UnsubmittedAnnotationHandler, FillColorSupport, SharedAnnotatorState, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport, WheelHandler};
 use egui::{pos2, Color32, CursorIcon, Pos2, Rect, Response, Sense, Stroke, Ui, Widget};
 use std::cell::RefCell;
 use std::rc::Weak;
@@ -522,7 +522,7 @@ where
     }
 }
 
-impl <S> DeactivatedAware for FreeLineBasedTool<S>
+impl <S> UnsubmittedAnnotationHandler for FreeLineBasedTool<S>
 where
     S: AnnotationStyle + Default,
 {

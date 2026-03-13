@@ -1,7 +1,7 @@
 use crate::annotator::cursor::{Crosshair, CustomCursor};
 use crate::annotator::{
     ActivationState, ActivationSupport, Annotation, AnnotationActivationSupport, AnnotationStyle,
-    AnnotationToolCommon, AnnotatorState, DeactivatedAware, FillColorSupport, PainterExt,
+    AnnotationToolCommon, AnnotatorState, UnsubmittedAnnotationHandler, FillColorSupport, PainterExt,
     SharedAnnotatorState, StackTopAccessor, StrokeColorSupport, StrokeType, StrokeTypeSupport,
     StrokeWidthSupport, WheelHandler,
 };
@@ -633,7 +633,7 @@ where
     }
 }
 
-impl<S> DeactivatedAware for RectangleBasedTool<S> where S: AnnotationStyle + Default {}
+impl<S> UnsubmittedAnnotationHandler for RectangleBasedTool<S> where S: AnnotationStyle + Default {}
 
 pub type RectangleTool = RectangleBasedTool<RectangleStyle>;
 pub type EllipseTool = RectangleBasedTool<EllipseStyle>;

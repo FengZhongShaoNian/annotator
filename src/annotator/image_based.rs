@@ -1,5 +1,5 @@
 use crate::annotator::{
-    ActivationSupport, Annotation, AnnotationActivationSupport, AnnotatorState, DeactivatedAware,
+    ActivationSupport, Annotation, AnnotationActivationSupport, AnnotatorState, UnsubmittedAnnotationHandler,
     FillColorSupport, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport,
 };
 use crate::dpi::{LogicalBounds, PhysicalBounds, PhysicalSize};
@@ -356,7 +356,7 @@ impl<S: Default + Clone, H: ImageHandler> ImageBasedTool<S, H> {
     }
 }
 
-impl<S, H> DeactivatedAware for ImageBasedTool<S, H>
+impl<S, H> UnsubmittedAnnotationHandler for ImageBasedTool<S, H>
 where
     S: Default + Clone,
     H: ImageHandler,

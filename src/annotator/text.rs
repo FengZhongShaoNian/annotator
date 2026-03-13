@@ -1,5 +1,5 @@
 use crate::annotator::rectangle_based::{HitTarget, HitTest};
-use crate::annotator::{ActivationState, ActivationSupport, Annotation, AnnotationActivationSupport, AnnotationToolCommon, AnnotatorState, DeactivatedAware, PainterExt, SharedAnnotatorState, StackTopAccessor};
+use crate::annotator::{ActivationState, ActivationSupport, Annotation, AnnotationActivationSupport, AnnotationToolCommon, AnnotatorState, UnsubmittedAnnotationHandler, PainterExt, SharedAnnotatorState, StackTopAccessor};
 use crate::annotator::{
     FillColorSupport, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport,
 };
@@ -496,8 +496,12 @@ impl StrokeWidthSupport for TextAnnotation {
         }
     }
 
-    impl DeactivatedAware for TextTool {
-        fn on_deactivated(&mut self, annotator_state: &mut AnnotatorState) {
+    impl UnsubmittedAnnotationHandler for TextTool {
+        fn has_uncommitted_annotations(&self) -> bool {
+            self.tool_state.current_annotation.is_some()
+        }
+        
+        fn submit_uncommitted_annotations(&mut self, annotator_state: &mut AnnotatorState) {
             self.submit_current_annotation(annotator_state);
         }
     }

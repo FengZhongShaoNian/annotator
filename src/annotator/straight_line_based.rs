@@ -2,7 +2,7 @@ use crate::annotator::cursor::{Crosshair, CustomCursor};
 use crate::annotator::rectangle_based::{EllipseTool, HitTarget, HitTest, RectangleTool};
 use crate::annotator::{
     ActivationState, ActivationSupport, Annotation, AnnotationActivationSupport, AnnotationStyle,
-    AnnotationToolCommon, AnnotatorState, DEFAULT_SIZE_FOR_SMALL_RECT, DeactivatedAware,
+    AnnotationToolCommon, AnnotatorState, DEFAULT_SIZE_FOR_SMALL_RECT, UnsubmittedAnnotationHandler,
     FillColorSupport, PainterExt, SharedAnnotatorState, SmallRect, StackTopAccessor,
     StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport, WheelHandler,
     dash_len_for_dashed_line, gap_len_for_dashed_line, radius_for_dotted_line,
@@ -671,7 +671,7 @@ where
     }
 }
 
-impl<S> DeactivatedAware for StraightLineBasedTool<S> where S: AnnotationStyle + Default {}
+impl<S> UnsubmittedAnnotationHandler for StraightLineBasedTool<S> where S: AnnotationStyle + Default {}
 
 pub type StraightLineTool = StraightLineBasedTool<StraightLineStyle>;
 pub type ArrowTool = StraightLineBasedTool<ArrowStyle>;

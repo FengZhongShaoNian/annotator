@@ -573,8 +573,18 @@ impl AnnotationTool {
     }
 }
 
-pub trait DeactivatedAware {
-    fn on_deactivated(&mut self, _annotator_state: &mut AnnotatorState){}
+pub trait UnsubmittedAnnotationHandler {
+    fn has_uncommitted_annotations(&self) -> bool {
+        false
+    }
+
+    fn submit_uncommitted_annotations(&mut self, _annotator_state: &mut AnnotatorState) {
+        unimplemented!()
+    }
+
+    fn drop_uncommitted_annotations(&mut self) {
+        unimplemented!()
+    }
 }
 
 #[delegate_impl]
@@ -624,8 +634,10 @@ impl Widget for &mut AnnotationTool {
 }
 
 #[delegate_impl]
-impl DeactivatedAware for AnnotationTool {
-    fn on_deactivated(&mut self, annotator_state: &mut AnnotatorState);
+impl UnsubmittedAnnotationHandler for AnnotationTool {
+    fn has_uncommitted_annotations(&self) -> bool;
+    fn submit_uncommitted_annotations(&mut self, _annotator_state: &mut AnnotatorState);
+    fn drop_uncommitted_annotations(&mut self);
 }
 
 /// 当前标注状态
@@ -753,7 +765,9 @@ impl AnnotatorState {
             .remove(&tool_name)
             .expect(&format!("{:?}Tool does not exist", tool_name));
         if let Some(mut previous_tool) = self.current_annotation_tool.replace(tool) {
-            previous_tool.on_deactivated(self);
+            if previous_tool.has_uncommitted_annotations() {
+                previous_tool.submit_uncommitted_annotations(self);
+            }
             self.annotation_tools
                 .insert(previous_tool.tool_name(), previous_tool);
         }
@@ -761,7 +775,9 @@ impl AnnotatorState {
 
     pub fn deactivate_annotation_tool(&mut self) {
         if let Some(mut previous_tool) = self.current_annotation_tool.take() {
-            previous_tool.on_deactivated(self);
+            if previous_tool.has_uncommitted_annotations() {
+                previous_tool.submit_uncommitted_annotations(self);
+            }
             self.annotation_tools
                 .insert(previous_tool.tool_name(), previous_tool);
         }
