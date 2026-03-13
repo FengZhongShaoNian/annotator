@@ -123,11 +123,6 @@ pub fn create_secondly_toolbar(
                                         );
                                     }
 
-                                    if !supports_set_stroke_type && !show_color_selector {
-                                        current_view.set_visible(false);
-                                        return;
-                                    }
-
                                     let color_selector_width = 393;
                                     let mut new_width = color_selector_width;
                                     if supports_set_stroke_type {

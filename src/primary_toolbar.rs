@@ -191,7 +191,7 @@ pub fn create_primary_toolbar(
                                         .activate_annotation_tool(ToolName::Mosaic);
                                     window.set_view_visible(
                                         &AnnotatorState::secondly_toolbar_id(),
-                                        true,
+                                        false,
                                     );
                                 }
                             }
@@ -213,7 +213,7 @@ pub fn create_primary_toolbar(
                                         .activate_annotation_tool(ToolName::Blur);
                                     window.set_view_visible(
                                         &AnnotatorState::secondly_toolbar_id(),
-                                        true,
+                                        false,
                                     );
                                 }
                             }
@@ -279,7 +279,7 @@ pub fn create_primary_toolbar(
                                         .activate_annotation_tool(ToolName::Eraser);
                                     window.set_view_visible(
                                         &AnnotatorState::secondly_toolbar_id(),
-                                        true,
+                                        false,
                                     );
                                 }
                             }
