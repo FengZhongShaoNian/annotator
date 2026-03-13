@@ -18,6 +18,7 @@ pub enum Icons {
     EditCopy,
     DialogOk,
     Sticky,
+    CursorMove,
 }
 
 impl Icons {
@@ -73,6 +74,9 @@ impl Icons {
             }
             Icons::Sticky =>{
                 include_image!("../assets/icons/sticky.svg")
+            }
+            Icons::CursorMove => {
+                include_image!("../assets/icons/cursor-move.svg")
             }
         };
         Image::new(image_source)

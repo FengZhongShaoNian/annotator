@@ -1,4 +1,8 @@
-use egui::{pos2, vec2, Color32, FontId, Painter, Pos2, Rangef, Rect, Shape, Stroke, StrokeKind, Ui};
+use egui::{paint_texture_at, pos2, vec2, Align, Color32, FontId, ImageOptions, Painter, Pos2, Rangef, Rect, Shape, SizeHint, Spinner, Stroke, StrokeKind, TextFormat, TextStyle, TextureId, TextureOptions, Ui, Vec2};
+use egui::emath::GuiRounding;
+use egui::load::{TextureLoadResult, TexturePoll};
+use egui::text::{LayoutJob, TextWrapping};
+use crate::icon::Icons;
 
 pub trait CustomCursor {
     fn paint_with(&self, painter: &Painter);
@@ -127,34 +131,65 @@ impl CustomCursor for Circle {
 pub struct Move {
     /// 光标中点的坐标
     center_pos: Pos2,
-    /// 光标的颜色
-    color: Color32,
     /// 光标的宽高
     size: f32,
+    texture_id: Option<TextureId>,
 }
 
 impl Move {
-    pub fn new(center_pos: Pos2, color: Color32, size: f32) -> Self {
+    pub fn new(center_pos: Pos2) -> Self {
         Self {
             center_pos,
-            color,
-            size,
+            size: 257.,
+            texture_id: None,
         }
     }
 }
 
 impl CustomCursor for Move {
     fn paint_with(&self, painter: &Painter) {
-        let half_size = self.size / 2.;
-        let stroke_width = 2.5;
-        // 向左的箭头
-        painter.arrow(self.center_pos, vec2(-half_size, 0.), Stroke::new(stroke_width, self.color));
-        // 向右的箭头
-        painter.arrow(self.center_pos, vec2(half_size, 0.), Stroke::new(stroke_width, self.color));
-        // 向上的箭头
-        painter.arrow(self.center_pos, vec2(0., -half_size), Stroke::new(stroke_width, self.color));
-        // 向下的箭头
-        painter.arrow(self.center_pos, vec2(0., half_size), Stroke::new(stroke_width, self.color));
+        // 在原图片（尺寸257 × 257）中的热点坐标
+        let x_hotspot = 139.;
+        let y_hotspot = 86.;
+
+        // 图标显示的时候的逻辑尺寸
+        let target_size = 24.;
+        let zoom = target_size / self.size;
+
+        // 将图片缩小到合适尺寸（16 × 16）时的热点坐标
+        let x_hotspot = x_hotspot * zoom;
+        let y_hotspot = y_hotspot * zoom;
+
+        let left_top = pos2(self.center_pos.x - x_hotspot, self.center_pos.y - y_hotspot);
+        let rect = Rect::from_min_size(left_top, vec2(target_size, target_size));
+        let cursor_image = Icons::CursorMove.get_image();
+        let pixels_per_point = painter.pixels_per_point();
+
+        // Load exactly the size of the rectangle we are painting to.
+        // This is important for getting crisp SVG:s.
+        let pixel_size = (pixels_per_point * rect.round_to_pixels(pixels_per_point).size()).round();
+
+        let texture_options = TextureOptions::default();
+        let tlr = cursor_image.source(painter.ctx()).clone().load(
+            painter.ctx(),
+            texture_options,
+            SizeHint::Size {
+                width: pixel_size.x as _,
+                height: pixel_size.y as _,
+                maintain_aspect_ratio: false, // no - just get exactly what we asked for
+            },
+        );
+
+        let image_option = ImageOptions::default();
+
+        match tlr {
+            Ok(TexturePoll::Ready { texture }) => {
+                paint_texture_at(painter, rect, &image_option, &texture);
+            }
+
+            _ => ()
+        }
+
     }
 }
 

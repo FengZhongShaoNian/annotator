@@ -312,7 +312,7 @@ impl StrokeWidthSupport for TextAnnotation {
                     // 鼠标位于边框上
                     if hit_target != HitTarget::Outside && hit_target != HitTarget::Inside {
                         ui.ctx().set_cursor_icon(CursorIcon::None);
-                        self.custom_cursor = Some(Box::new(Move::new(pointer_pos, Color32::RED, 24.)));
+                        self.custom_cursor = Some(Box::new(Move::new(pointer_pos)));
                     } else {
                         ui.ctx().set_cursor_icon(CursorIcon::Text);
                     }
