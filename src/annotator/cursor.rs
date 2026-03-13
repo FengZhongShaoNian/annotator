@@ -133,7 +133,6 @@ pub struct Move {
     center_pos: Pos2,
     /// 光标的宽高
     size: f32,
-    texture_id: Option<TextureId>,
 }
 
 impl Move {
@@ -141,7 +140,6 @@ impl Move {
         Self {
             center_pos,
             size: 257.,
-            texture_id: None,
         }
     }
 }
