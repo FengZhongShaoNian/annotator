@@ -77,20 +77,20 @@ pub fn create_annotator_panel(
                         current_annotation_tool: None,
                         candidate_colors: vec![
                             Color32::RED,
-                            Color32::DARK_RED,
-                            Color32::LIGHT_RED,
                             Color32::YELLOW,
-                            Color32::CYAN,
-                            Color32::MAGENTA,
                             Color32::GREEN,
-                            Color32::DARK_GREEN,
-                            Color32::LIGHT_GREEN,
                             Color32::BLUE,
-                            Color32::DARK_BLUE,
-                            Color32::LIGHT_BLUE,
                             Color32::BLACK,
                             Color32::WHITE,
                             Color32::GRAY,
+                            Color32::DARK_RED,
+                            Color32::LIGHT_RED,
+                            Color32::CYAN,
+                            Color32::MAGENTA,
+                            Color32::DARK_GREEN,
+                            Color32::LIGHT_GREEN,
+                            Color32::DARK_BLUE,
+                            Color32::LIGHT_BLUE,
                         ]
                     };
 
