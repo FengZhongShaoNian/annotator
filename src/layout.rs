@@ -1,4 +1,4 @@
-use crate::annotator::AnnotatorState;
+use crate::annotator::{AnnotatorState, ApplyExtraZoomFactor, SharedAnnotatorState};
 use crate::annotator_panel::create_annotator_panel;
 use crate::application::Application;
 use crate::context::Command;
@@ -13,6 +13,7 @@ use sctk::shell::WaylandSurface;
 use std::sync::Arc;
 use taffy::prelude::*;
 use taffy::{geometry::Rect, style::LengthPercentageAuto};
+use crate::global::ReadGlobal;
 
 // 主窗口和工具条以及工具条之间的间隙
 const GAP: u32 = 12;
@@ -47,7 +48,22 @@ pub fn build_annotator(
         annotator_panel.get_view_ref().size()
     } else {
         let scale_factor = window.scale_factor().unwrap();
-        PhysicalSize::new(image.width(), image.height()).to_logical(scale_factor)
+        // 标注面板的逻辑大小=背景图片的逻辑大小=(背景图片的物理大小/scale_factor) * extra_zoom_factor)
+        let extra_zoom_factor = if window.window_context
+            .globals_by_type
+            .has_global::<SharedAnnotatorState>() {
+            let annotator_state = window
+                .window_context
+                .globals_by_type
+                .require_ref::<SharedAnnotatorState>();
+            annotator_state.borrow().extra_zoom_factor
+        }else {
+            1.
+        };
+
+        PhysicalSize::new(image.width(), image.height())
+            .to_logical(scale_factor)
+            .apply_extra_zoom_factor(extra_zoom_factor)
     };
     let mut tree: TaffyTree<()> = TaffyTree::new();
 
@@ -141,14 +157,14 @@ pub fn build_annotator(
 
     tree.compute_layout(root_node, Size::MAX_CONTENT).unwrap();
     let root_node_layout_result = tree.layout(root_node).unwrap();
-    let annotator_panel_node_result = tree.layout(annotator_panel_node).unwrap();
-    let primary_toolbar_node_layout_result = tree.layout(primary_toolbar_node).unwrap();
-    let secondly_toolbar_node_layout_result = tree.layout(secondly_toolbar_node).unwrap();
+    let annotator_panel_layout_result = tree.layout(annotator_panel_node).unwrap();
+    let primary_toolbar_layout_result = tree.layout(primary_toolbar_node).unwrap();
+    let secondly_toolbar_layout_result = tree.layout(secondly_toolbar_node).unwrap();
 
     if !window.views.contains_key(&annotator_panel_id) {
         let annotator_panel_position = LogicalPosition::new(
-            annotator_panel_node_result.location.x.round() as i32,
-            annotator_panel_node_result.location.y.round() as i32,
+            annotator_panel_layout_result.location.x.round() as i32,
+            annotator_panel_layout_result.location.y.round() as i32,
         );
         create_annotator_panel(
             annotator_panel_id.clone(),
@@ -159,8 +175,8 @@ pub fn build_annotator(
         );
 
         let primary_toolbar_position = LogicalPosition::new(
-            primary_toolbar_node_layout_result.location.x.round() as i32,
-            primary_toolbar_node_layout_result.location.y.round() as i32,
+            primary_toolbar_layout_result.location.x.round() as i32,
+            primary_toolbar_layout_result.location.y.round() as i32,
         );
         create_primary_toolbar(
             primary_toolbar_id.clone(),
@@ -171,8 +187,8 @@ pub fn build_annotator(
         );
 
         let secondly_toolbar_position = LogicalPosition::new(
-            secondly_toolbar_node_layout_result.location.x.round() as i32,
-            secondly_toolbar_node_layout_result.location.y.round() as i32,
+            secondly_toolbar_layout_result.location.x.round() as i32,
+            secondly_toolbar_layout_result.location.y.round() as i32,
         );
         create_secondly_toolbar(
             secondly_toolbar_id.clone(),
@@ -181,28 +197,6 @@ pub fn build_annotator(
             secondly_toolbar_size,
             secondly_toolbar_position,
         );
-    } else {
-        // 主工具条的位置基本不会变，所以只调整次工具条的位置
-        let secondly_toolbar_position = LogicalPosition::new(
-            secondly_toolbar_node_layout_result.location.x.round() as i32,
-            secondly_toolbar_node_layout_result.location.y.round() as i32,
-        );
-        let secondly_toolbar = window
-            .views
-            .get(&secondly_toolbar_id)
-            .unwrap()
-            .as_ref()
-            .unwrap();
-        let secondly_toolbar_current_position = secondly_toolbar.get_view_ref().position().unwrap();
-        if secondly_toolbar_current_position != secondly_toolbar_position {
-            window
-                .window_context
-                .commands
-                .push_back(Command::RepositionSubView(
-                    secondly_toolbar_id,
-                    secondly_toolbar_position,
-                ));
-        }
     }
 
     let main_window_size = LogicalSize::new(
@@ -224,6 +218,69 @@ pub fn build_annotator(
             .wl_compositor()
             .create_region(qh, ());
         window.xdg_window().set_input_region(Some(&empty_region));
+    }
+
+    let annotator_panel_position = LogicalPosition::new(
+        annotator_panel_layout_result.location.x.round() as i32,
+        annotator_panel_layout_result.location.y.round() as i32,
+    );
+    let annotator_panel = window
+        .views
+        .get(&annotator_panel_id)
+        .unwrap()
+        .as_ref()
+        .unwrap();
+    let annotator_panel_current_position = annotator_panel.get_view_ref().position().unwrap();
+    if annotator_panel_current_position != annotator_panel_position {
+        window
+            .window_context
+            .commands
+            .push_back(Command::RepositionSubView(
+                annotator_panel_id,
+                annotator_panel_position,
+            ));
+    }
+
+    let primary_toolbar_position = LogicalPosition::new(
+        primary_toolbar_layout_result.location.x.round() as i32,
+        primary_toolbar_layout_result.location.y.round() as i32,
+    );
+    let primary_toolbar = window
+        .views
+        .get(&primary_toolbar_id)
+        .unwrap()
+        .as_ref()
+        .unwrap();
+    let primary_toolbar_current_position = primary_toolbar.get_view_ref().position().unwrap();
+    if primary_toolbar_current_position != primary_toolbar_position {
+        window
+            .window_context
+            .commands
+            .push_back(Command::RepositionSubView(
+                primary_toolbar_id,
+                primary_toolbar_position,
+            ));
+    }
+
+    let secondly_toolbar_position = LogicalPosition::new(
+        secondly_toolbar_layout_result.location.x.round() as i32,
+        secondly_toolbar_layout_result.location.y.round() as i32,
+    );
+    let secondly_toolbar = window
+        .views
+        .get(&secondly_toolbar_id)
+        .unwrap()
+        .as_ref()
+        .unwrap();
+    let secondly_toolbar_current_position = secondly_toolbar.get_view_ref().position().unwrap();
+    if secondly_toolbar_current_position != secondly_toolbar_position {
+        window
+            .window_context
+            .commands
+            .push_back(Command::RepositionSubView(
+                secondly_toolbar_id,
+                secondly_toolbar_position,
+            ));
     }
 
     egui_ctx.run(input, move |_ctx| {})

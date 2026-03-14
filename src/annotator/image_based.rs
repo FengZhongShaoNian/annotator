@@ -1,10 +1,16 @@
 use crate::annotator::{
-    ActivationSupport, Annotation, AnnotationActivationSupport, AnnotatorState, UnsubmittedAnnotationHandler,
-    FillColorSupport, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport,FontColorSupport
+    ActivationSupport, Annotation, AnnotationActivationSupport, AnnotatorState,
+    ApplyExtraZoomFactor, FillColorSupport, FontColorSupport, RemoveExtraZoomFactor,
+    StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport,
+    UnsubmittedAnnotationHandler,
 };
 use crate::dpi::{LogicalBounds, PhysicalBounds, PhysicalSize};
 use crate::egui_off_screen_render::EguiOffScreenRender;
-use crate::{declare_not_support_fill_color, declare_not_support_font_color, declare_not_support_stroke_color, declare_not_support_stroke_type, declare_not_support_stroke_width};
+use crate::{
+    declare_not_support_fill_color, declare_not_support_font_color,
+    declare_not_support_stroke_color, declare_not_support_stroke_type,
+    declare_not_support_stroke_width,
+};
 use egui::load::SizedTexture;
 use egui::{
     Color32, ColorImage, CursorIcon, Frame, Image, ImageSource, Pos2, Rect, Response, Sense,
@@ -13,7 +19,7 @@ use egui::{
 use image::{GenericImageView, ImageError};
 use image::{Rgba, RgbaImage};
 use imageproc::filter::gaussian_blur_f32;
-use log::{error, warn};
+use log::{error};
 use std::cell::RefCell;
 use std::cmp::{max, min};
 use std::default::Default;
@@ -242,7 +248,7 @@ impl<T: Clone + Default, H: ImageHandler> Widget for &mut ImageBasedAnnotation<T
             let texture_id = texture_handle.id();
             painter.image(
                 texture_id,
-                self.rect,
+                self.rect.apply_extra_zoom_factor_with_ctx(ui.ctx()),
                 Rect::from_two_pos(pos2(0., 0.), pos2(1., 1.)),
                 Color32::WHITE,
             );
@@ -268,7 +274,7 @@ impl<T: Clone + Default, H: ImageHandler> Widget for &mut ImageBasedAnnotation<T
                 let texture_id = texture_handle.id();
                 painter.image(
                     texture_id,
-                    self.rect,
+                    self.rect.apply_extra_zoom_factor_with_ctx(ui.ctx()),
                     Rect::from_two_pos(pos2(0., 0.), pos2(1., 1.)),
                     Color32::WHITE,
                 );
@@ -328,6 +334,7 @@ pub struct ImageBasedTool<S: Default + Clone, H: ImageHandler> {
     image_handler: Rc<H>,
 }
 
+/// 提供（未经extra_zoom_factor缩放的）背景图片
 pub trait BackgroundImageProvider {
     fn background_image(
         &self,
@@ -419,7 +426,7 @@ impl Widget for &mut $tool {
         if response.dragged() {
             // 拖动中
             let drag_started_pos = self.tool_state.drag_start_pos.unwrap();
-            let rect = Rect::from_two_pos(drag_started_pos, pointer_pos);
+            let rect = Rect::from_two_pos(drag_started_pos, pointer_pos).remove_extra_zoom_factor_with_ctx(ui.ctx());
             if let Some(background_image) = self.background_image.clone() {
                 let mut annotation =
                     <$annotation>::new(rect, background_image, self.image_handler.clone());
@@ -452,7 +459,7 @@ impl Widget for &mut $tool {
         if response.drag_stopped() {
             // 拖动结束
             let drag_started_pos = self.tool_state.drag_start_pos.unwrap();
-            let rect = Rect::from_two_pos(drag_started_pos, pointer_pos);
+            let rect = Rect::from_two_pos(drag_started_pos, pointer_pos).remove_extra_zoom_factor_with_ctx(ui.ctx());
 
             if let Some(background_image) = self.background_image.clone() {
                 let annotation =
@@ -465,6 +472,7 @@ impl Widget for &mut $tool {
                     .push(annotation.into());
             } else {
                 let background_image_receiver = self.background_image_receiver.take();
+                // TODO: 考虑是否处理可能存在的background_image_receiver.try_recv()失败的场景
                 if let Some(background_image_receiver) = background_image_receiver {
                     let background_image = background_image_receiver.try_recv();
                     match background_image {

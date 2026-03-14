@@ -1,13 +1,6 @@
 use crate::annotator::cursor::{Crosshair, CustomCursor};
 use crate::annotator::rectangle_based::{EllipseTool, HitTarget, HitTest, RectangleTool};
-use crate::annotator::{
-    ActivationState, ActivationSupport, Annotation, AnnotationActivationSupport, AnnotationStyle,
-    AnnotationToolCommon, AnnotatorState, DEFAULT_SIZE_FOR_SMALL_RECT, UnsubmittedAnnotationHandler,
-    FillColorSupport, PainterExt, SharedAnnotatorState, SmallRect, StackTopAccessor,
-    StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport, WheelHandler, FontColorSupport,
-    dash_len_for_dashed_line, gap_len_for_dashed_line, radius_for_dotted_line,
-    spacing_for_dotted_line,
-};
+use crate::annotator::{ActivationState, ActivationSupport, Annotation, AnnotationActivationSupport, AnnotationStyle, AnnotationToolCommon, AnnotatorState, DEFAULT_SIZE_FOR_SMALL_RECT, UnsubmittedAnnotationHandler, FillColorSupport, PainterExt, SharedAnnotatorState, SmallRect, StackTopAccessor, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport, WheelHandler, FontColorSupport, dash_len_for_dashed_line, gap_len_for_dashed_line, radius_for_dotted_line, spacing_for_dotted_line, ApplyExtraZoomFactor, RemoveExtraZoomFactor};
 use crate::{declare_not_support_font_color, impl_stack_top_access_for, impl_stroke_width_handler_for};
 use egui::{
     Color32, CursorIcon, Painter, Pos2, Rect, Response, Sense, Shape, Stroke, Ui, Widget, vec2,
@@ -373,18 +366,20 @@ impl Into<Annotation> for ArrowAnnotation {
 
 impl Widget for &mut StraightLineAnnotation {
     fn ui(self, ui: &mut Ui) -> Response {
-        let rect = Rect::from_two_pos(self.start_position, self.end_position);
+        let start_position = self.start_position().apply_extra_zoom_factor_with_ctx(ui.ctx());
+        let end_position = self.end_position().apply_extra_zoom_factor_with_ctx(ui.ctx());
+        let rect = Rect::from_two_pos(start_position, end_position);
         let response = ui.allocate_rect(rect, Sense::hover());
         let painter = ui.painter();
         match self.stroke_type() {
             StrokeType::SolidLine => {
-                painter.line_segment([self.start_position, self.end_position], self.style.stroke);
+                painter.line_segment([start_position, end_position], self.style.stroke);
             }
             StrokeType::DashedLine => {
                 let dash_len = dash_len_for_dashed_line(self.style.stroke.width);
                 let gap_len = gap_len_for_dashed_line(self.style.stroke.width);
                 let shape = Shape::dashed_line(
-                    &[self.start_position, self.end_position],
+                    &[start_position, end_position],
                     self.style.stroke,
                     dash_len,
                     gap_len,
@@ -395,7 +390,7 @@ impl Widget for &mut StraightLineAnnotation {
                 let spacing = spacing_for_dotted_line(self.style.stroke.width); // 点间距
                 let radius = radius_for_dotted_line(self.style.stroke.width); // 点半径
                 let shape = Shape::dotted_line(
-                    &[self.start_position, self.end_position],
+                    &[start_position, end_position],
                     self.style.stroke.color,
                     spacing,
                     radius,
@@ -405,8 +400,8 @@ impl Widget for &mut StraightLineAnnotation {
         }
 
         if self.activation.is_active() {
-            painter.small_rect(&self.start_position);
-            painter.small_rect(&self.end_position);
+            painter.small_rect(&start_position);
+            painter.small_rect(&end_position);
         }
         response
     }
@@ -414,21 +409,23 @@ impl Widget for &mut StraightLineAnnotation {
 
 impl Widget for &mut ArrowAnnotation {
     fn ui(self, ui: &mut Ui) -> Response {
-        let rect = Rect::from_two_pos(self.start_position, self.end_position);
+        let start_position = self.start_position().apply_extra_zoom_factor_with_ctx(ui.ctx());
+        let end_position = self.end_position().apply_extra_zoom_factor_with_ctx(ui.ctx());
+        let rect = Rect::from_two_pos(start_position, end_position);
         let response = ui.allocate_rect(rect, Sense::hover());
         let painter = ui.painter();
         painter.simple_arrow(
-            self.start_position,
+            start_position,
             vec2(
-                self.end_position.x - self.start_position.x,
-                self.end_position.y - self.start_position.y,
+                end_position.x - start_position.x,
+                end_position.y - start_position.y,
             ),
             self.style.stroke,
         );
 
         if self.activation().is_active() {
-            painter.small_rect(&self.start_position);
-            painter.small_rect(&self.end_position);
+            painter.small_rect(&start_position);
+            painter.small_rect(&end_position);
         }
         response
     }
@@ -696,10 +693,12 @@ impl $tool {
         let Some(pointer_pos) = ui.ctx().pointer_hover_pos() else {
             return;
         };
+
         // 从标注栈的栈顶中获取最近的一个标注
         let hit_target =
             self.peek_annotation(|annotation_on_stack_top: Option<&$annotation>| {
                 // 判断当前鼠标是否位于此标注上
+                let pointer_pos = pointer_pos.remove_extra_zoom_factor_with_ctx(ui.ctx());
                 match annotation_on_stack_top {
                     None => None,
                     Some(annotation) => Some(annotation.hit_test(&pointer_pos)),
@@ -737,6 +736,7 @@ impl Widget for &mut $tool {
         let Some(pointer_pos) = ui.ctx().pointer_hover_pos() else {
             return response;
         };
+        let pointer_pos = pointer_pos.remove_extra_zoom_factor_with_ctx(ui.ctx());
 
         // 滚动鼠标滚轮调整线条大小
         self.handle_wheel_event(ui);
@@ -747,6 +747,7 @@ impl Widget for &mut $tool {
         if response.drag_started() {
             // 拖动开始
             let drag_started_pos = ui.ctx().input(|i| i.pointer.press_origin()).unwrap();
+            let drag_started_pos = drag_started_pos.remove_extra_zoom_factor_with_ctx(ui.ctx());
             let hit_target =
                 self.peek_annotation(|annotation_on_stack_top: Option<&$annotation>| {
                     // 判断当前鼠标是否位于此标注上
@@ -814,6 +815,7 @@ impl Widget for &mut $tool {
                     DragAction::None => {
                         let drag_started_pos =
                             ui.ctx().input(|i| i.pointer.press_origin()).unwrap();
+                        let drag_started_pos = drag_started_pos.remove_extra_zoom_factor_with_ctx(ui.ctx());
                         annotation.start_position = drag_started_pos;
                         annotation.end_position = pointer_pos;
                     }
@@ -821,6 +823,7 @@ impl Widget for &mut $tool {
                 ui.add(annotation);
             } else {
                 let drag_started_pos = ui.ctx().input(|i| i.pointer.press_origin()).unwrap();
+                let drag_started_pos = drag_started_pos.remove_extra_zoom_factor_with_ctx(ui.ctx());
                 let mut annotation = <$annotation>::new(
                     drag_started_pos,
                     pointer_pos,

@@ -1,7 +1,8 @@
-use egui::{paint_texture_at, pos2, vec2, Align, Color32, FontId, ImageOptions, Painter, Pos2, Rangef, Rect, Shape, SizeHint, Spinner, Stroke, StrokeKind, TextFormat, TextStyle, TextureId, TextureOptions, Ui, Vec2};
+use egui::{paint_texture_at, pos2, vec2, Align, Color32, Context, FontId, ImageOptions, Painter, Pos2, Rangef, Rect, Shape, SizeHint, Spinner, Stroke, StrokeKind, TextFormat, TextStyle, TextureId, TextureOptions, Ui, Vec2};
 use egui::emath::GuiRounding;
 use egui::load::{TextureLoadResult, TexturePoll};
 use egui::text::{LayoutJob, TextWrapping};
+use crate::annotator::{ApplyExtraZoomFactor, ExtraZoomFactorSupport};
 use crate::icon::Icons;
 
 pub trait CustomCursor {
@@ -229,6 +230,18 @@ pub struct SerialNumber {
     number: u32,
     style: SerialNumberStyle,
 }
+
+impl ApplyExtraZoomFactor<SerialNumber> for SerialNumber {
+    fn apply_extra_zoom_factor_with_ctx(&self, context: &Context) -> SerialNumber {
+        self.apply_extra_zoom_factor(context.extra_zoom_factor())
+    }
+
+    fn apply_extra_zoom_factor(&self, extra_zoom_factor: f32) -> SerialNumber {
+        let center_pos = self.center_pos.apply_extra_zoom_factor(extra_zoom_factor);
+        SerialNumber::new(center_pos, self.number, self.style.clone())
+    }
+}
+
 impl SerialNumber {
     pub fn new(center_pos: Pos2, number: u32, style: SerialNumberStyle) -> Self {
         Self {

@@ -3,7 +3,7 @@ use std::rc::{Rc, Weak};
 use crate::annotator::cursor::{CustomCursor, SerialNumber, SerialNumberStyle};
 use egui::{Color32, CursorIcon, Pos2, Rect, Response, Sense, Ui, Widget};
 use crate::{declare_not_support_font_color, declare_not_support_stroke_color, declare_not_support_stroke_type, declare_not_support_stroke_width};
-use crate::annotator::{StrokeWidthSupport, StrokeColorSupport, StrokeTypeSupport, FillColorSupport, FontColorSupport, StrokeType, AnnotatorState, Annotation, ActivationSupport, AnnotationActivationSupport, UnsubmittedAnnotationHandler, WheelHandler};
+use crate::annotator::{StrokeWidthSupport, StrokeColorSupport, StrokeTypeSupport, FillColorSupport, FontColorSupport, StrokeType, AnnotatorState, Annotation, ActivationSupport, AnnotationActivationSupport, UnsubmittedAnnotationHandler, WheelHandler, ApplyExtraZoomFactor, RemoveExtraZoomFactor};
 
 #[derive(Clone)]
 pub struct SerialNumberAnnotation {
@@ -32,8 +32,10 @@ impl AnnotationActivationSupport for SerialNumberAnnotation {
 
 impl Widget for &mut SerialNumberAnnotation {
     fn ui(self, ui: &mut Ui) -> Response {
-        let response = ui.allocate_rect(self.serial_number.rect(), Sense::hover());
-        self.serial_number.paint_with(ui.painter());
+        let serial_number = self.serial_number.apply_extra_zoom_factor_with_ctx(ui.ctx());
+        let rect = serial_number.rect();
+        let response = ui.allocate_rect(rect, Sense::hover());
+        serial_number.paint_with(ui.painter());
         response
     }
 }
@@ -149,9 +151,11 @@ impl Widget for &mut SerialNumberTool {
         self.handle_wheel_event(ui);
 
         if response.clicked() {
+            println!("sense_area: {:?}", sense_area);
             let pointer_pos = ui.ctx().input(|i|i.pointer.hover_pos());
+            let pointer_pos = pointer_pos.unwrap().remove_extra_zoom_factor_with_ctx(ui.ctx());
             let number = self.tool_state.next_number;
-            let annotation = SerialNumberAnnotation::new(pointer_pos.unwrap(), number, self.tool_state.style.clone());
+            let annotation = SerialNumberAnnotation::new(pointer_pos, number, self.tool_state.style.clone());
             self.tool_state.next_number += 1;
             if self.tool_state.next_number > MAX_NUMBER {
                 self.tool_state.next_number = 1;

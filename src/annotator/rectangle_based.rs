@@ -1,11 +1,8 @@
 use crate::annotator::cursor::{Crosshair, CustomCursor};
-use crate::annotator::{
-    ActivationState, ActivationSupport, Annotation, AnnotationActivationSupport, AnnotationStyle,
-    AnnotationToolCommon, AnnotatorState, UnsubmittedAnnotationHandler, FillColorSupport, PainterExt,
-    SharedAnnotatorState, StackTopAccessor, StrokeColorSupport, StrokeType, StrokeTypeSupport,
-    StrokeWidthSupport, WheelHandler, FontColorSupport
+use crate::annotator::{ActivationState, ActivationSupport, Annotation, AnnotationActivationSupport, AnnotationStyle, AnnotationToolCommon, AnnotatorState, ApplyExtraZoomFactor, ExtraZoomFactorSupport, FillColorSupport, FontColorSupport, PainterExt, RemoveExtraZoomFactor, SharedAnnotatorState, StackTopAccessor, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport, UnsubmittedAnnotationHandler, WheelHandler};
+use crate::{
+    declare_not_support_font_color, impl_stack_top_access_for, impl_stroke_width_handler_for,
 };
-use crate::{declare_not_support_font_color, impl_stack_top_access_for, impl_stroke_width_handler_for};
 use egui::epaint::EllipseShape;
 use egui::{
     Color32, CursorIcon, Painter, Pos2, Rect, Response, Sense, Stroke, StrokeKind, Ui, Widget,
@@ -347,11 +344,12 @@ impl Into<Annotation> for EllipseAnnotation {
 
 impl Widget for &mut RectangleAnnotation {
     fn ui(self, ui: &mut Ui) -> Response {
-        let response = ui.allocate_rect(self.rect, Sense::hover());
+        let rect = self.rect().apply_extra_zoom_factor_with_ctx(ui.ctx());
+        let response = ui.allocate_rect(rect, Sense::hover());
         let painter = ui.painter();
         if let Some(fill_color) = self.style.fill_color {
             painter.rectangle(
-                &self.rect,
+                &rect,
                 fill_color,
                 self.style.stroke,
                 StrokeKind::Middle,
@@ -359,7 +357,7 @@ impl Widget for &mut RectangleAnnotation {
             );
         } else {
             painter.rectangle(
-                &self.rect,
+                &rect,
                 Color32::TRANSPARENT,
                 self.style.stroke,
                 StrokeKind::Middle,
@@ -368,7 +366,7 @@ impl Widget for &mut RectangleAnnotation {
         }
 
         if self.activation.is_active() {
-            painter.small_rects(&self.rect);
+            painter.small_rects(&rect);
         }
 
         response
@@ -377,7 +375,8 @@ impl Widget for &mut RectangleAnnotation {
 
 impl Widget for &mut EllipseAnnotation {
     fn ui(self, ui: &mut Ui) -> Response {
-        let response = ui.allocate_rect(self.rect, Sense::hover());
+        let rect = self.rect().apply_extra_zoom_factor_with_ctx(ui.ctx());
+        let response = ui.allocate_rect(rect, Sense::hover());
         let painter = ui.painter();
         let fill = if let Some(fill_color) = self.style.fill_color {
             fill_color
@@ -386,17 +385,17 @@ impl Widget for &mut EllipseAnnotation {
         };
 
         let ellipse_shape = EllipseShape {
-            center: self.rect.center(),
+            center: rect.center(),
             fill,
             stroke: self.style.stroke,
-            radius: vec2(self.rect.width() / 2., self.rect.height() / 2.),
+            radius: vec2(rect.width() / 2., rect.height() / 2.),
         };
 
         painter.add(ellipse_shape);
 
         if self.activation.is_active() {
             // 绘制虚线矩形框以及外框上的各个角以及边上的小矩形
-            painter.small_rects(&self.rect);
+            painter.small_rects(&rect);
         }
         response
     }
@@ -711,6 +710,7 @@ macro_rules! impl_widget_for {
                 if response.drag_started() {
                     // 拖动开始
                     let drag_started_pos = ui.ctx().input(|i| i.pointer.press_origin()).unwrap();
+                    let drag_started_pos = drag_started_pos.remove_extra_zoom_factor_with_ctx(ui.ctx());
                     let hit_target = self.peek_annotation(|annotation_on_stack_top: Option<&$annotation>| {
                          // 判断当前鼠标是否位于此标注上
                          match annotation_on_stack_top {
@@ -762,6 +762,7 @@ macro_rules! impl_widget_for {
 
                 if response.dragged() {
                     // 拖动中
+                    let pointer_pos = pointer_pos.remove_extra_zoom_factor_with_ctx(ui.ctx());
                     if let Some(annotation) = &mut self.tool_state.current_annotation {
                         match self.tool_state.drag_action {
                             DragAction::AdjustTopEdge => {
@@ -793,12 +794,14 @@ macro_rules! impl_widget_for {
 
                             DragAction::None => {
                                 let drag_started_pos = ui.ctx().input(|i| i.pointer.press_origin()).unwrap();
+                                let drag_started_pos = drag_started_pos.remove_extra_zoom_factor_with_ctx(ui.ctx());
                                 annotation.rect = Rect::from_two_pos(drag_started_pos, pointer_pos);
                             }
                         }
                         ui.add(annotation);
                     } else {
                         let drag_started_pos = ui.ctx().input(|i| i.pointer.press_origin()).unwrap();
+                        let drag_started_pos = drag_started_pos.remove_extra_zoom_factor_with_ctx(ui.ctx());
                         let rect = Rect::from_two_pos(drag_started_pos, pointer_pos);
                         let mut annotation = <$annotation>::new(rect, self.tool_state.style, ActivationSupport::Supported(ActivationState::new(true)));
                         self.tool_state.current_annotation = Some(annotation.clone());

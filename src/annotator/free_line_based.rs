@@ -1,5 +1,5 @@
 use crate::annotator::cursor::{Circle, Crosshair, CustomCursor};
-use crate::annotator::{ActivationSupport, Annotation, AnnotationActivationSupport, AnnotationStyle, AnnotationToolCommon, AnnotatorState, UnsubmittedAnnotationHandler, FillColorSupport, SharedAnnotatorState, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport, WheelHandler, FontColorSupport};
+use crate::annotator::{ActivationSupport, Annotation, AnnotationActivationSupport, AnnotationStyle, AnnotationToolCommon, AnnotatorState, UnsubmittedAnnotationHandler, FillColorSupport, SharedAnnotatorState, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport, WheelHandler, FontColorSupport, ApplyExtraZoomFactor, RemoveExtraZoomFactor};
 use egui::{pos2, Color32, CursorIcon, Pos2, Rect, Response, Sense, Stroke, Ui, Widget};
 use std::cell::RefCell;
 use std::rc::Weak;
@@ -343,7 +343,8 @@ where
         let mut top = None;
         let mut right = None;
         let mut bottom = None;
-        for point in &self.points {
+        let points = self.points().apply_extra_zoom_factor_with_ctx(ui.ctx());
+        for point in &points {
             if let Some(ref mut l) = left {
                 if point.x < *l {
                     *l = point.x;
@@ -379,7 +380,7 @@ where
         let rect = Rect::from_two_pos(pos2(left.unwrap(), top.unwrap()), pos2(right.unwrap(), bottom.unwrap()));
         let response = ui.allocate_rect(rect, Sense::hover());
         let painter = ui.painter();
-        painter.line(self.points.clone(), Stroke::new(self.style.stroke_width(), self.style.stroke_color()));
+        painter.line(points, Stroke::new(self.style.stroke_width(), self.style.stroke_color()));
         response
     }
 }
@@ -631,6 +632,7 @@ impl Widget for &mut $tool  {
         if response.drag_started() {
             // 拖动开始
             let drag_started_pos = ui.ctx().input(|i| i.pointer.press_origin()).unwrap();
+            let drag_started_pos = drag_started_pos.remove_extra_zoom_factor_with_ctx(ui.ctx());
             let points = vec![drag_started_pos];
             let annotation = <$annotation>::new(points, self.tool_state.style, ActivationSupport::NotSupported);
             self.tool_state.current_annotation = Some(annotation);
@@ -639,6 +641,7 @@ impl Widget for &mut $tool  {
         if response.dragged() {
             // 拖动中
             if let Some(annotation) = self.tool_state.current_annotation.as_mut() {
+                let pointer_pos = pointer_pos.remove_extra_zoom_factor_with_ctx(ui.ctx());
                 annotation.points.push(pointer_pos);
                 ui.add(annotation);
             }
@@ -647,6 +650,7 @@ impl Widget for &mut $tool  {
         if response.drag_stopped() {
             // 拖动结束
             let mut annotation = self.tool_state.current_annotation.take().unwrap();
+            let pointer_pos = pointer_pos.remove_extra_zoom_factor_with_ctx(ui.ctx());
             annotation.points.push(pointer_pos);
 
             self.annotator_state

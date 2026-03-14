@@ -1,5 +1,5 @@
 use crate::annotator::rectangle_based::{HitTarget, HitTest};
-use crate::annotator::{ActivationState, ActivationSupport, Annotation, AnnotationActivationSupport, AnnotationToolCommon, AnnotatorState, UnsubmittedAnnotationHandler, PainterExt, SharedAnnotatorState, StackTopAccessor, FontColorSupport};
+use crate::annotator::{ActivationState, ActivationSupport, Annotation, AnnotationActivationSupport, AnnotationToolCommon, AnnotatorState, UnsubmittedAnnotationHandler, PainterExt, SharedAnnotatorState, StackTopAccessor, FontColorSupport, ApplyExtraZoomFactor, RemoveExtraZoomFactor};
 use crate::annotator::{
     FillColorSupport, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport,
 };
@@ -164,7 +164,7 @@ impl Widget for &mut TextAnnotation {
         let row_height = ui.fonts_mut(|f| f.row_height(&style.font));
         let text_width = max_text_width.max(MIN_TEXT_WIDTH);
         let text_height = text_height.max(row_height);
-        let left_top = self.pos() - vec2(style.padding.leftf(), style.padding.topf() + row_height / 2.0);
+        let left_top = self.pos().apply_extra_zoom_factor_with_ctx(ui.ctx()) - vec2(style.padding.leftf(), style.padding.topf() + row_height / 2.0);
         // 文本的底部和边框添加额外的间距，不然边框底边的鼠标的拖动事件会被编辑框吞了，导致无法拖动
         let extra_padding_bottom = 20.;
         let right_bottom = left_top + vec2(text_width+ style.padding.sum().x, text_height + style.padding.sum().y + extra_padding_bottom);
@@ -312,7 +312,7 @@ impl StrokeWidthSupport for TextAnnotation {
             }
             // 从标注栈的栈顶中获取最近的一个标注
             if let Some(annotation) = self.tool_state.current_annotation.as_ref() {
-                let hit_target = Self::hit_test_for_annotation(annotation, &pointer_pos);
+                let hit_target = Self::hit_test_for_annotation(annotation, &(pointer_pos.remove_extra_zoom_factor_with_ctx(ui.ctx())));
                 if let Some(hit_target) = hit_target {
                     // 鼠标位于边框上
                     if hit_target != HitTarget::Outside && hit_target != HitTarget::Inside {
@@ -445,6 +445,7 @@ impl Widget for &mut TextTool {
         } else if response.clicked() {
             println!("clicked!");
             let pointer_pos = response.hover_pos().unwrap();
+            let pointer_pos = pointer_pos.remove_extra_zoom_factor_with_ctx(ui.ctx());
             let hit_target = self.hit_test_for_annotation_on_stack_top(&pointer_pos);
             if hit_target.is_none() || hit_target.unwrap() != HitTarget::Inside {
                 if self.tool_state.current_annotation.is_some() {
@@ -468,7 +469,8 @@ impl Widget for &mut TextTool {
             }
         } else if response.dragged() {
             if let Some(annotation) = self.tool_state.current_annotation.as_mut() {
-                let new_pos = annotation.pos + response.drag_delta();
+                let drag_delta = response.drag_delta().remove_extra_zoom_factor_with_ctx(ui.ctx());
+                let new_pos = annotation.pos + drag_delta;
                 annotation.set_pos(new_pos);
                 ui.add(annotation);
             }

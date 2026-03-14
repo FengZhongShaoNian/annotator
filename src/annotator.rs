@@ -25,10 +25,7 @@ use crate::egui_off_screen_render::EguiOffScreenRender;
 use crate::global::Global;
 use crate::view::ViewId;
 use egui::ahash::HashMap;
-use egui::{
-    Color32, Id, Painter, Pos2, Rect, Response, Shape, Stroke, StrokeKind, TextureHandle, Ui, Vec2,
-    Widget, pos2,
-};
+use egui::{Color32, Id, Painter, Pos2, Rect, Response, Shape, Stroke, StrokeKind, TextureHandle, Ui, Vec2, Widget, pos2, Context, vec2};
 use image::RgbaImage;
 use spire_enum::prelude::{delegate_impl, delegated_enum};
 use std::cell::RefCell;
@@ -38,6 +35,7 @@ use delegate::delegate;
 use log::info;
 use crate::annotator::serial_number::{SerialNumberAnnotation, SerialNumberTool};
 use crate::annotator::text::{TextAnnotation, TextTool};
+use crate::dpi::{LogicalSize, Pixel};
 
 /// 线条类型（实线、虚线、点线）
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
@@ -691,8 +689,144 @@ impl UnsubmittedAnnotationHandler for AnnotationTool {
     fn drop_uncommitted_annotations(&mut self);
 }
 
+pub trait ExtraZoomFactorSupport {
+    fn extra_zoom_factor(&self) -> f32;
+    fn set_extra_zoom_factor(&self, extra_zoom_factor: f32);
+}
+
+impl ExtraZoomFactorSupport for Context {
+    fn extra_zoom_factor(&self) -> f32 {
+        self.memory(|memory|memory.data.get_temp(AnnotatorState::extra_zoom_factor_id()).unwrap_or(1.))
+    }
+
+    fn set_extra_zoom_factor(&self, extra_zoom_factor: f32) {
+        self.memory_mut(|memory| {
+            memory.data.insert_temp(AnnotatorState::extra_zoom_factor_id(), extra_zoom_factor);
+        });
+    }
+}
+
+pub trait ApplyExtraZoomFactor<T> {
+    /// 对T类型的数据应用context.extra_zoom_factor()，返回一个新的数据（不改变原来的数据）
+    fn apply_extra_zoom_factor_with_ctx(&self, context: &Context) -> T;
+    /// 对T类型的数据应用extra_zoom_factor，返回一个新的数据（不改变原来的数据）
+    fn apply_extra_zoom_factor(&self, extra_zoom_factor: f32) -> T;
+}
+
+/// ApplyExtraZoomFactor<T>的反向操作
+pub trait RemoveExtraZoomFactor<T> {
+    fn remove_extra_zoom_factor_with_ctx(&self, context: &Context) -> T;
+    fn remove_extra_zoom_factor(&self, extra_zoom_factor: f32) -> T;
+}
+
+impl ApplyExtraZoomFactor<Pos2> for Pos2 {
+    fn apply_extra_zoom_factor_with_ctx(&self, context: &Context) -> Pos2 {
+        self.apply_extra_zoom_factor(context.extra_zoom_factor())
+    }
+
+    fn apply_extra_zoom_factor(&self, extra_zoom_factor: f32) -> Pos2 {
+        pos2(self.x * extra_zoom_factor, self.y * extra_zoom_factor)
+    }
+}
+
+impl RemoveExtraZoomFactor<Pos2> for Pos2 {
+    fn remove_extra_zoom_factor_with_ctx(&self, context: &Context) -> Pos2 {
+        self.remove_extra_zoom_factor(context.extra_zoom_factor())
+    }
+
+    fn remove_extra_zoom_factor(&self, extra_zoom_factor: f32) -> Pos2 {
+        self.apply_extra_zoom_factor(1./extra_zoom_factor)
+    }
+}
+
+impl ApplyExtraZoomFactor<Vec2> for Vec2 {
+    fn apply_extra_zoom_factor_with_ctx(&self, context: &Context) -> Vec2 {
+        self.apply_extra_zoom_factor(context.extra_zoom_factor())
+    }
+
+    fn apply_extra_zoom_factor(&self, extra_zoom_factor: f32) -> Vec2 {
+        vec2(self.x * extra_zoom_factor, self.y * extra_zoom_factor)
+    }
+}
+
+impl RemoveExtraZoomFactor<Vec2> for Vec2 {
+    fn remove_extra_zoom_factor_with_ctx(&self, context: &Context) -> Vec2 {
+        self.remove_extra_zoom_factor(context.extra_zoom_factor())
+    }
+
+    fn remove_extra_zoom_factor(&self, extra_zoom_factor: f32) -> Vec2 {
+        self.apply_extra_zoom_factor(1./extra_zoom_factor)
+    }
+}
+
+impl ApplyExtraZoomFactor<Rect> for Rect {
+    fn apply_extra_zoom_factor_with_ctx(&self, context: &Context) -> Rect {
+        let extra_zoom_factor = context.extra_zoom_factor();
+        self.apply_extra_zoom_factor(extra_zoom_factor)
+    }
+
+    fn apply_extra_zoom_factor(&self, extra_zoom_factor: f32) -> Rect {
+        let min = self.min.apply_extra_zoom_factor(extra_zoom_factor);
+        let max = self.max.apply_extra_zoom_factor(extra_zoom_factor);
+        Rect::from_two_pos(min, max)
+    }
+}
+
+impl RemoveExtraZoomFactor<Rect> for Rect {
+    fn remove_extra_zoom_factor_with_ctx(&self, context: &Context) -> Rect {
+        self.remove_extra_zoom_factor(context.extra_zoom_factor())
+    }
+
+    fn remove_extra_zoom_factor(&self, extra_zoom_factor: f32) -> Rect {
+        self.apply_extra_zoom_factor(1./extra_zoom_factor)
+    }
+}
+
+impl ApplyExtraZoomFactor<Vec<Pos2>> for Vec<Pos2> {
+    fn apply_extra_zoom_factor_with_ctx(&self, context: &Context) -> Vec<Pos2> {
+        let extra_zoom_factor = context.extra_zoom_factor();
+        self.apply_extra_zoom_factor(extra_zoom_factor)
+    }
+
+    fn apply_extra_zoom_factor(&self, extra_zoom_factor: f32) -> Vec<Pos2> {
+        self.iter().map(|point| point.apply_extra_zoom_factor(extra_zoom_factor)).collect()
+    }
+}
+
+impl RemoveExtraZoomFactor<Vec<Pos2>> for Vec<Pos2> {
+    fn remove_extra_zoom_factor_with_ctx(&self, context: &Context) -> Vec<Pos2> {
+        self.remove_extra_zoom_factor(context.extra_zoom_factor())
+    }
+
+    fn remove_extra_zoom_factor(&self, extra_zoom_factor: f32) -> Vec<Pos2> {
+        self.apply_extra_zoom_factor(1./extra_zoom_factor)
+    }
+}
+
+impl<P: Pixel> ApplyExtraZoomFactor<LogicalSize<P>> for LogicalSize<P> {
+    fn apply_extra_zoom_factor_with_ctx(&self, context: &Context) -> LogicalSize<P> {
+        let extra_zoom_factor = context.extra_zoom_factor();
+        self.apply_extra_zoom_factor(extra_zoom_factor)
+    }
+
+    fn apply_extra_zoom_factor(&self, extra_zoom_factor: f32) -> LogicalSize<P> {
+        let width = self.width.cast::<f64>();
+        let height = self.height.cast::<f64>();
+        LogicalSize::new(width * extra_zoom_factor as f64, height * extra_zoom_factor as f64).cast::<P>()
+    }
+}
+
 /// 当前标注状态
 pub struct AnnotatorState {
+    /// 对标注面板进行缩放的缩放因子
+    /// 标注面板的逻辑大小=背景图片的逻辑大小=(背景图片的物理大小/scale_factor) * extra_zoom_factor)
+    /// 几个概念：
+    /// 1. 窗口的缩放因子：scale_factor，这是操作系统中设置的缩放比例，例如缩放125%，那么scale_factor就是1.25
+    /// 2. egui的缩放因子：pixels_per_point, 表示使用多少个物理像素来绘制一个逻辑像素，这个和窗口的scale_factor保持一致
+    /// 3. 标注面板的额外缩放因子：extra_zoom_factor，表示对面板进行额外的缩放，以支持通过滚轮调整标注面板的尺寸的功能
+    /// 4. 每个标注（Annotation）中的数据（位置、宽高）都是基于extra_zoom_factor为1的情况存放的，在绘制的时候才会应用extra_zoom_factor
+    pub extra_zoom_factor: f32,
+
     /// 是否隐藏主工具条
     pub hide_primary_toolbar: bool,
 
@@ -806,6 +940,10 @@ impl AnnotatorState {
     }
     pub fn secondly_toolbar_id() -> ViewId {
         "secondly-toolbar".into()
+    }
+
+    pub fn extra_zoom_factor_id() -> Id {
+        "extra-zoom-factor".into()
     }
 
     pub fn activate_annotation_tool(&mut self, tool_name: ToolName) {

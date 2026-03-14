@@ -4,24 +4,27 @@ use crate::annotator::image_based::{
     MosaicHandler, MosaicTool, OriginalBackgroundImageProvider,
 };
 use crate::annotator::rectangle_based::{EllipseTool, RectangleTool};
+use crate::annotator::serial_number::SerialNumberTool;
 use crate::annotator::straight_line_based::{ArrowTool, StraightLineTool};
 use crate::annotator::text::TextTool;
 use crate::annotator::{
-    AnnotationTool, AnnotatorState, SharedAnnotatorState, SharedAnnotatorStateUtil, ToolName,
+    AnnotationTool, AnnotatorState, ExtraZoomFactorSupport, SharedAnnotatorState,
+    SharedAnnotatorStateUtil, ToolName, WheelHandler, ApplyExtraZoomFactor
 };
 use crate::application::Application;
-use crate::dpi::{LogicalPosition, PhysicalSize};
+use crate::context::Command;
+use crate::dpi::{LogicalPosition, LogicalSize, PhysicalSize};
 use crate::egui_off_screen_render::EguiOffScreenRender;
 use crate::global::{ReadGlobalMut, ReadOrInsertGlobal};
 use crate::view::ViewId;
 use crate::window::AppWindow;
 use egui::load::SizedTexture;
-use egui::{Area, ColorImage, Frame, Image, ImageSource, Rect, pos2, vec2, Color32};
+use egui::{Area, Color32, ColorImage, Frame, Image, ImageSource, Rect, pos2, vec2};
 use image::RgbaImage;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
-use crate::annotator::serial_number::SerialNumberTool;
+use log::info;
 
 pub fn create_annotator_panel(
     view_id: ViewId,
@@ -66,6 +69,7 @@ pub fn create_annotator_panel(
                     ));
 
                     let annotator_state = AnnotatorState {
+                        extra_zoom_factor: 1.0,
                         hide_primary_toolbar: false,
                         background_image: image.clone(),
                         background_texture_handle: Some(texture_handle),
@@ -90,7 +94,7 @@ pub fn create_annotator_panel(
                             Color32::LIGHT_GREEN,
                             Color32::DARK_BLUE,
                             Color32::LIGHT_BLUE,
-                        ]
+                        ],
                     };
 
                     let annotator_state_rc = Rc::new(RefCell::new(annotator_state));
@@ -119,7 +123,8 @@ pub fn create_annotator_panel(
                         Rc::new(ExtractHandler::new()),
                     );
                     let text_tool = TextTool::new(Rc::downgrade(&annotator_state_rc));
-                    let serial_number_tool = SerialNumberTool::new(Rc::downgrade(&annotator_state_rc));
+                    let serial_number_tool =
+                        SerialNumberTool::new(Rc::downgrade(&annotator_state_rc));
 
                     annotator_state_rc.borrow_mut().annotation_tools.insert(
                         ToolName::Rectangle,
@@ -161,10 +166,10 @@ pub fn create_annotator_panel(
                         .borrow_mut()
                         .annotation_tools
                         .insert(ToolName::Text, AnnotationTool::Text(text_tool));
-                    annotator_state_rc
-                        .borrow_mut()
-                        .annotation_tools
-                        .insert(ToolName::SerialNumber, AnnotationTool::SerialNumber(serial_number_tool));
+                    annotator_state_rc.borrow_mut().annotation_tools.insert(
+                        ToolName::SerialNumber,
+                        AnnotationTool::SerialNumber(serial_number_tool),
+                    );
 
                     annotator_state_rc
                 });
@@ -184,24 +189,24 @@ pub fn create_annotator_panel(
                             &texture_handle,
                         )));
 
-                        let logical_size = PhysicalSize::new(image_width, image_height)
-                            .to_logical(ctx.pixels_per_point() as f64);
-
-                        let panel_size = vec2(logical_size.width, logical_size.height);
-
-                        bg_image.paint_at(
-                            ui,
-                            Rect::from_min_size(
-                                pos2(0., 0.),
-                                panel_size,
-                            ),
-                        );
-
                         let annotator_state = window
                             .window_context
                             .globals_by_type
                             .require_ref_mut::<SharedAnnotatorState>()
                             .clone();
+
+                        let scale_factor = ui.ctx().pixels_per_point();
+                        let extra_zoom_factor = annotator_state.borrow().extra_zoom_factor;
+                        ui.ctx().set_extra_zoom_factor(extra_zoom_factor);
+
+                        // 标注面板的逻辑大小=背景图片的逻辑大小=(背景图片的物理大小/scale_factor) * extra_zoom_factor)
+                        let logical_size = PhysicalSize::new(image_width, image_height)
+                            .to_logical(scale_factor as f64)
+                            .apply_extra_zoom_factor_with_ctx(ui.ctx());
+
+                        let panel_size = vec2(logical_size.width, logical_size.height);
+
+                        bg_image.paint_at(ui, Rect::from_min_size(pos2(0., 0.), panel_size));
 
                         annotator_state
                             .borrow_mut()
@@ -214,16 +219,52 @@ pub fn create_annotator_panel(
                         if annotator_state.borrow().current_annotation_tool.is_some() {
                             Area::new("annotation_tool_area".into())
                                 .fixed_pos(pos2(0., 0.))
-                                .default_size(panel_size)
                                 .show(ctx, |ui| {
-                                annotator_state.with_current_annotation_tool(|tool| {
-                                    ui.add(tool);
-                                })
-                            });
+                                    ui.set_width(panel_size.x);
+                                    ui.set_height(panel_size.y);
+                                    annotator_state.with_current_annotation_tool(|tool| {
+                                        ui.add(tool);
+                                    })
+                                });
+                        } else {
+                            // 缩放窗口
+                            let zoom_before = annotator_state.borrow().extra_zoom_factor;
+                            annotator_state.borrow_mut().handle_wheel_event(ui);
+                            let zoom_after = annotator_state.borrow().extra_zoom_factor;
+
+                            if zoom_before != zoom_after {
+                                info!("extra_zoom_factor changed from {} to {}", zoom_before, zoom_after);
+
+                                // 标注面板的逻辑大小=背景图片的逻辑大小=(背景图片的物理大小/scale_factor) * extra_zoom_factor)
+                                let new_size = PhysicalSize::new(image_width, image_height)
+                                    .to_logical(ctx.pixels_per_point() as f64)
+                                    .apply_extra_zoom_factor(zoom_after);
+
+                                info!("标注面板尺寸更改from {:?} to {:?}", logical_size, new_size);
+
+                                window
+                                    .window_context
+                                    .commands
+                                    .push_back(Command::ResizeView(current_view.id(), new_size));
+                            }
                         }
                     });
             })
         }),
         None,
     );
+}
+
+impl WheelHandler for AnnotatorState {
+    fn on_scroll_delta_changed(&mut self, value: f32) {
+        if value > 0. {
+            let zoom = self.extra_zoom_factor - 0.1;
+            if zoom >= 0.1 {
+                self.extra_zoom_factor = zoom;
+            }
+        } else {
+            let zoom = self.extra_zoom_factor + 0.1;
+            self.extra_zoom_factor = zoom;
+        }
+    }
 }
