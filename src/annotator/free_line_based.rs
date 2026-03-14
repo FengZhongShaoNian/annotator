@@ -657,8 +657,7 @@ impl Widget for &mut $tool  {
                 .upgrade()
                 .unwrap()
                 .borrow_mut()
-                .annotations_stack
-                .push(annotation.into());
+                .submit_annotation(annotation.into());
         }
         response
     }

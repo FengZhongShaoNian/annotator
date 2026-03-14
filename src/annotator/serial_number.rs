@@ -162,7 +162,7 @@ impl Widget for &mut SerialNumberTool {
             }
 
             let  annotator_state= self.annotator_state.upgrade().unwrap();
-            annotator_state.borrow_mut().annotations_stack.push(annotation.into());
+            annotator_state.borrow_mut().submit_annotation(annotation.into());
         }
 
         response

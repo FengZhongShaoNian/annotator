@@ -468,8 +468,7 @@ impl Widget for &mut $tool {
                     .upgrade()
                     .unwrap()
                     .borrow_mut()
-                    .annotations_stack
-                    .push(annotation.into());
+                    .submit_annotation(annotation.into());
             } else {
                 let background_image_receiver = self.background_image_receiver.take();
                 // TODO: 考虑是否处理可能存在的background_image_receiver.try_recv()失败的场景
@@ -487,8 +486,7 @@ impl Widget for &mut $tool {
                                 .upgrade()
                                 .unwrap()
                                 .borrow_mut()
-                                .annotations_stack
-                                .push(annotation.into());
+                                .submit_annotation(annotation.into());
                         }
                         Err(oneshot::TryRecvError::Empty(rx)) => {
                             self.background_image_receiver = Some(rx);

@@ -620,7 +620,7 @@ pub trait UnsubmittedAnnotationHandler {
         unimplemented!()
     }
 
-    fn drop_uncommitted_annotations(&mut self) {
+    fn drop_uncommitted_annotations(&mut self) -> Annotation {
         unimplemented!()
     }
 }
@@ -686,7 +686,7 @@ impl Widget for &mut AnnotationTool {
 impl UnsubmittedAnnotationHandler for AnnotationTool {
     fn has_uncommitted_annotations(&self) -> bool;
     fn submit_uncommitted_annotations(&mut self, _annotator_state: &mut AnnotatorState);
-    fn drop_uncommitted_annotations(&mut self);
+    fn drop_uncommitted_annotations(&mut self) -> Annotation;
 }
 
 pub trait ExtraZoomFactorSupport {
@@ -972,6 +972,51 @@ impl AnnotatorState {
             }
             self.annotation_tools
                 .insert(previous_tool.tool_name(), previous_tool);
+        }
+    }
+
+    pub fn submit_annotation(&mut self, annotation: Annotation) {
+        self.annotations_stack.push(annotation);
+        self.redo_stack.clear();
+    }
+
+    pub fn can_undo(&self) -> bool {
+        if let Some(current_tool) = self.current_annotation_tool.as_ref() {
+            if current_tool.has_uncommitted_annotations() {
+                return true;
+            }
+        }
+        if !self.annotations_stack.is_empty() {
+            return true
+        }
+        false
+    }
+
+    pub fn undo(&mut self) {
+        let mut pop_stack_top_annotation = true;
+        if let Some(tool) = self.current_annotation_tool.as_mut() {
+            if tool.has_uncommitted_annotations() {
+                let annotation = tool.drop_uncommitted_annotations();
+                self.redo_stack.push(annotation);
+                pop_stack_top_annotation = false;
+            }
+        }
+        if pop_stack_top_annotation {
+            let annotation = self.annotations_stack.pop();
+            if let Some(annotation) = annotation {
+                self.redo_stack.push(annotation);
+            }
+        }
+    }
+
+    pub fn can_redo(&self) -> bool {
+        !self.redo_stack.is_empty()
+    }
+
+    pub fn redo(&mut self) {
+        let annotation = self.redo_stack.pop();
+        if let Some(annotation) = annotation {
+            self.annotations_stack.push(annotation);
         }
     }
 }

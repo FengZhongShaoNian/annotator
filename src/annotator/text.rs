@@ -333,7 +333,7 @@ impl StrokeWidthSupport for TextAnnotation {
             if let Some(mut annotation) = self.tool_state.current_annotation.take() {
                 annotation.activation.deactivate();
                 if !annotation.text.is_empty() {
-                    annotator_state.annotations_stack.push(annotation.into());
+                    annotator_state.submit_annotation(annotation.into());
                 }
             }
         }
@@ -499,5 +499,13 @@ impl UnsubmittedAnnotationHandler for TextTool {
 
     fn submit_uncommitted_annotations(&mut self, annotator_state: &mut AnnotatorState) {
         self.submit_current_annotation(annotator_state);
+    }
+
+    fn drop_uncommitted_annotations(&mut self) -> Annotation {
+        if self.tool_state.current_annotation.is_some() {
+            let text_annotation  = self.tool_state.current_annotation.take().unwrap();
+            return Annotation::Text(text_annotation);
+        }
+        panic!("There are no unsubmitted annotations in TextTool!");
     }
 }

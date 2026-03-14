@@ -818,8 +818,7 @@ macro_rules! impl_widget_for {
                         .upgrade()
                         .unwrap()
                         .borrow_mut()
-                        .annotations_stack
-                        .push(current_annotation.into());
+                        .submit_annotation(current_annotation.into());
                 }
                 response
             }

@@ -49,6 +49,7 @@ pub fn create_primary_toolbar(
                                     "rectangle-tool".into(),
                                     Icons::DrawRectangle.get_image(),
                                     LogicalSize::new(32., 32.),
+                                    false,
                                     true,
                                     matches!(active_tool, Some(ToolName::Rectangle)),
                                 ))
@@ -70,6 +71,7 @@ pub fn create_primary_toolbar(
                                     "ellipse-tool".into(),
                                     Icons::DrawEllipse.get_image(),
                                     LogicalSize::new(32., 32.),
+                                    false,
                                     true,
                                     matches!(active_tool, Some(ToolName::Ellipse)),
                                 ))
@@ -92,6 +94,7 @@ pub fn create_primary_toolbar(
                                     "straight-line-tool".into(),
                                     Icons::DrawLine.get_image(),
                                     LogicalSize::new(32., 32.),
+                                    false,
                                     true,
                                     matches!(active_tool, Some(ToolName::StraightLine)),
                                 ))
@@ -113,6 +116,7 @@ pub fn create_primary_toolbar(
                                     "arrow-tool".into(),
                                     Icons::DrawArrow.get_image(),
                                     LogicalSize::new(32., 32.),
+                                    false,
                                     true,
                                     matches!(active_tool, Some(ToolName::Arrow)),
                                 ))
@@ -135,6 +139,7 @@ pub fn create_primary_toolbar(
                                     "pencil-tool".into(),
                                     Icons::DrawFreehand.get_image(),
                                     LogicalSize::new(32., 32.),
+                                    false,
                                     true,
                                     matches!(active_tool, Some(ToolName::Pencil)),
                                 ))
@@ -157,6 +162,7 @@ pub fn create_primary_toolbar(
                                     "marker-pen-tool".into(),
                                     Icons::DrawHighlight.get_image(),
                                     LogicalSize::new(32., 32.),
+                                    false,
                                     true,
                                     matches!(active_tool, Some(ToolName::MarkerPen)),
                                 ))
@@ -179,6 +185,7 @@ pub fn create_primary_toolbar(
                                     "mosaic-tool".into(),
                                     Icons::PixelArtTrace.get_image(),
                                     LogicalSize::new(32., 32.),
+                                    false,
                                     true,
                                     matches!(active_tool, Some(ToolName::Mosaic)),
                                 ))
@@ -201,6 +208,7 @@ pub fn create_primary_toolbar(
                                     "blur-tool".into(),
                                     Icons::BlurFx.get_image(),
                                     LogicalSize::new(32., 32.),
+                                    false,
                                     true,
                                     matches!(active_tool, Some(ToolName::Blur)),
                                 ))
@@ -223,6 +231,7 @@ pub fn create_primary_toolbar(
                                     "text-tool".into(),
                                     Icons::DrawText.get_image(),
                                     LogicalSize::new(32., 32.),
+                                    false,
                                     true,
                                     matches!(active_tool, Some(ToolName::Text)),
                                 ))
@@ -245,6 +254,7 @@ pub fn create_primary_toolbar(
                                     "serial-number-tool".into(),
                                     Icons::DrawNumber.get_image(),
                                     LogicalSize::new(32., 32.),
+                                    false,
                                     true,
                                     matches!(active_tool, Some(ToolName::SerialNumber)),
                                 ))
@@ -267,6 +277,7 @@ pub fn create_primary_toolbar(
                                     "eraser-tool".into(),
                                     Icons::DrawEraser.get_image(),
                                     LogicalSize::new(32., 32.),
+                                    false,
                                     true,
                                     matches!(active_tool, Some(ToolName::Eraser)),
                                 ))
@@ -289,28 +300,35 @@ pub fn create_primary_toolbar(
                                     "undo-tool".into(),
                                     Icons::EditUndo.get_image(),
                                     LogicalSize::new(32., 32.),
+                                    !annotator_state_mut_ref.can_undo(),
                                     false,
                                     false,
                                 ))
                                 .clicked()
-                            {}
+                            {
+                                annotator_state_mut_ref.undo();
+                            }
 
                             if ui
                                 .add(SvgButton::new(
                                     "redo-tool".into(),
                                     Icons::EditRedo.get_image(),
                                     LogicalSize::new(32., 32.),
+                                    !annotator_state_mut_ref.can_redo(),
                                     false,
                                     false,
                                 ))
                                 .clicked()
-                            {}
+                            {
+                                annotator_state_mut_ref.redo();
+                            }
 
                             if ui
                                 .add(SvgButton::new(
                                     "save-tool".into(),
                                     Icons::DocumentSave.get_image(),
                                     LogicalSize::new(32., 32.),
+                                    false,
                                     false,
                                     false,
                                 ))
@@ -324,6 +342,7 @@ pub fn create_primary_toolbar(
                                     LogicalSize::new(32., 32.),
                                     false,
                                     false,
+                                    false,
                                 ))
                                 .clicked()
                             {}
@@ -332,6 +351,7 @@ pub fn create_primary_toolbar(
                                     "ok-tool".into(),
                                     Icons::DialogOk.get_image(),
                                     LogicalSize::new(32., 32.),
+                                    false,
                                     false,
                                     false,
                                 ))
