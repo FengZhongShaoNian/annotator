@@ -267,7 +267,7 @@ pub fn create_primary_toolbar(
                                     "eraser-tool".into(),
                                     Icons::DrawEraser.get_image(),
                                     LogicalSize::new(32., 32.),
-                                    false,
+                                    true,
                                     matches!(active_tool, Some(ToolName::Eraser)),
                                 ))
                                 .clicked()
