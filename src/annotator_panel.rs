@@ -19,7 +19,7 @@ use crate::global::{ReadGlobalMut, ReadOrInsertGlobal};
 use crate::view::ViewId;
 use crate::window::AppWindow;
 use egui::load::SizedTexture;
-use egui::{Area, Color32, ColorImage, Frame, Image, ImageSource, Rect, pos2, vec2};
+use egui::{Area, Color32, ColorImage, Frame, Image, ImageSource, Rect, pos2, vec2, PointerButton};
 use image::RgbaImage;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -246,6 +246,13 @@ pub fn create_annotator_panel(
                                     .window_context
                                     .commands
                                     .push_back(Command::ResizeView(current_view.id(), new_size));
+                            }
+
+                            // 处理窗口移动
+                            if ui.ctx().input(|input_state|{
+                                input_state.pointer.button_down(PointerButton::Primary) && input_state.pointer.is_moving()
+                            }) {
+                                window.window_context.commands.push_back(Command::StartMovingWindow);
                             }
                         }
                     });

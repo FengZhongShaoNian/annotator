@@ -24,6 +24,7 @@ pub enum Command {
     DropView(ViewId),
     RepositionSubView(ViewId, LogicalPosition<i32>),
     CopyImage(Receiver<Arc<RgbaImage>>),
+    StartMovingWindow,
 }
 
 impl Default for WindowContext {

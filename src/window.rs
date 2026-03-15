@@ -680,7 +680,9 @@ impl AppWindow {
                             warn!("Failed to send data to clipboard: {:?}", err);
                         }
                     }
-
+                }
+                Command::StartMovingWindow => {
+                    self.xdg_window.move_(app.global_state.seat.as_ref().unwrap(), self.serial_tracker.get(SerialKind::MousePress));
                 }
             }
         }
