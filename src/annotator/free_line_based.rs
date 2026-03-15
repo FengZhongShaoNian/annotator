@@ -564,7 +564,7 @@ impl MarkerPenTool {
         // 绘制自定义光标
         Circle::new(
             pointer_pos,
-            Color32::RED,
+            self.tool_state.style.stroke_color(),
             self.tool_state.style.stroke_width(),
         ).paint_with(ui.painter());
     }
