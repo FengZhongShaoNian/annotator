@@ -1,9 +1,16 @@
 use crate::annotator::cursor::{Circle, Crosshair, CustomCursor};
-use crate::annotator::{ActivationSupport, Annotation, AnnotationActivationSupport, AnnotationStyle, AnnotationToolCommon, AnnotatorState, UnsubmittedAnnotationHandler, FillColorSupport, SharedAnnotatorState, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport, WheelHandler, FontColorSupport, ApplyExtraZoomFactor, RemoveExtraZoomFactor};
-use egui::{pos2, Color32, CursorIcon, PointerButton, Pos2, Rect, Response, Sense, Stroke, Ui, Widget};
+use crate::annotator::{
+    ActivationSupport, Annotation, AnnotationActivationSupport, AnnotationStyle,
+    AnnotationToolCommon, AnnotatorState, ApplyExtraZoomFactor, FillColorSupport, FontColorSupport,
+    RemoveExtraZoomFactor, SharedAnnotatorState, StrokeColorSupport, StrokeType, StrokeTypeSupport,
+    StrokeWidthSupport, UnsubmittedAnnotationHandler, WheelHandler,
+};
+use crate::declare_not_support_font_color;
+use egui::{
+    Color32, CursorIcon, PointerButton, Pos2, Rect, Response, Sense, Stroke, Ui, Widget, pos2,
+};
 use std::cell::RefCell;
 use std::rc::Weak;
-use crate::declare_not_support_font_color;
 
 #[derive(Debug, Copy, Clone)]
 pub struct PencilStyle {
@@ -205,11 +212,7 @@ impl<S> FreeLineBasedAnnotation<S>
 where
     S: AnnotationStyle,
 {
-    pub fn new(
-        points: Vec<Pos2>,
-        style: S,
-        activation: ActivationSupport,
-    ) -> Self {
+    pub fn new(points: Vec<Pos2>, style: S, activation: ActivationSupport) -> Self {
         Self {
             points,
             style,
@@ -336,7 +339,7 @@ impl Into<Annotation> for MarkerPenAnnotation {
 
 impl<S> Widget for &mut FreeLineBasedAnnotation<S>
 where
-    S: AnnotationStyle, 
+    S: AnnotationStyle,
 {
     fn ui(self, ui: &mut Ui) -> Response {
         let mut left = None;
@@ -377,10 +380,16 @@ where
                 bottom = Some(point.y);
             }
         }
-        let rect = Rect::from_two_pos(pos2(left.unwrap(), top.unwrap()), pos2(right.unwrap(), bottom.unwrap()));
+        let rect = Rect::from_two_pos(
+            pos2(left.unwrap(), top.unwrap()),
+            pos2(right.unwrap(), bottom.unwrap()),
+        );
         let response = ui.allocate_rect(rect, Sense::hover());
         let painter = ui.painter();
-        painter.line(points, Stroke::new(self.style.stroke_width(), self.style.stroke_color()));
+        painter.line(
+            points,
+            Stroke::new(self.style.stroke_width(), self.style.stroke_color()),
+        );
         response
     }
 }
@@ -524,11 +533,7 @@ where
     }
 }
 
-impl <S> UnsubmittedAnnotationHandler for FreeLineBasedTool<S>
-where
-    S: AnnotationStyle + Default,
-{
-}
+impl<S> UnsubmittedAnnotationHandler for FreeLineBasedTool<S> where S: AnnotationStyle + Default {}
 
 /// 限制最大的线条宽度
 const MAX_STROKE_WIDTH: f32 = 62.;
@@ -550,7 +555,8 @@ impl PencilTool {
             pointer_pos,
             Color32::RED,
             self.tool_state.style.stroke_width(),
-        ).paint_with(ui.painter());
+        )
+        .paint_with(ui.painter());
     }
 }
 
@@ -564,14 +570,19 @@ impl MarkerPenTool {
         // 绘制自定义光标
         Circle::new(
             pointer_pos,
-            self.tool_state.style.stroke_color(),
+            Color32::from_rgba_unmultiplied(
+                self.tool_state.style.stroke_color().r(),
+                self.tool_state.style.stroke_color().g(),
+                self.tool_state.style.stroke_color().b(),
+                200,
+            ),
             self.tool_state.style.stroke_width(),
-        ).paint_with(ui.painter());
+        )
+        .paint_with(ui.painter());
     }
 }
 
-impl WheelHandler for PencilTool
-{
+impl WheelHandler for PencilTool {
     fn on_scroll_delta_changed(&mut self, value: f32) {
         if !self.supports_set_stroke_width() {
             return;
@@ -590,8 +601,7 @@ impl WheelHandler for PencilTool
     }
 }
 
-impl WheelHandler for MarkerPenTool
-{
+impl WheelHandler for MarkerPenTool {
     fn on_scroll_delta_changed(&mut self, value: f32) {
         if !self.supports_set_stroke_width() {
             return;
@@ -609,7 +619,6 @@ impl WheelHandler for MarkerPenTool
         self.set_stroke_width(stroke_width);
     }
 }
-
 
 macro_rules! impl_widget_for {
     ($($tool:ty=>$annotation:ty),*) => {
