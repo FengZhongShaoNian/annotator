@@ -27,6 +27,7 @@ use sctk::{
     delegate_xdg_window, registry_handlers,
 };
 use std::cell::RefCell;
+use std::sync::Arc;
 use smithay_clipboard::Clipboard;
 use wayland_client::globals::registry_queue_init;
 use wayland_client::protocol::wl_keyboard::WlKeyboard;
@@ -85,7 +86,7 @@ pub struct GlobalState {
     loop_handle: LoopHandle<'static, Application>,
     pub text_input_manager: Option<zwp_text_input_manager_v3::ZwpTextInputManagerV3>,
     pub text_input: Option<zwp_text_input_v3::ZwpTextInputV3>,
-    pub(crate) clipboard: Clipboard
+    pub clipboard: Arc<Clipboard>
 }
 
 /// Application 是应用的核心结构，管理全局状态和窗口列表。
@@ -148,7 +149,7 @@ impl Application {
                 loop_handle: event_loop.handle(),
                 text_input_manager,
                 text_input: None,
-                clipboard,
+                clipboard: Arc::new(clipboard),
             },
             app_id,
             windows: vec![],

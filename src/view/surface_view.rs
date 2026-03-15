@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use crate::application::{Application, GlobalState};
 use crate::dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize};
 use crate::egui_input::EguiInput;
@@ -11,6 +12,7 @@ use egui_wgpu::{RendererOptions, wgpu};
 use log::info;
 use sctk::seat::keyboard::{KeyEvent, Modifiers};
 use sctk::seat::pointer::PointerEvent;
+use smithay_clipboard::Clipboard;
 use wayland_backend::client::ObjectId;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::Proxy;
@@ -41,6 +43,7 @@ pub struct SurfaceView<'window> {
     build_view: Option<BuildViewFn>,
     visible: bool,
     should_remove: bool,
+    clipboard: Arc<Clipboard>,
 }
 
 impl<'window> SurfaceView<'window> {
@@ -53,6 +56,7 @@ impl<'window> SurfaceView<'window> {
         scale_factor: f64,
         position: Option<LogicalPosition<i32>>,
         viewport: WpViewport,
+        clipboard: Arc<Clipboard>,
         build_view: BuildViewFn,
     ) -> Self {
         viewport.set_destination(size.width as i32, size.height as i32);
@@ -62,7 +66,7 @@ impl<'window> SurfaceView<'window> {
         egui_extras::install_image_loaders(&egui_ctx);
         setup_chinese_fonts(&egui_ctx);
 
-        let egui_input = EguiInput::new();
+        let egui_input = EguiInput::new().with_clipboard(clipboard.clone());
 
         Self {
             id,
@@ -79,6 +83,7 @@ impl<'window> SurfaceView<'window> {
             build_view: Some(build_view),
             visible: true,
             should_remove: false,
+            clipboard,
         }
     }
 

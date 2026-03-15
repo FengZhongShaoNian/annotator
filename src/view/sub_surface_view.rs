@@ -3,6 +3,7 @@ use crate::view::surface_view::SurfaceView;
 use crate::view::{BuildViewFn, SubView, View, ViewId};
 use egui_wgpu::wgpu::Surface;
 use std::sync::Arc;
+use smithay_clipboard::Clipboard;
 use wayland_backend::client::ObjectId;
 use wayland_client::protocol::wl_subsurface::WlSubsurface;
 use wayland_client::protocol::wl_surface::WlSurface;
@@ -26,6 +27,7 @@ impl<'window> SubSurfaceView<'window> {
         scale_factor: f64,
         position: Option<LogicalPosition<i32>>,
         viewport: WpViewport,
+        clipboard: Arc<Clipboard>,
         build_view: BuildViewFn,
         position_calculator: Option<Arc<crate::view::RelativePositionCalculator>>,
     ) -> Self {
@@ -41,6 +43,7 @@ impl<'window> SubSurfaceView<'window> {
             scale_factor,
             position,
             viewport,
+            clipboard,
             build_view,
         );
         view.surface().commit(); // Initial commit

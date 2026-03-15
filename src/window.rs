@@ -9,7 +9,7 @@ use crate::view::surface_view::SurfaceView;
 use crate::view::xdg_popup_view::{TriggerType, XdgPopupView};
 use crate::view::{AppView, BuildViewFn, PopupView, SubView, View, ViewId};
 use egui::ahash::{HashMap, HashMapExt};
-use egui::{CursorIcon, ImeEvent, PlatformOutput};
+use egui::{CursorIcon, ImeEvent, OutputCommand, PlatformOutput};
 use egui_wgpu::wgpu;
 use egui_wgpu::wgpu::{CompositeAlphaMode, Surface as WgpuSurface, SurfaceCapabilities};
 use indexmap::IndexMap;
@@ -27,6 +27,8 @@ use std::cmp::PartialEq;
 use std::convert::Into;
 use std::ptr::NonNull;
 use std::sync::{oneshot, Arc};
+use egui::CursorIcon::Text;
+use smithay_clipboard::Clipboard;
 use wayland_backend::client::ObjectId;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::{Proxy, QueueHandle};
@@ -63,6 +65,7 @@ pub struct AppWindow {
     pub should_remove: bool,
 
     pub serial_tracker: SerialTracker,
+    clipboard: Arc<Clipboard>,
 }
 
 /// 窗口的Id
@@ -152,6 +155,7 @@ impl AppWindow {
             1., // 此时还拿不到scale_factor
             None,
             main_viewport,
+            global_state.clipboard.clone(),
             build_root_view,
         );
 
@@ -177,6 +181,7 @@ impl AppWindow {
             surface_under_mouse: None,
             should_remove: false,
             serial_tracker: SerialTracker::new(),
+            clipboard: global_state.clipboard.clone(),
         };
 
         window
@@ -229,6 +234,7 @@ impl AppWindow {
             scale_factor,
             Some(position),
             viewport,
+            self.clipboard.clone(),
             build_view,
             position_calculator,
         );
@@ -328,6 +334,7 @@ impl AppWindow {
             default_logical_size,
             scale_factor,
             viewport,
+            self.clipboard.clone(),
             build_view,
         );
         let subview_id = SurfaceId(popup_view.view().surface().id());
@@ -613,6 +620,7 @@ impl AppWindow {
                 if self.surface_under_mouse == Some(surface_id) {
                     Self::update_cursor_icon_if_necessary(&platform_output, global_state);
                 }
+                self.handle_egui_commands(&platform_output.commands);
             }
         }
 
@@ -827,5 +835,22 @@ impl AppWindow {
                 view.set_visible(visible);
             }
         }
+    }
+
+    fn handle_egui_commands(&mut self, commands: &Vec<OutputCommand>) {
+        commands.iter().for_each(|command| {
+            match command {
+                OutputCommand::CopyText(text) => {
+                    self.clipboard.store_text(text);
+                }
+                OutputCommand::CopyImage(color_image) => {
+                    let image = Image::from(color_image);
+                    self.clipboard.store(image);
+                }
+                OutputCommand::OpenUrl(_) => {
+                    todo!("Open url output command not yet implemented");
+                }
+            }
+        });
     }
 }

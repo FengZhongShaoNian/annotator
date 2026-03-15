@@ -1,10 +1,13 @@
+use std::sync::Arc;
 use egui::{Event, ImeEvent, Key, Modifiers, PointerButton, Pos2, RawInput, Vec2};
 use sctk::seat::keyboard::{KeyEvent, Keysym, Modifiers as SctkModifiers};
 use sctk::seat::pointer::{PointerEvent, PointerEventKind};
+use smithay_clipboard::Clipboard;
 
 pub struct EguiInput {
     pub raw: RawInput,
     pub modifiers: Modifiers,
+    pub clipboard: Option<Arc<Clipboard>>,
 }
 
 impl EguiInput {
@@ -12,7 +15,13 @@ impl EguiInput {
         Self {
             raw: RawInput::default(),
             modifiers: Modifiers::default(),
+            clipboard: None,
         }
+    }
+
+    pub fn with_clipboard(mut self, clipboard: Arc<Clipboard>) -> Self {
+        self.clipboard = Some(clipboard);
+        self
     }
 
     pub fn handle_pointer_event(&mut self, event: &PointerEvent) {
@@ -76,6 +85,19 @@ impl EguiInput {
                 repeat,
                 modifiers: self.modifiers,
             });
+            // 处理Ctrl+C/Ctrl+V
+            if pressed && self.modifiers.ctrl {
+                if key == Key::C {
+                    self.raw.events.push(Event::Copy);
+                }else if key == Key::V {
+                    if let Some(clipboard) = self.clipboard.clone() {
+                        let text = clipboard.load_text();
+                        if let Ok(text) = text {
+                            self.raw.events.push(Event::Paste(text));
+                        }
+                    }
+                }
+            }
         }
 
         // For text input

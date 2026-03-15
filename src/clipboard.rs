@@ -2,6 +2,7 @@ use image::RgbaImage;
 use smithay_clipboard::mime::{AllowedMimeTypes, AsMimeTypes, MimeType};
 use std::borrow::Cow;
 use std::sync::Arc;
+use egui::ColorImage;
 
 pub struct Image {
     /// png图片
@@ -33,6 +34,29 @@ impl From<RgbaImage> for Image {
 impl From<Arc<RgbaImage>> for Image {
     fn from(image: Arc<RgbaImage>) -> Self {
         Self::new(to_png_bytes(&*image).unwrap())
+    }
+}
+
+fn color_image_to_rgba_image_manual(color_image: &ColorImage) -> RgbaImage {
+    let [w, h] = color_image.size;
+    let mut rgba_vec = Vec::with_capacity(w * h * 4);
+    for color32 in &color_image.pixels {
+        rgba_vec.extend_from_slice(&color32.to_array()); // [r, g, b, a]
+    }
+    RgbaImage::from_raw(w as u32, h as u32, rgba_vec).unwrap()
+}
+
+impl From<ColorImage> for Image {
+    fn from(image: ColorImage) -> Self {
+        let rgba_image = color_image_to_rgba_image_manual(&image);
+        Image::from(rgba_image)
+    }
+}
+
+impl From<&ColorImage> for Image {
+    fn from(image: &ColorImage) -> Self {
+        let rgba_image = color_image_to_rgba_image_manual(image);
+        Image::from(rgba_image)
     }
 }
 

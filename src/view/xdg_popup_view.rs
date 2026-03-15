@@ -1,7 +1,9 @@
+use std::sync::Arc;
 use crate::dpi::{LogicalPosition, LogicalSize};
 use crate::view::{BuildViewFn, PopupView, View, ViewId};
 use egui_wgpu::wgpu::Surface;
 use sctk::shell::xdg::popup::Popup;
+use smithay_clipboard::Clipboard;
 use wayland_backend::client::ObjectId;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::Proxy;
@@ -28,6 +30,7 @@ impl<'window> XdgPopupView<'window> {
         size: LogicalSize<u32>,
         scale_factor: f64,
         viewport: WpViewport,
+        clipboard: Arc<Clipboard>,
         build_view: BuildViewFn,
     ) -> Self {
         let view = SurfaceView::new(
@@ -39,6 +42,7 @@ impl<'window> XdgPopupView<'window> {
             scale_factor,
             None,
             viewport,
+            clipboard,
             build_view,
         );
         Self {
