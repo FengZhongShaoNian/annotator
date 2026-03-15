@@ -5,7 +5,7 @@ use crate::annotator::{
 };
 use crate::{declare_not_support_fill_color, declare_not_support_stroke_color, declare_not_support_stroke_type, impl_stack_top_access_for};
 use delegate::delegate;
-use egui::{Color32, CursorIcon, Id, Margin, Pos2, Rect, Response, Sense, Stroke, StrokeKind, TextEdit, Ui, Widget, vec2, FontSelection, FontId, UiBuilder};
+use egui::{Color32, CursorIcon, Id, Margin, Pos2, Rect, Response, Sense, Stroke, StrokeKind, TextEdit, Ui, Widget, vec2, FontSelection, FontId, UiBuilder, PointerButton};
 use log::info;
 use std::cell::RefCell;
 use std::ops::Add;
@@ -439,10 +439,10 @@ impl Widget for &mut TextTool {
 
         self.update_cursor_icon(ui);
 
-        if response.drag_started() {
+        if response.drag_started_by(PointerButton::Primary) {
             info!("drag started!");
             self.is_dragging = true;
-        } else if response.clicked() {
+        } else if response.clicked_by(PointerButton::Primary) {
             println!("clicked!");
             let pointer_pos = response.hover_pos().unwrap();
             let pointer_pos = pointer_pos.remove_extra_zoom_factor_with_ctx(ui.ctx());
@@ -467,7 +467,7 @@ impl Widget for &mut TextTool {
                     }
                 }
             }
-        } else if response.dragged() {
+        } else if response.dragged_by(PointerButton::Primary) {
             if let Some(annotation) = self.tool_state.current_annotation.as_mut() {
                 let drag_delta = response.drag_delta().remove_extra_zoom_factor_with_ctx(ui.ctx());
                 let new_pos = annotation.pos + drag_delta;
@@ -480,7 +480,7 @@ impl Widget for &mut TextTool {
             }
         }
 
-        if response.drag_stopped() {
+        if response.drag_stopped_by(PointerButton::Primary) {
             self.is_dragging = false;
         }
 

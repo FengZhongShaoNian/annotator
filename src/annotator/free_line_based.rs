@@ -1,6 +1,6 @@
 use crate::annotator::cursor::{Circle, Crosshair, CustomCursor};
 use crate::annotator::{ActivationSupport, Annotation, AnnotationActivationSupport, AnnotationStyle, AnnotationToolCommon, AnnotatorState, UnsubmittedAnnotationHandler, FillColorSupport, SharedAnnotatorState, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport, WheelHandler, FontColorSupport, ApplyExtraZoomFactor, RemoveExtraZoomFactor};
-use egui::{pos2, Color32, CursorIcon, Pos2, Rect, Response, Sense, Stroke, Ui, Widget};
+use egui::{pos2, Color32, CursorIcon, PointerButton, Pos2, Rect, Response, Sense, Stroke, Ui, Widget};
 use std::cell::RefCell;
 use std::rc::Weak;
 use crate::declare_not_support_font_color;
@@ -629,7 +629,7 @@ impl Widget for &mut $tool  {
         // 检测鼠标碰撞并绘制光标
         self.update_cursor_icon(ui);
 
-        if response.drag_started() {
+        if response.drag_started_by(PointerButton::Primary){
             // 拖动开始
             let drag_started_pos = ui.ctx().input(|i| i.pointer.press_origin()).unwrap();
             let drag_started_pos = drag_started_pos.remove_extra_zoom_factor_with_ctx(ui.ctx());
@@ -638,7 +638,7 @@ impl Widget for &mut $tool  {
             self.tool_state.current_annotation = Some(annotation);
         }
 
-        if response.dragged() {
+        if response.dragged_by(PointerButton::Primary) {
             // 拖动中
             if let Some(annotation) = self.tool_state.current_annotation.as_mut() {
                 let pointer_pos = pointer_pos.remove_extra_zoom_factor_with_ctx(ui.ctx());
@@ -647,7 +647,7 @@ impl Widget for &mut $tool  {
             }
         }
 
-        if response.drag_stopped() {
+        if response.drag_stopped_by(PointerButton::Primary) {
             // 拖动结束
             let mut annotation = self.tool_state.current_annotation.take().unwrap();
             let pointer_pos = pointer_pos.remove_extra_zoom_factor_with_ctx(ui.ctx());

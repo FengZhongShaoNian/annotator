@@ -1,3 +1,4 @@
+use egui::PointerButton;
 use crate::annotator::{
     ActivationSupport, Annotation, AnnotationActivationSupport, AnnotatorState,
     ApplyExtraZoomFactor, FillColorSupport, FontColorSupport, RemoveExtraZoomFactor,
@@ -410,7 +411,7 @@ impl Widget for &mut $tool {
 
         ui.ctx().set_cursor_icon(CursorIcon::Crosshair);
 
-        if response.drag_started() {
+        if response.drag_started_by(PointerButton::Primary) {
             let drag_started_pos = ui.ctx().input(|i| i.pointer.press_origin()).unwrap();
             self.tool_state.drag_start_pos = Some(drag_started_pos);
 
@@ -424,7 +425,7 @@ impl Widget for &mut $tool {
             self.background_image = None;
         }
 
-        if response.dragged() {
+        if response.dragged_by(PointerButton::Primary) {
             // 拖动中
             let drag_started_pos = self.tool_state.drag_start_pos.unwrap();
             let rect = Rect::from_two_pos(drag_started_pos, pointer_pos).remove_extra_zoom_factor_with_ctx(ui.ctx());
@@ -457,7 +458,7 @@ impl Widget for &mut $tool {
             }
         }
 
-        if response.drag_stopped() {
+        if response.drag_stopped_by(PointerButton::Primary) {
             // 拖动结束
             let drag_started_pos = self.tool_state.drag_start_pos.unwrap();
             let rect = Rect::from_two_pos(drag_started_pos, pointer_pos).remove_extra_zoom_factor_with_ctx(ui.ctx());

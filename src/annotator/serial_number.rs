@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
 use crate::annotator::cursor::{CustomCursor, SerialNumber, SerialNumberStyle};
-use egui::{Color32, CursorIcon, Pos2, Rect, Response, Sense, Ui, Widget};
+use egui::{Color32, CursorIcon, PointerButton, Pos2, Rect, Response, Sense, Ui, Widget};
 use crate::{declare_not_support_font_color, declare_not_support_stroke_color, declare_not_support_stroke_type, declare_not_support_stroke_width};
 use crate::annotator::{StrokeWidthSupport, StrokeColorSupport, StrokeTypeSupport, FillColorSupport, FontColorSupport, StrokeType, AnnotatorState, Annotation, ActivationSupport, AnnotationActivationSupport, UnsubmittedAnnotationHandler, WheelHandler, ApplyExtraZoomFactor, RemoveExtraZoomFactor};
 
@@ -150,7 +150,7 @@ impl Widget for &mut SerialNumberTool {
         self.update_cursor(ui);
         self.handle_wheel_event(ui);
 
-        if response.clicked() {
+        if response.clicked_by(PointerButton::Primary) {
             println!("sense_area: {:?}", sense_area);
             let pointer_pos = ui.ctx().input(|i|i.pointer.hover_pos());
             let pointer_pos = pointer_pos.unwrap().remove_extra_zoom_factor_with_ctx(ui.ctx());

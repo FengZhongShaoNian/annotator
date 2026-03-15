@@ -1,3 +1,4 @@
+use egui::PointerButton;
 use crate::annotator::cursor::{Crosshair, CustomCursor};
 use crate::annotator::{ActivationState, ActivationSupport, Annotation, AnnotationActivationSupport, AnnotationStyle, AnnotationToolCommon, AnnotatorState, ApplyExtraZoomFactor, ExtraZoomFactorSupport, FillColorSupport, FontColorSupport, PainterExt, RemoveExtraZoomFactor, SharedAnnotatorState, StackTopAccessor, StrokeColorSupport, StrokeType, StrokeTypeSupport, StrokeWidthSupport, UnsubmittedAnnotationHandler, WheelHandler};
 use crate::{
@@ -707,7 +708,7 @@ macro_rules! impl_widget_for {
                 // 检测鼠标碰撞并绘制光标
                 self.update_cursor_icon(ui);
 
-                if response.drag_started() {
+                if response.drag_started_by(PointerButton::Primary) {
                     // 拖动开始
                     let drag_started_pos = ui.ctx().input(|i| i.pointer.press_origin()).unwrap();
                     let drag_started_pos = drag_started_pos.remove_extra_zoom_factor_with_ctx(ui.ctx());
@@ -760,7 +761,7 @@ macro_rules! impl_widget_for {
                     });
                 }
 
-                if response.dragged() {
+                if response.dragged_by(PointerButton::Primary) {
                     // 拖动中
                     let pointer_pos = pointer_pos.remove_extra_zoom_factor_with_ctx(ui.ctx());
                     if let Some(annotation) = &mut self.tool_state.current_annotation {
@@ -810,7 +811,7 @@ macro_rules! impl_widget_for {
                     }
                 }
 
-                if response.drag_stopped() {
+                if response.drag_stopped_by(PointerButton::Primary) {
                     // 拖动结束
                     self.tool_state.drag_action = DragAction::None;
                     let current_annotation = self.tool_state.current_annotation.take().unwrap();
