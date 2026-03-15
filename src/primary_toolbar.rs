@@ -365,6 +365,8 @@ pub fn create_primary_toolbar(
                             {
                                 let image_receiver = annotator_state_mut_ref.take_screenshot(ui.pixels_per_point());
                                 window.window_context.commands.push_back(Command::CopyImage(image_receiver));
+                                annotator_state_mut_ref.deactivate_annotation_tool();
+                                current_view.set_visible(false);
                             }
                             if ui
                                 .add(SvgButton::new(
