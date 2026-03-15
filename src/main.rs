@@ -24,6 +24,7 @@ mod view;
 mod wp_viewporter;
 mod clipboard;
 mod context_menu;
+mod annotator_panel_shadow;
 
 use crate::application::Application;
 use crate::dpi::LogicalSize;

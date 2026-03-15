@@ -1,11 +1,13 @@
 use crate::annotator::{AnnotatorState, ApplyExtraZoomFactor, SharedAnnotatorState};
 use crate::annotator_panel::create_annotator_panel;
+use crate::annotator_panel_shadow::create_annotator_panel_shadow;
 use crate::application::Application;
 use crate::context::Command;
 use crate::dpi::{LogicalPosition, LogicalSize, PhysicalSize};
+use crate::global::ReadGlobal;
 use crate::primary_toolbar::create_primary_toolbar;
 use crate::secondly_toolbar::create_secondly_toolbar;
-use crate::view::View;
+use crate::view::{View, ViewId};
 use crate::window::AppWindow;
 use egui::{Context, FullOutput, RawInput};
 use image::RgbaImage;
@@ -13,10 +15,11 @@ use sctk::shell::WaylandSurface;
 use std::sync::Arc;
 use taffy::prelude::*;
 use taffy::{geometry::Rect, style::LengthPercentageAuto};
-use crate::global::ReadGlobal;
 
 // 主窗口和工具条以及工具条之间的间隙
 const GAP: u32 = 12;
+
+const SHADOW_SIZE: u32 = 3;
 
 // 布局说明：
 // 1.annotator_panel与底层的xdg_toplevel右对齐
@@ -36,6 +39,8 @@ pub fn build_annotator(
     let primary_toolbar_id = AnnotatorState::primary_toolbar_id();
     // 次工具的ID
     let secondly_toolbar_id = AnnotatorState::secondly_toolbar_id();
+    // 标注面板的阴影
+    let annotator_shadow_panel_id: ViewId = "annotator_panel_shadow".into();
 
     let annotator_panel_created = window.views.contains_key(&annotator_panel_id);
     let annotator_panel_size = if annotator_panel_created {
@@ -49,15 +54,17 @@ pub fn build_annotator(
     } else {
         let scale_factor = window.scale_factor().unwrap();
         // 标注面板的逻辑大小=背景图片的逻辑大小=(背景图片的物理大小/scale_factor) * extra_zoom_factor)
-        let extra_zoom_factor = if window.window_context
+        let extra_zoom_factor = if window
+            .window_context
             .globals_by_type
-            .has_global::<SharedAnnotatorState>() {
+            .has_global::<SharedAnnotatorState>()
+        {
             let annotator_state = window
                 .window_context
                 .globals_by_type
                 .require_ref::<SharedAnnotatorState>();
             annotator_state.borrow().extra_zoom_factor
-        }else {
+        } else {
             1.
         };
 
@@ -166,6 +173,17 @@ pub fn build_annotator(
             annotator_panel_layout_result.location.x.round() as i32,
             annotator_panel_layout_result.location.y.round() as i32,
         );
+
+        let (shadow_panel_size, shadow_panel_position) =
+            get_panel_shadow_position_and_size(annotator_panel_size, annotator_panel_position);
+        create_annotator_panel_shadow(
+            annotator_shadow_panel_id.clone(),
+            app,
+            window,
+            shadow_panel_size,
+            shadow_panel_position,
+        );
+
         create_annotator_panel(
             annotator_panel_id.clone(),
             app,
@@ -224,6 +242,35 @@ pub fn build_annotator(
         annotator_panel_layout_result.location.x.round() as i32,
         annotator_panel_layout_result.location.y.round() as i32,
     );
+    let (shadow_panel_size, shadow_panel_position) =
+        get_panel_shadow_position_and_size(annotator_panel_size, annotator_panel_position);
+    let annotator_panel_shadow = window
+        .views
+        .get(&annotator_shadow_panel_id)
+        .unwrap()
+        .as_ref()
+        .unwrap();
+
+    let panel_shadow_current_size = annotator_panel_shadow.get_view_ref().size();
+    let panel_shadow_current_position = annotator_panel_shadow.get_view_ref().position().unwrap();
+    if panel_shadow_current_size != shadow_panel_size {
+        window
+            .window_context
+            .commands
+            .push_back(Command::ResizeView(
+                annotator_shadow_panel_id,
+                shadow_panel_size,
+            ));
+    } else if panel_shadow_current_position != shadow_panel_position {
+        window
+            .window_context
+            .commands
+            .push_back(Command::RepositionSubView(
+                annotator_shadow_panel_id,
+                shadow_panel_position,
+            ));
+    }
+
     let annotator_panel = window
         .views
         .get(&annotator_panel_id)
@@ -284,4 +331,19 @@ pub fn build_annotator(
     }
 
     egui_ctx.run(input, move |_ctx| {})
+}
+
+fn get_panel_shadow_position_and_size(
+    annotator_panel_size: LogicalSize<u32>,
+    annotator_panel_position: LogicalPosition<i32>,
+) -> (LogicalSize<u32>, LogicalPosition<i32>) {
+    let shadow_panel_size = LogicalSize::new(
+        annotator_panel_size.width + SHADOW_SIZE * 2,
+        annotator_panel_size.height + SHADOW_SIZE * 2,
+    );
+    let shadow_panel_position = LogicalPosition::new(
+        annotator_panel_position.x - SHADOW_SIZE as i32,
+        annotator_panel_position.y - SHADOW_SIZE as i32,
+    );
+    (shadow_panel_size, shadow_panel_position)
 }
