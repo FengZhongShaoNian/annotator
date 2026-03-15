@@ -25,6 +25,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 use log::info;
+use crate::context_menu::create_context_menu;
 
 pub fn create_annotator_panel(
     view_id: ViewId,
@@ -70,7 +71,6 @@ pub fn create_annotator_panel(
 
                     let annotator_state = AnnotatorState {
                         extra_zoom_factor: 1.0,
-                        hide_primary_toolbar: false,
                         background_image: image.clone(),
                         background_texture_handle: Some(texture_handle),
                         renderer: renderer.clone(),
@@ -248,11 +248,26 @@ pub fn create_annotator_panel(
                                     .push_back(Command::ResizeView(current_view.id(), new_size));
                             }
 
-                            // 处理窗口移动
+                            // 处理窗口移动和右键菜单
+                            let pointer = ui.ctx().input(|input_state|{
+                                input_state.pointer.clone()
+                            });
                             if ui.ctx().input(|input_state|{
                                 input_state.pointer.button_down(PointerButton::Primary) && input_state.pointer.is_moving()
                             }) {
                                 window.window_context.commands.push_back(Command::StartMovingWindow);
+                            }else {
+                                let view_id: ViewId = "context-menu".into();
+                                if pointer.button_clicked(PointerButton::Secondary){
+                                    let pointer_pos = pointer.interact_pos().unwrap();
+                                    if !window.views.contains_key(&view_id) {
+                                        create_context_menu(view_id, app, window, pointer_pos);
+                                    }
+                                }else if pointer.button_clicked(PointerButton::Primary) {
+                                    if window.views.contains_key(&view_id) {
+                                        window.window_context.commands.push_back(Command::DropView(view_id));
+                                    }
+                                }
                             }
                         }
                     });

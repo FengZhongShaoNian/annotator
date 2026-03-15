@@ -828,9 +828,6 @@ pub struct AnnotatorState {
     /// 4. 每个标注（Annotation）中的数据（位置、宽高）都是基于extra_zoom_factor为1的情况存放的，在绘制的时候才会应用extra_zoom_factor
     pub extra_zoom_factor: f32,
 
-    /// 是否隐藏主工具条
-    pub hide_primary_toolbar: bool,
-
     /// 背景图片
     pub background_image: Arc<RgbaImage>,
 

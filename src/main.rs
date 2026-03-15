@@ -23,6 +23,7 @@ mod serial;
 mod view;
 mod wp_viewporter;
 mod clipboard;
+mod context_menu;
 
 use crate::application::Application;
 use crate::dpi::LogicalSize;
