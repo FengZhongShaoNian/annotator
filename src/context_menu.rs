@@ -126,7 +126,10 @@ pub fn create_context_menu(
                                     }
                                 });
                             }
-                            if ui.add(MenuItem::new("关闭窗口", menu_item_size)).clicked() {}
+                            if ui.add(MenuItem::new("关闭窗口", menu_item_size)).clicked() {
+                                annotator_state.borrow_mut().deactivate_annotation_tool();
+                                window.close_later();
+                            }
                         });
                     });
             })

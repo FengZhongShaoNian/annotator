@@ -853,4 +853,8 @@ impl AppWindow {
             }
         });
     }
+    
+    pub fn close_later(&mut self) {
+        self.should_remove = true;
+    }
 }
