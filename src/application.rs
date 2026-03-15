@@ -28,6 +28,8 @@ use sctk::{
 };
 use std::cell::RefCell;
 use std::sync::Arc;
+use std::time::Duration;
+use sctk::reexports::calloop_wayland_source::WaylandSource;
 use smithay_clipboard::Clipboard;
 use wayland_client::globals::registry_queue_init;
 use wayland_client::protocol::wl_keyboard::WlKeyboard;
@@ -66,8 +68,6 @@ pub struct GlobalState {
     pub fractional_scaling_manager: Option<FractionalScalingManager>,
     /// XDG Shell 状态，用于管理窗口。
     pub xdg_shell_state: XdgShell,
-    /// 事件队列。
-    event_queue: Option<EventQueue<Application>>,
     /// 队列句柄。
     pub queue_handle: QueueHandle<Application>,
     /// GPU 上下文（EGL/Skia）。
@@ -97,11 +97,14 @@ pub struct Application {
     pub app_id: &'static str,
     /// 窗口列表。
     windows: Vec<AppWindow>,
+    exit_when_all_windows_closed: bool,
+    event_loop: Option<EventLoop<'static, Application>>,
+    should_exit: bool,
 }
 
 impl Application {
     /// 初始化 Application，建立 Wayland 连接并准备 GPU 环境。
-    pub fn new(app_id: &'static str) -> Application {
+    pub fn new(app_id: &'static str, exit_when_all_windows_closed: bool) -> Application {
         let conn = Connection::connect_to_env().expect("Can't connect to the wayland server");
 
         let (globals, event_queue) = registry_queue_init(&conn).unwrap();
@@ -121,6 +124,8 @@ impl Application {
             };
         let event_loop: EventLoop<Application> =
             EventLoop::try_new().expect("Failed to initialize the event loop!");
+        let loop_handle = event_loop.handle();
+        WaylandSource::new(conn.clone(), event_queue).insert(loop_handle.clone()).unwrap();
 
         let seat_state = SeatState::new(&globals, &qh);
         let shm_state = Shm::bind(&globals, &qh).expect("wl shm not available");
@@ -138,7 +143,6 @@ impl Application {
                 viewporter_state,
                 fractional_scaling_manager,
                 xdg_shell_state: XdgShell::bind(&globals, &qh).expect("xdg shell not available"),
-                event_queue: None,
                 queue_handle: qh,
                 gpu: RefCell::new(None),
                 seat_state,
@@ -146,16 +150,18 @@ impl Application {
                 keyboard: None,
                 themed_pointer: None,
                 shm_state,
-                loop_handle: event_loop.handle(),
+                loop_handle,
                 text_input_manager,
                 text_input: None,
                 clipboard: Arc::new(clipboard),
             },
             app_id,
             windows: vec![],
+            exit_when_all_windows_closed,
+            should_exit: false,
+            event_loop: Some(event_loop),
         };
 
-        app.global_state.event_queue = Some(event_queue);
         app
     }
 
@@ -249,12 +255,18 @@ impl Application {
         if !window.should_remove {
             self.windows.push(window);
         }
+        if self.windows.is_empty() {
+            self.should_exit = true;
+        }
     }
 
     pub fn run(&mut self) {
-        let mut event_queue = self.global_state.event_queue.take().unwrap();
+        let mut event_loop = self.event_loop.take().unwrap();
         loop {
-            event_queue.blocking_dispatch(self).unwrap();
+            event_loop.dispatch(Duration::from_millis(16), self).unwrap();
+            if self.should_exit {
+                break;
+            }
         }
     }
 }

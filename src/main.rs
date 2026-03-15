@@ -37,7 +37,7 @@ use std::sync::Arc;
 fn main() {
     env_logger::init();
 
-    let mut app = Application::new("site.nullable.annotator");
+    let mut app = Application::new("site.nullable.annotator", true);
 
     for path in env::args_os().skip(1) {
         let image = match image::open(&path) {
