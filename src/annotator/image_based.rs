@@ -334,12 +334,12 @@ pub struct ImageBasedTool<S: Default + Clone, H: ImageHandler> {
     image_handler: Rc<H>,
 }
 
-/// 提供（未经extra_zoom_factor缩放的）背景图片
 pub trait BackgroundImageProvider {
     fn background_image(
         &self,
         annotator_state: &AnnotatorState,
         pixels_per_point: f32,
+        extra_zoom_factor: f32,
     ) -> Receiver<Arc<RgbaImage>>;
 }
 
@@ -417,8 +417,9 @@ impl Widget for &mut $tool {
             let annotator_state = self.annotator_state.upgrade().unwrap();
             let pixels_per_point = ui.ctx().pixels_per_point();
             self.background_image_receiver = Some(
+                // 给ImageBasedTool提供的图片是未经extra_zoom_factor处理的
                 self.background_image_provider
-                    .background_image(&*annotator_state.borrow(), pixels_per_point),
+                    .background_image(&*annotator_state.borrow(), pixels_per_point, 1.),
             );
             self.background_image = None;
         }
@@ -516,10 +517,12 @@ impl OriginalBackgroundImageProvider {
     }
 }
 
+/// 提供（未经extra_zoom_factor缩放的）原始背景图片（不包含标注内容）
 impl BackgroundImageProvider for OriginalBackgroundImageProvider {
     fn background_image(
         &self,
         annotator_state: &AnnotatorState,
+        _: f32,
         _: f32,
     ) -> Receiver<Arc<RgbaImage>> {
         let image = annotator_state.background_image.clone();
@@ -543,6 +546,7 @@ impl BackgroundImageProvider for BackgroundImageWithAnnotationsProvider {
         &self,
         annotator_state: &AnnotatorState,
         pixels_per_point: f32,
+        extra_zoom_factor: f32,
     ) -> Receiver<Arc<RgbaImage>> {
         let original_background_image = annotator_state.background_image.clone();
         let annotations = annotator_state.annotations_stack.clone();
@@ -551,11 +555,13 @@ impl BackgroundImageProvider for BackgroundImageWithAnnotationsProvider {
             original_background_image.width(),
             original_background_image.height(),
         );
-        let logical_size = physical_size.to_logical(pixels_per_point as f64);
+        let logical_size = physical_size.to_logical(pixels_per_point as f64)
+            .apply_extra_zoom_factor(extra_zoom_factor);
 
         self.renderer.render_egui_to_image(
             logical_size,
             pixels_per_point,
+            extra_zoom_factor,
             Box::new(move |input, context| {
                 let mut annotaions = annotations;
                 context.run(input, move |ctx| {
@@ -587,7 +593,8 @@ impl BackgroundImageProvider for BackgroundImageWithAnnotationsProvider {
                                 original_background_image.width(),
                                 original_background_image.height(),
                             )
-                            .to_logical(ctx.pixels_per_point() as f64);
+                            .to_logical(ctx.pixels_per_point() as f64)
+                            .apply_extra_zoom_factor_with_ctx(ctx);
 
                             bg_image.paint_at(
                                 ui,

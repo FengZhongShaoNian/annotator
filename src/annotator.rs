@@ -12,9 +12,7 @@ pub mod watermark;
 use crate::annotator::free_line_based::{
     MarkerPenAnnotation, MarkerPenTool, PencilAnnotation, PencilTool,
 };
-use crate::annotator::image_based::{
-    BlurAnnotation, BlurTool, EraserAnnotation, EraserTool, MosaicAnnotation, MosaicTool,
-};
+use crate::annotator::image_based::{BackgroundImageProvider, BackgroundImageWithAnnotationsProvider, BlurAnnotation, BlurTool, EraserAnnotation, EraserTool, MosaicAnnotation, MosaicTool};
 use crate::annotator::rectangle_based::{
     EllipseAnnotation, EllipseTool, RectangleAnnotation, RectangleTool,
 };
@@ -30,12 +28,15 @@ use image::RgbaImage;
 use spire_enum::prelude::{delegate_impl, delegated_enum};
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::sync::Arc;
+use std::sync::{oneshot, Arc};
+use std::sync::oneshot::{channel, Receiver};
+use std::thread::spawn;
 use delegate::delegate;
-use log::info;
+use imageproc::drawing::Canvas;
+use log::{error, info};
 use crate::annotator::serial_number::{SerialNumberAnnotation, SerialNumberTool};
 use crate::annotator::text::{TextAnnotation, TextTool};
-use crate::dpi::{LogicalSize, Pixel};
+use crate::dpi::{LogicalSize, PhysicalSize, Pixel};
 
 /// 线条类型（实线、虚线、点线）
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
@@ -1018,6 +1019,18 @@ impl AnnotatorState {
         if let Some(annotation) = annotation {
             self.annotations_stack.push(annotation);
         }
+    }
+
+    pub fn take_screenshot(&mut self, scale_factor: f32) -> Receiver<Arc<RgbaImage>> {
+        if let Some(mut tool) = self.current_annotation_tool.take() {
+            if tool.has_uncommitted_annotations() {
+                tool.submit_uncommitted_annotations(self);
+            }
+            self.current_annotation_tool = Some(tool);
+        }
+
+        let provider = BackgroundImageWithAnnotationsProvider::new(self.renderer.clone());
+        provider.background_image(self, scale_factor, self.extra_zoom_factor)
     }
 }
 

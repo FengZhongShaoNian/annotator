@@ -13,7 +13,7 @@ use egui::{CursorIcon, ImeEvent, PlatformOutput};
 use egui_wgpu::wgpu;
 use egui_wgpu::wgpu::{CompositeAlphaMode, Surface as WgpuSurface, SurfaceCapabilities};
 use indexmap::IndexMap;
-use log::{info, warn};
+use log::{error, info, warn};
 use raw_window_handle::{
     RawDisplayHandle, RawWindowHandle, WaylandDisplayHandle, WaylandWindowHandle,
 };
@@ -26,13 +26,14 @@ use sctk::shell::xdg::window::{Window as XdgWindow, WindowDecorations};
 use std::cmp::PartialEq;
 use std::convert::Into;
 use std::ptr::NonNull;
-use std::sync::Arc;
+use std::sync::{oneshot, Arc};
 use wayland_backend::client::ObjectId;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::{Proxy, QueueHandle};
 use wayland_protocols::wp::fractional_scale::v1::client::wp_fractional_scale_v1::WpFractionalScaleV1;
 use wayland_protocols::xdg::shell::client::xdg_positioner::XdgPositioner;
 use wgpu::SurfaceConfiguration;
+use crate::clipboard::Image;
 
 const ROOT_VIEW_ID_STR: &str = "root-view";
 
@@ -666,6 +667,20 @@ impl AppWindow {
                     }else {
                         warn!("AppView with id {:?} not found", id);
                     }
+                }
+                Command::CopyImage(receiver) => {
+                    let clipboard = &mut app.global_state.clipboard;
+
+                    match receiver.recv() {
+                        Ok(rgba_image) => {
+                            let image = Image::from(rgba_image);
+                            clipboard.store(image);
+                        }
+                        Err(err) => {
+                            warn!("Failed to send data to clipboard: {:?}", err);
+                        }
+                    }
+
                 }
             }
         }

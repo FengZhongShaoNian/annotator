@@ -1,3 +1,4 @@
+use std::thread::spawn;
 use crate::annotator::svg_button::SvgButton;
 use crate::annotator::{AnnotatorState, SharedAnnotatorState, ToolName};
 use crate::application::Application;
@@ -7,6 +8,7 @@ use crate::icon::Icons;
 use crate::view::ViewId;
 use crate::window::AppWindow;
 use egui::{vec2, Color32, Frame};
+use crate::context::Command;
 
 pub fn create_primary_toolbar(
     view_id: ViewId,
@@ -345,7 +347,10 @@ pub fn create_primary_toolbar(
                                     false,
                                 ))
                                 .clicked()
-                            {}
+                            {
+                                let image_receiver = annotator_state_mut_ref.take_screenshot(ui.pixels_per_point());
+                                window.window_context.commands.push_back(Command::CopyImage(image_receiver));
+                            }
                             if ui
                                 .add(SvgButton::new(
                                     "ok-tool".into(),

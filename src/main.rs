@@ -22,6 +22,7 @@ mod secondly_toolbar;
 mod serial;
 mod view;
 mod wp_viewporter;
+mod clipboard;
 
 use crate::application::Application;
 use crate::dpi::LogicalSize;

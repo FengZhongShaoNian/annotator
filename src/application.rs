@@ -27,6 +27,7 @@ use sctk::{
     delegate_xdg_window, registry_handlers,
 };
 use std::cell::RefCell;
+use smithay_clipboard::Clipboard;
 use wayland_client::globals::registry_queue_init;
 use wayland_client::protocol::wl_keyboard::WlKeyboard;
 use wayland_client::protocol::wl_pointer::WlPointer;
@@ -84,6 +85,7 @@ pub struct GlobalState {
     loop_handle: LoopHandle<'static, Application>,
     pub text_input_manager: Option<zwp_text_input_manager_v3::ZwpTextInputManagerV3>,
     pub text_input: Option<zwp_text_input_v3::ZwpTextInputV3>,
+    pub(crate) clipboard: Clipboard
 }
 
 /// Application 是应用的核心结构，管理全局状态和窗口列表。
@@ -122,6 +124,9 @@ impl Application {
         let seat_state = SeatState::new(&globals, &qh);
         let shm_state = Shm::bind(&globals, &qh).expect("wl shm not available");
         let text_input_manager = globals.bind(&qh, 1..=1, ()).ok();
+        let clipboard = unsafe {
+            Clipboard::new(conn.backend().display_ptr() as *mut _)
+        };
         let mut app = Self {
             global_state: GlobalState {
                 connection: conn,
@@ -143,6 +148,7 @@ impl Application {
                 loop_handle: event_loop.handle(),
                 text_input_manager,
                 text_input: None,
+                clipboard,
             },
             app_id,
             windows: vec![],

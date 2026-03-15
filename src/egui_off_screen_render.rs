@@ -12,6 +12,9 @@ use image::{ImageBuffer, Rgba, RgbaImage};
 use std::sync::oneshot::Receiver;
 use std::sync::{oneshot, Arc};
 use std::thread::spawn;
+use log::error;
+use crate::annotator::ExtraZoomFactorSupport;
+use crate::font::setup_chinese_fonts;
 
 pub type BuildUI = Box<dyn FnOnce(RawInput, &mut egui::Context) -> FullOutput>;
 
@@ -48,6 +51,7 @@ impl EguiOffScreenRender {
         &self,
         virtual_screen_size: LogicalSize<u32>,
         pixels_per_point: f32,
+        extra_zoom_factor: f32,
         build_ui: BuildUI,
     ) -> Receiver<Arc<RgbaImage>> {
         let physical_size = virtual_screen_size.to_physical(pixels_per_point as f64);
@@ -60,7 +64,10 @@ impl EguiOffScreenRender {
         let texture_view = texture.create_view(&Default::default());
 
         let mut egui_ctx = egui::Context::default();
+        egui_extras::install_image_loaders(&egui_ctx);
+        setup_chinese_fonts(&egui_ctx);
         egui_ctx.set_pixels_per_point(pixels_per_point);
+        egui_ctx.set_extra_zoom_factor(extra_zoom_factor);
 
         let mut raw_input = RawInput::default();
         raw_input.screen_rect = Some(Rect::from_min_size(
@@ -136,7 +143,12 @@ impl EguiOffScreenRender {
         let (sender, receiver) = oneshot::channel();
         spawn(move || {
             let image = Self::get_render_result(device, queue, texture);
-            sender.send(Arc::new(image)).unwrap();
+            match sender.send(Arc::new(image)) {
+                Ok(_) => {}
+                Err(err) => {
+                    error!("Failed to send image by sender: {}", err);
+                }
+            }
         });
         receiver
     }

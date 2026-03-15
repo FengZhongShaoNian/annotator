@@ -2,6 +2,9 @@ use crate::view::{BuildViewFn, ViewId};
 use rustc_hash::FxHashMap;
 use std::any::{Any, TypeId};
 use std::collections::VecDeque;
+use std::sync::Arc;
+use std::sync::oneshot::Receiver;
+use image::RgbaImage;
 use crate::dpi::{LogicalPosition, LogicalSize};
 
 pub struct WindowContext {
@@ -20,6 +23,7 @@ pub enum Command {
     ResizeView(ViewId, LogicalSize<u32>),
     DropView(ViewId),
     RepositionSubView(ViewId, LogicalPosition<i32>),
+    CopyImage(Receiver<Arc<RgbaImage>>),
 }
 
 impl Default for WindowContext {
