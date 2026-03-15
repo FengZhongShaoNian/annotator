@@ -1025,6 +1025,9 @@ impl AnnotatorState {
             }
             self.current_annotation_tool = Some(tool);
         }
+        self.annotations_stack.iter_mut().for_each(|annotation| {
+            annotation.activation_mut().deactivate();
+        });
 
         let provider = BackgroundImageWithAnnotationsProvider::new(self.renderer.clone());
         provider.background_image(self, scale_factor, self.extra_zoom_factor)
