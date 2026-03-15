@@ -1,3 +1,4 @@
+use std::fs;
 use std::thread::spawn;
 use crate::annotator::svg_button::SvgButton;
 use crate::annotator::{AnnotatorState, SharedAnnotatorState, ToolName};
@@ -8,6 +9,8 @@ use crate::icon::Icons;
 use crate::view::ViewId;
 use crate::window::AppWindow;
 use egui::{vec2, Color32, Frame};
+use rfd::FileDialog;
+use crate::clipboard::to_png_bytes;
 use crate::context::Command;
 
 pub fn create_primary_toolbar(
@@ -335,7 +338,19 @@ pub fn create_primary_toolbar(
                                     false,
                                 ))
                                 .clicked()
-                            {}
+                            {
+                                let image_receiver = annotator_state_mut_ref.take_screenshot(ui.pixels_per_point());
+                                spawn(move ||{
+                                    let image = image_receiver.recv().unwrap();
+                                    let image = to_png_bytes(&*image).unwrap();
+                                    if let Some(mut file_path) = FileDialog::new().save_file() {
+                                        if file_path.extension().is_none() {
+                                            file_path.set_extension("png");
+                                        }
+                                        fs::write(file_path, image).unwrap();
+                                    }
+                                });
+                            }
 
                             if ui
                                 .add(SvgButton::new(

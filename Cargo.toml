@@ -30,3 +30,4 @@ spire_enum = "1.0.0"
 delegate = "0.13.5"
 taffy = "0.9.2"
 smithay-clipboard = {git = "https://github.com/FengZhongShaoNian/smithay-clipboard.git", branch = "mime-types"}
+rfd = "0.17.2"

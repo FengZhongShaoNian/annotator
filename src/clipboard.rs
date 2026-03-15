@@ -14,7 +14,7 @@ impl Image {
         Self { data }
     }
 }
-fn to_png_bytes(image: &RgbaImage) -> Result<Vec<u8>, String> {
+pub fn to_png_bytes(image: &RgbaImage) -> Result<Vec<u8>, String> {
     let mut png_bytes: Vec<u8> = Vec::new();
     image
         .write_to(
