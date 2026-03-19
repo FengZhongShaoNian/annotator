@@ -38,7 +38,7 @@ use wayland_client::protocol::wl_seat::WlSeat;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::protocol::{wl_output, wl_surface};
 use wayland_client::{
-    Connection, Dispatch, EventQueue, Proxy, QueueHandle, delegate_dispatch, delegate_noop,
+    Connection, Dispatch, Proxy, QueueHandle, delegate_dispatch, delegate_noop,
 };
 use wayland_client::protocol::wl_region::WlRegion;
 use wayland_protocols::wp::cursor_shape::v1::client::wp_cursor_shape_device_v1::WpCursorShapeDeviceV1;
@@ -51,59 +51,61 @@ use wayland_protocols::wp::text_input::zv3::client::{
 };
 use wayland_protocols::xdg::shell::client::xdg_positioner::XdgPositioner;
 
-/// GlobalState 存储了 Wayland 的全局状态和协议处理器。
+/// GlobalState 存储了 Wayland 的全局状态
 pub struct GlobalState {
     pub connection: Connection,
-    /// 注册表状态，用于管理 Wayland 全局对象。
+    /// 注册表状态，用于管理 Wayland 全局对象
     pub registry_state: RegistryState,
-    /// 输出设备状态（显示器信息）。
+    /// 输出设备状态（显示器信息）
     pub output_state: OutputState,
-    /// 合成器状态。
+    /// 合成器状态
     pub compositor_state: CompositorState,
-    /// 子合成器状态，用于管理 SubSurface。
+    /// 子合成器状态，用于管理 SubSurface
     pub sub_compositor_state: SubcompositorState,
-    /// 视口管理器（用于调整 Surface 显示尺寸）。
+    /// 视口管理器（用于调整 Surface 显示尺寸）
     pub viewporter_state: Option<ViewporterState>,
-    /// 分数缩放管理器。
+    /// 分数缩放管理器
     pub fractional_scaling_manager: Option<FractionalScalingManager>,
-    /// XDG Shell 状态，用于管理窗口。
+    /// XDG Shell 状态，用于管理窗口
     pub xdg_shell_state: XdgShell,
-    /// 队列句柄。
+    /// 队列句柄
     pub queue_handle: QueueHandle<Application>,
-    /// GPU 上下文（EGL/Skia）。
+    /// GPU 上下文（wgpu相关的全局对象）
     pub gpu: RefCell<Option<GpuContext>>,
-    /// 座位状态（管理输入设备）。
+    /// 座位状态（管理输入设备）
     pub seat_state: SeatState,
     pub seat: Option<WlSeat>,
-    /// 键盘实例。
+    /// 键盘实例
     keyboard: Option<WlKeyboard>,
 
-    /// 指针实例。
+    /// 指针实例
     pub themed_pointer: Option<ThemedPointer<PointerData>>,
+    /// 共享内存（给ThemePointer使用）
     shm_state: Shm,
 
-    /// 事件循环句柄。
+    /// 事件循环句柄
     loop_handle: LoopHandle<'static, Application>,
     pub text_input_manager: Option<zwp_text_input_manager_v3::ZwpTextInputManagerV3>,
     pub text_input: Option<zwp_text_input_v3::ZwpTextInputV3>,
     pub clipboard: Arc<Clipboard>
 }
 
-/// Application 是应用的核心结构，管理全局状态和窗口列表。
+/// Application 是应用的核心结构，管理全局状态和窗口列表
 pub struct Application {
-    /// 全局状态。
+    /// 全局状态
     pub global_state: GlobalState,
-    /// 应用 ID。
+    /// 应用 ID
     pub app_id: &'static str,
-    /// 窗口列表。
+    /// 窗口列表（需要注意，在窗口的绘制过程中，对应窗口会暂时从窗口列表中移除，以便在绘制过程中可变地借用Application的引用）
     windows: Vec<AppWindow>,
+    /// 如果为true，那么当所有窗口都关闭的时候退出程序
     exit_when_all_windows_closed: bool,
     event_loop: Option<EventLoop<'static, Application>>,
     should_exit: bool,
 }
 
 impl Application {
-    /// 初始化 Application，建立 Wayland 连接并准备 GPU 环境。
+    /// 初始化 Application，建立 Wayland 连接
     pub fn new(app_id: &'static str, exit_when_all_windows_closed: bool) -> Application {
         let conn = Connection::connect_to_env().expect("Can't connect to the wayland server");
 
@@ -133,7 +135,7 @@ impl Application {
         let clipboard = unsafe {
             Clipboard::new(conn.backend().display_ptr() as *mut _)
         };
-        let mut app = Self {
+        let app = Self {
             global_state: GlobalState {
                 connection: conn,
                 registry_state: RegistryState::new(&globals),
@@ -165,6 +167,7 @@ impl Application {
         app
     }
 
+    /// 新建一个窗口
     pub fn open_window(
         &mut self,
         window_config: WindowConfiguration,
@@ -177,6 +180,7 @@ impl Application {
         window_id
     }
 
+    /// 根据窗口Id获取窗口实例并使用获取到的窗口实例执行指定的函数
     pub fn with_window_mut<F>(&mut self, window_id: WindowId, func: F)
     where
         F: FnOnce(&GlobalState, &mut Option<&mut AppWindow>),
@@ -239,7 +243,7 @@ impl Application {
             let gpu_context = gpu_context.as_ref().unwrap();
             window.set_scale_factor(scale_factor, gpu_context);
 
-            needs_start_first_draw = is_first_draw_pending && !window.first_configure;
+            needs_start_first_draw = is_first_draw_pending && window.configured;
         }
 
         if needs_start_first_draw {
@@ -255,7 +259,7 @@ impl Application {
         if !window.should_remove {
             self.windows.push(window);
         }
-        if self.windows.is_empty() {
+        if self.windows.is_empty() && self.exit_when_all_windows_closed {
             self.should_exit = true;
         }
     }
@@ -294,7 +298,7 @@ impl CompositorHandler for Application {
         &mut self,
         _conn: &Connection,
         _qh: &QueueHandle<Self>,
-        surface: &wl_surface::WlSurface,
+        surface: &WlSurface,
         new_factor: i32,
     ) {
         self.scale_factor_changed(surface, new_factor as f64, true);
@@ -304,10 +308,9 @@ impl CompositorHandler for Application {
         &mut self,
         _conn: &Connection,
         _qh: &QueueHandle<Self>,
-        _surface: &wl_surface::WlSurface,
+        _surface: &WlSurface,
         _new_transform: wl_output::Transform,
     ) {
-        // Not needed for this example.
         info!("transform changed");
     }
 
@@ -344,7 +347,6 @@ impl CompositorHandler for Application {
         _surface: &WlSurface,
         _output: &wl_output::WlOutput,
     ) {
-        // Not needed for this example.
         info!("Surface entered");
     }
 
@@ -355,7 +357,6 @@ impl CompositorHandler for Application {
         _surface: &WlSurface,
         _output: &wl_output::WlOutput,
     ) {
-        // Not needed for this example.
         info!("Surface leaved");
     }
 }
@@ -422,8 +423,8 @@ impl WindowHandler for Application {
         let needs_draw;
         {
             let window = &mut self.windows[window_index];
-            needs_draw = window.first_configure && window.scale_factor().is_some();
-            window.first_configure = false;
+            needs_draw = !window.configured && window.scale_factor().is_some();
+            window.configured = true;
         }
 
         if needs_draw {
@@ -436,8 +437,8 @@ impl WindowHandler for Application {
 impl PopupHandler for Application {
     fn configure(
         &mut self,
-        conn: &Connection,
-        qh: &QueueHandle<Self>,
+        _conn: &Connection,
+        _qh: &QueueHandle<Self>,
         popup: &Popup,
         config: PopupConfigure,
     ) {
@@ -452,7 +453,7 @@ impl PopupHandler for Application {
         }
     }
 
-    fn done(&mut self, conn: &Connection, qh: &QueueHandle<Self>, popup: &Popup) {
+    fn done(&mut self, _conn: &Connection, _qh: &QueueHandle<Self>, popup: &Popup) {
         info!("Popup done: {:?}", popup.xdg_surface().id());
         // 弹出框被合成器关闭（例如用户点击外部）
         let window_index = self.windows.iter().position(|w|w.contains_surface(popup.wl_surface()));
@@ -465,14 +466,14 @@ impl PopupHandler for Application {
 
 impl Dispatch<XdgPositioner, ()> for Application {
     fn event(
-        state: &mut Self,
-        proxy: &XdgPositioner,
+        _state: &mut Self,
+        _proxy: &XdgPositioner,
         event: <XdgPositioner as Proxy>::Event,
-        data: &(),
-        conn: &Connection,
-        queue_handle: &QueueHandle<Self>,
+        _data: &(),
+        _conn: &Connection,
+        _queue_handle: &QueueHandle<Self>,
     ) {
-        todo!()
+        info!("XdgPositioner event {:?}", event);
     }
 }
 
@@ -491,7 +492,7 @@ impl SeatHandler for Application {
         capability: Capability,
     ) {
         if capability == Capability::Keyboard && self.global_state.keyboard.is_none() {
-            println!("Set keyboard capability");
+            info!("Set keyboard capability");
             let keyboard = self
                 .global_state
                 .seat_state
@@ -501,7 +502,7 @@ impl SeatHandler for Application {
                     None,
                     self.global_state.loop_handle.clone(),
                     Box::new(|_state, _wl_kbd, event| {
-                        println!("Repeat: {:?} ", event);
+                        info!("Repeat: {:?} ", event);
                     }),
                 )
                 .expect("Failed to create keyboard");
@@ -516,7 +517,7 @@ impl SeatHandler for Application {
         }
 
         if capability == Capability::Pointer && self.global_state.themed_pointer.is_none() {
-            println!("Set pointer capability");
+            info!("Set pointer capability");
             let surface = self.global_state.compositor_state.create_surface(qh);
             let pointer_data = PointerData::new(seat.clone());
             let themed_pointer = self
@@ -546,12 +547,12 @@ impl SeatHandler for Application {
         capability: Capability,
     ) {
         if capability == Capability::Keyboard && self.global_state.keyboard.is_some() {
-            println!("Unset keyboard capability");
+            info!("Unset keyboard capability");
             self.global_state.keyboard.take().unwrap().release();
         }
 
         if capability == Capability::Pointer && self.global_state.themed_pointer.is_some() {
-            println!("Unset pointer capability");
+            info!("Unset pointer capability");
             self.global_state
                 .themed_pointer
                 .take()
@@ -573,7 +574,7 @@ impl KeyboardHandler for Application {
         surface: &WlSurface,
         _: u32,
         _: &[u32],
-        keysyms: &[Keysym],
+        _keysyms: &[Keysym],
     ) {
         let window = self
             .windows
@@ -675,7 +676,7 @@ impl PointerHandler for Application {
         events: &[PointerEvent], // 指针事件使用的是逻辑坐标
     ) {
         for event in events {
-            // Ignore events for other window
+            // 找到事件对应的窗口
             let mut target_window_idx = None;
             for (idx, w) in self.windows.iter().enumerate() {
                 if w.contains_surface(&event.surface) {

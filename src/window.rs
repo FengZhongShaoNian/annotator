@@ -37,34 +37,52 @@ use wayland_protocols::xdg::shell::client::xdg_positioner::XdgPositioner;
 use wgpu::SurfaceConfiguration;
 use crate::clipboard::Image;
 
+/// 每个窗口都有且只有一个根视图。通过这个ID来标识一个窗口的根视图
+/// 根视图对应着一个XDG Toplevel
 const ROOT_VIEW_ID_STR: &str = "root-view";
 
-/// AppWindow 管理应用的主窗口，包括主视图和动态管理的子视图。
+/// AppWindow 管理应用的主窗口，包括根视图和动态管理的子视图、弹出视图
 pub struct AppWindow {
+    /// 存储窗口的所有视图
+    /// 需要注意的是，在视图的绘制过程中，相应的视图会从views中暂时移除（将Option置为None），
+    /// 这是为了能够同时可变地借用AppWindow和AppView，详情见draw(&mut self, app: &mut Application)方法
     pub views: IndexMap<ViewId, Option<AppView>>,
+
+    /// 存储表面Id到视图Id之间的映射关系
     surface_id_to_view_id: HashMap<ObjectId, ViewId>,
 
-    /// 用于发送 Wayland 请求的消息队列句柄
-    queue_handle: QueueHandle<Application>,
-    /// XDG Shell 窗口句柄
+    /// 底层的SCTK窗口，通过它可以实现窗口移动之类的一些操作
     xdg_window: XdgWindow,
-    /// 是否为首次配置（用于避免在窗口未准备好时绘图）
-    pub first_configure: bool,
+
+    /// 是否完成了首次配置（用于避免在窗口未准备好时绘图）
+    pub configured: bool,
+
     /// 分数缩放管理（Wayland 协议扩展）
     fractional_scale: Option<WpFractionalScaleV1>,
-    /// 当前缩放倍数
+
+    /// 当前缩放倍数（只有当获取到缩放倍数后才会开始首次绘制）
     scale_factor: Option<f64>,
-    /// 窗口是否持有键盘焦点
-    keyboard_focus: bool,
+
+    /// 记录当前窗口是否持有键盘焦点
+    has_keyboard_focus: bool,
+
     /// 一个物理尺寸，用于在首次获取到缩放倍数后调整窗口的大小
     pub preferred_size: Option<PhysicalSize<u32>>,
+
+    /// 窗口上下文（在视图中可以通过它来添加一下命令，以便在当前的绘制流程结束的时候执行一些操作）
+    /// 同时它也提供一个在当前窗口作用域中存储共享变量的功能
     pub window_context: WindowContext,
+
     /// 当前鼠标指针所在的表面
     surface_under_mouse: Option<ObjectId>,
-    /// 当前窗口是否需要移除
+
+    /// 当前窗口是否需要移除（提示Application应该从窗口列表中移除当前窗口）
     pub should_remove: bool,
 
+    /// 跟踪不同种类事件的序列号
     pub serial_tracker: SerialTracker,
+
+    /// 剪切板
     clipboard: Arc<Clipboard>,
 }
 
@@ -75,26 +93,10 @@ pub struct WindowId(ObjectId);
 pub struct SurfaceId(ObjectId);
 
 pub struct WindowConfiguration {
-    app_id: String,
-    title: String,
-    size: LogicalSize<u32>,
-    preferred_size: Option<PhysicalSize<u32>>,
-}
-
-impl WindowConfiguration {
-    pub fn new(
-        app_id: String,
-        title: String,
-        size: LogicalSize<u32>,
-        preferred_size: Option<PhysicalSize<u32>>,
-    ) -> Self {
-        WindowConfiguration {
-            app_id,
-            title,
-            size,
-            preferred_size,
-        }
-    }
+    pub app_id: String,
+    pub title: String,
+    pub size: LogicalSize<u32>,
+    pub preferred_size: Option<PhysicalSize<u32>>,
 }
 
 impl AppWindow {
@@ -144,7 +146,7 @@ impl AppWindow {
             })
             .expect("Failed to retrieve viewport");
 
-        // 初始化主视图 (SurfaceView)
+        // 初始化根视图 (SurfaceView)
         let main_size = LogicalSize::new(window_config.size.width, window_config.size.height);
         let root_view = SurfaceView::new(
             Self::root_view_id(),
@@ -170,12 +172,11 @@ impl AppWindow {
         let window = Self {
             views,
             surface_id_to_view_id,
-            queue_handle: qh,
             xdg_window,
-            first_configure: true,
+            configured: false,
             fractional_scale,
             scale_factor: None,
-            keyboard_focus: false,
+            has_keyboard_focus: false,
             preferred_size: window_config.preferred_size,
             window_context: Default::default(),
             surface_under_mouse: None,
@@ -561,17 +562,17 @@ impl AppWindow {
     }
 
     pub fn set_keyboard_focus(&mut self, focus: bool) {
-        self.keyboard_focus = focus;
+        self.has_keyboard_focus = focus;
     }
 
     pub fn keyboard_focus(&self) -> bool {
-        self.keyboard_focus
+        self.has_keyboard_focus
     }
 
     /// 执行窗口重绘逻辑。
     /// 遍历所有视图并调用其独立的渲染方法。
     pub fn draw(&mut self, app: &mut Application) {
-        if self.first_configure || self.scale_factor.is_none() {
+        if !self.configured || self.scale_factor.is_none() {
             return;
         }
 

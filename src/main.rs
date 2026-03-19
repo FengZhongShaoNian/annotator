@@ -51,12 +51,13 @@ fn main() {
         };
 
         let image = Arc::new(image.to_rgba8());
-        let window_config = WindowConfiguration::new(
-            app.app_id.to_string(),
-            "".to_string(),
-            LogicalSize::new(800, 600),
-            None,
-        );
+        let window_config = WindowConfiguration {
+            app_id: app.app_id.to_owned(),
+            title: "Annotator".to_owned(),
+            size: LogicalSize::new(800, 600),
+            preferred_size: None,
+        };
+
         app.open_window(
             window_config,
             Box::new(move |input, egui_ctx, app, window, current_view| {

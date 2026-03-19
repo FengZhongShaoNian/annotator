@@ -22,7 +22,7 @@ impl SerialData {
 
 #[derive(Debug)]
 /// Helper for tracking of different serial kinds.
-pub(crate) struct SerialTracker {
+pub struct SerialTracker {
     serials: HashMap<SerialKind, SerialData>,
 }
 
