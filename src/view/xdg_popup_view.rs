@@ -88,7 +88,7 @@ impl PopupView for XdgPopupView<'_> {
     }
 }
 
-/// xdg-popup抓取弹窗必须由真实的用户交互触发，例如鼠标点击、按键或触摸事件
+/// xdg-popup抓取弹窗必须由真实的用户交互触发，例如鼠标点击、按键按下或触摸按下
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum TriggerType {
     MousePress,

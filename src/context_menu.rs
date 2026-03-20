@@ -46,7 +46,7 @@ pub fn create_context_menu(
     window.create_xdg_popup_view(
         view_id,
         &app.global_state,
-        TriggerType::MousePress,
+        Some(TriggerType::MousePress),
         positioner,
         Box::new(|input, egui_ctx, app, window, current_view| {
             // 构建 UI 的具体内容

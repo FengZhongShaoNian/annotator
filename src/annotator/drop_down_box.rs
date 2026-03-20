@@ -65,13 +65,13 @@ impl Widget for DropdownBox<'_, '_, '_, '_> {
             positioner.set_anchor(xdg_positioner::Anchor::BottomLeft);
             // 弹窗相对于锚点的伸展方向
             positioner.set_gravity(xdg_positioner::Gravity::BottomRight);
-            positioner.set_offset(0, -20);
+            positioner.set_offset(0, -15);
             // 空间不足时的自动调整策略
             positioner.set_constraint_adjustment(xdg_positioner::ConstraintAdjustment::all());
             self.window.create_xdg_popup_view(
                 popup_view_id,
                 &self.app.global_state,
-                TriggerType::MousePress,
+                Some(TriggerType::MousePress),
                 positioner,
                 Box::new(move |input, egui_ctx, app, window, current_view| {
                     // 构建 UI 的具体内容

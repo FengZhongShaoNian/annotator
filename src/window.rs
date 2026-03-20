@@ -1,6 +1,6 @@
 use crate::application::{Application, GlobalState};
 use crate::context::{Command, WindowContext};
-use crate::dpi::{LogicalPosition, LogicalSize, PhysicalSize, Position};
+use crate::dpi::{LogicalPosition, LogicalSize, PhysicalSize};
 use crate::gpu::GpuContext;
 use crate::serial::{SerialKind, SerialTracker};
 use crate::view::AppView::{Child, Pop, Root};
@@ -13,7 +13,7 @@ use egui::{CursorIcon, ImeEvent, OutputCommand, PlatformOutput};
 use egui_wgpu::wgpu;
 use egui_wgpu::wgpu::{CompositeAlphaMode, Surface as WgpuSurface, SurfaceCapabilities};
 use indexmap::IndexMap;
-use log::{error, info, warn};
+use log::{info, warn};
 use raw_window_handle::{
     RawDisplayHandle, RawWindowHandle, WaylandDisplayHandle, WaylandWindowHandle,
 };
@@ -26,12 +26,12 @@ use sctk::shell::xdg::window::{Window as XdgWindow, WindowDecorations};
 use std::cmp::PartialEq;
 use std::convert::Into;
 use std::ptr::NonNull;
-use std::sync::{oneshot, Arc};
-use egui::CursorIcon::Text;
+use std::sync::Arc;
+use std::thread::spawn;
 use smithay_clipboard::Clipboard;
 use wayland_backend::client::ObjectId;
 use wayland_client::protocol::wl_surface::WlSurface;
-use wayland_client::{Proxy, QueueHandle};
+use wayland_client::Proxy;
 use wayland_protocols::wp::fractional_scale::v1::client::wp_fractional_scale_v1::WpFractionalScaleV1;
 use wayland_protocols::xdg::shell::client::xdg_positioner::XdgPositioner;
 use wgpu::SurfaceConfiguration;
@@ -100,25 +100,22 @@ pub struct WindowConfiguration {
 }
 
 impl AppWindow {
-    /// 创建一个新的 AppWindow。
-    /// 该方法会初始化 Wayland Surface、SubSurface、XDG Window，并为每个视图创建 GPU 渲染表面。
-    ///
+    /// 创建一个新的 AppWindow
     /// # 参数
-    /// - `app`: 应用实例
-    /// - `build_root_view`: 构建根视图 UI 的回调函数，接收窗口实例和 egui Context，返回 FullOutput
+    /// - `global_state`: Wayland的全局状态对象
+    /// - `window_config`: 窗口配置
+    /// - `build_root_view`: 构建根视图 UI 的回调函数
     pub fn new(
         global_state: &GlobalState,
         window_config: WindowConfiguration,
         build_root_view: BuildViewFn,
     ) -> AppWindow {
-        // 创建主表面
-        let main_surface = global_state
+        let root_surface = global_state
             .compositor_state
             .create_surface(&global_state.queue_handle);
 
-        // 创建 XDG 窗口并设置属性
         let xdg_window = global_state.xdg_shell_state.create_window(
-            main_surface.clone(),
+            root_surface.clone(),
             WindowDecorations::None,
             &global_state.queue_handle,
         );
@@ -126,23 +123,22 @@ impl AppWindow {
         xdg_window.set_app_id(window_config.app_id);
         xdg_window.commit();
 
-        // 此时尚未拿到缩放系数，后面拿到之后会重新调整大小
+        // 此时尚未拿到缩放系数，后面拿到之后会重新调整wgpu_surface的大小
         let physical_size = window_config.size.to_physical(1.);
 
-        // 初始化 wgpu
         let (wgpu_surface, surface_config) =
-            Self::create_wgpu_surface(global_state, &main_surface, physical_size);
+            Self::create_wgpu_surface(global_state, &root_surface, physical_size);
 
         // 初始化分数缩放和视口
         let fractional_scale = global_state
             .fractional_scaling_manager
             .as_ref()
-            .map(|ref m| m.fractional_scaling(&main_surface, &global_state.queue_handle));
-        let main_viewport = global_state
+            .map(|ref m| m.fractional_scaling(&root_surface, &global_state.queue_handle));
+        let viewport = global_state
             .viewporter_state
             .as_ref()
             .map(|ref viewporter_state| {
-                viewporter_state.get_viewport(&main_surface, &global_state.queue_handle)
+                viewporter_state.get_viewport(&root_surface, &global_state.queue_handle)
             })
             .expect("Failed to retrieve viewport");
 
@@ -150,18 +146,16 @@ impl AppWindow {
         let main_size = LogicalSize::new(window_config.size.width, window_config.size.height);
         let root_view = SurfaceView::new(
             Self::root_view_id(),
-            main_surface.clone(),
+            root_surface.clone(),
             wgpu_surface,
             surface_config,
             main_size,
             1., // 此时还拿不到scale_factor
             None,
-            main_viewport,
+            viewport,
             global_state.clipboard.clone(),
             build_root_view,
         );
-
-        let qh = global_state.queue_handle.clone();
 
         let mut surface_id_to_view_id = HashMap::new();
         surface_id_to_view_id.insert(root_view.surface().id(), root_view.id());
@@ -192,13 +186,15 @@ impl AppWindow {
         ROOT_VIEW_ID_STR.into()
     }
 
-    /// 动态创建一个 SubSurfaceView 并添加到窗口中。
+    /// 动态创建一个 SubSurfaceView（子视图）并添加到窗口中
     ///
     /// # 参数
-    /// - `app`: 应用实例
+    /// - `id`: 视图ID，必须是一个唯一值
+    /// - `global_state`: Wayland的全局状态对象
     /// - `size`: 子视图的逻辑大小
     /// - `position`: 子视图的位置
-    /// - `build_view`: 构建子视图 UI 的回调函数，接收窗口实例和 egui Context，返回 FullOutput
+    /// - `build_view`: 构建子视图 UI 的回调函数
+    /// - `position_calculator`： 位置计算器，用于在父表面的大小发生变化的时候，重新计算子表面相对于父表面的位置
     pub fn create_sub_surface_view(
         &mut self,
         id: ViewId,
@@ -267,14 +263,22 @@ impl AppWindow {
         xdg_shell_state.xdg_wm_base().create_positioner(qh, ())
     }
 
-    /// 创建xdg-popup
-    /// 需要注意：positioner的anchor_rect必须是root-view上的有效区域，
-    /// 也就是弹窗必须和xdg-toplevel挨着，不然弹窗不显示
+    /// 动态创建一个 XdgPopupView（弹出视图）并添加到窗口中
+    ///
+    /// # 参数
+    /// - `id`: 视图ID，必须是一个唯一值
+    /// - `global_state`: Wayland的全局状态对象
+    /// - `trigger_type`: 该弹出视图是由什么类型的事件触发的。在Wayland中，如果一个Xdg-Popup想要从合成器那里获得“显式抓取”(grab)，即独占用户输入焦点，
+    ///   必须要在创建grab的时候提供一个有效的事件序列号。 如果不为None，那么将会尝试使用当前窗口对应类型事件的序列号来创建抓取。 如果为None，那么将不会抓取输入。
+    /// - `positioner`: 定位器，用于定位弹出视图的弹出位置。需要注意：positioner的anchor_rect必须是root-view上的有效区域，
+    ///   也就是弹窗必须和xdg-toplevel挨着，不然弹窗不显示。
+    /// - `build_view`: 构建子视图 UI 的回调函数
+    ///
     pub fn create_xdg_popup_view(
         &mut self,
         id: ViewId,
         global_state: &GlobalState,
-        trigger_type: TriggerType,
+        trigger_type: Option<TriggerType>,
         positioner: XdgPositioner,
         build_view: BuildViewFn,
     ) -> SurfaceId {
@@ -293,20 +297,25 @@ impl AppWindow {
         )
         .expect("Failed to create popup");
 
-        let mut serial = None;
-        let mut seat = global_state.seat.clone();
         match trigger_type {
-            TriggerType::MousePress => {
-                serial = Some(self.serial_tracker.get(SerialKind::MousePress));
+            Some(trigger_type) => {
+                let mut serial = None;
+                let seat = global_state.seat.clone();
+                match trigger_type {
+                    TriggerType::MousePress => {
+                        serial = Some(self.serial_tracker.get(SerialKind::MousePress));
+                    }
+                    TriggerType::KeyPress => {
+                        serial = Some(self.serial_tracker.get(SerialKind::KeyPress));
+                    }
+                    TriggerType::Touch => {
+                        todo!()
+                    }
+                }
+                popup.xdg_popup().grab(&seat.unwrap(), serial.unwrap());
             }
-            TriggerType::KeyPress => {
-                serial = Some(self.serial_tracker.get(SerialKind::KeyPress));
-            }
-            TriggerType::Touch => {
-                todo!()
-            }
+            None => {}
         }
-        popup.xdg_popup().grab(&seat.unwrap(), serial.unwrap());
 
         let surface = popup.wl_surface();
         surface.commit();
@@ -657,7 +666,7 @@ impl AppWindow {
                     }
                 }
                 Command::DropView(id) => {
-                    let app_view = self.views.remove(&id);
+                    let app_view = self.views.shift_remove(&id);
                     if let Some(Some(app_view)) = app_view {
                         self.surface_id_to_view_id.remove(&app_view.surface_id());
                     }
