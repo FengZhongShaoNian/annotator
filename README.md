@@ -61,6 +61,15 @@ rm ${HOME}/screenshot.png
 
 如果使用GNOME，建议搭配[annotator-gnome-extension](https://github.com/FengZhongShaoNian/annotator-gnome-extension)这个Gnome插件一起使用，这个插件提供窗口置顶和在dash-to-panel的任务栏中隐藏annotator窗口图标的功能。
 
+#### 使用AUR安装
+
+对应使用Archlinx的用户，可以使用如下命令来安装：
+```shell
+paru -S image-annotator-git
+# or
+yay -S image-annotator-git
+```
+
 ### 截图
 
 ![截图](screenshots/screenshot.png)
