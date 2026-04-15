@@ -30,6 +30,9 @@
 #### 从源代码构建
 
 ```bash
+# 需要先安装vulkan,例如，对应AMD显卡，可以安装vulkan-radeon这个包
+sudo pacman -S vulkan-radeon
+
 git clone https://github.com/FengZhongShaoNian/annotator.git
 cd annotator
 cargo build --release
