@@ -87,6 +87,9 @@ pub struct GlobalState {
     loop_handle: LoopHandle<'static, Application>,
     pub text_input_manager: Option<zwp_text_input_manager_v3::ZwpTextInputManagerV3>,
     pub text_input: Option<zwp_text_input_v3::ZwpTextInputV3>,
+    /// 记录上一个ImeEvent，以解决在某些平台（比如Niri）下，输入中文标点符号时，没有收到ImeEvent::Preedit就直接收到了ImeEvent::Commit事件的问题
+    /// egui看起来不支持“没有ImeEvent::Preedit而直接ImeEvent::Commit的情况”
+    previous_ime_event: Option<ImeEvent>,
     pub clipboard: Arc<Clipboard>
 }
 
@@ -155,6 +158,7 @@ impl Application {
                 loop_handle,
                 text_input_manager,
                 text_input: None,
+                previous_ime_event: None,
                 clipboard: Arc::new(clipboard),
             },
             app_id,
@@ -740,14 +744,24 @@ impl Dispatch<zwp_text_input_v3::ZwpTextInputV3, ()> for Application {
                         window.handle_ime_event(&ImeEvent::Disabled);
                     }
                 }
+                this.global_state.previous_ime_event = None;
             }
             zwp_text_input_v3::Event::CommitString { text } => {
                 let Some(text) = text else {
                     return;
                 };
+                if !matches!(this.global_state.previous_ime_event, Some(ImeEvent::Preedit(..))) {
+                    for window in &mut this.windows {
+                        if window.keyboard_focus() {
+                            this.global_state.previous_ime_event = Some(ImeEvent::Preedit("".to_string()));
+                            window.handle_ime_event(&ImeEvent::Preedit("".to_string()));
+                        }
+                    }
+                }
 
                 for window in &mut this.windows {
                     if window.keyboard_focus() {
+                        this.global_state.previous_ime_event = Some(ImeEvent::Commit(text.clone()));
                         window.handle_ime_event(&ImeEvent::Commit(text.clone()));
                     }
                 }
@@ -760,6 +774,7 @@ impl Dispatch<zwp_text_input_v3::ZwpTextInputV3, ()> for Application {
 
                 for window in &mut this.windows {
                     if window.keyboard_focus() {
+                        this.global_state.previous_ime_event = Some(ImeEvent::Preedit(text.clone()));
                         window.handle_ime_event(&ImeEvent::Preedit(text.clone()));
                     }
                 }
